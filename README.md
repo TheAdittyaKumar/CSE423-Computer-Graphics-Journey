@@ -25,24 +25,10 @@ The tone is intentionally playful. One of our favorite jokes is that **BRAC Univ
 
 ---
 
-## 🎮 Recommended README media set
-
-You do **not** need every image from the earlier pack. For GitHub, this smaller curated set is enough:
-
-- `media/bracu-campus.jpg`
-- `media/exit-searchlight.gif`
-- `media/landmark-challenge.jpg`
-- `media/passenger-pickup.jpg`
-- `media/minimap-view.jpg`
-
-These five files are the only ones referenced in this README.
-
----
-
 ## ✨ Gameplay highlights
 
-### 1) The funny menu moment
-Hovering over **Exit Game** triggers the giant spotlight. This became one of the most fun parts of the project.
+### 1) The menu
+Hovering over **Exit Game** triggers the giant spotlight towards YOU.
 
 <p align="center">
   <img src="media/exit-searchlight.gif" alt="Majhi Jaben main menu with the exit spotlight aiming at the player" width="860" />
