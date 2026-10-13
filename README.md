@@ -1,18 +1,18 @@
-# CSE423 Computer Graphics — From Pixels to Paddles 🚣
+# CSE423 Computer Graphics: From Pixels to Paddles 🚣
 
-**A semester journey from OpenGL basics to _Majhi Jaben?!_ — a 3D boat rescue game set in a flooded Dhaka.**
+**A semester journey from OpenGL basics to _Majhi Jaben?!_: a 3D boat rescue game set in a flooded Dhaka.**
 
 **Course:** CSE423 · Computer Graphics · BRAC University  
 **Section:** 16 · **Project Group:** 07  
 **Team:** Adittya Kumar Chowdhury · Nafisa Lubaba · Usaeed Rahman Tibro  
 **Technology:** Python · PyOpenGL · OpenGL / GLU / GLUT
 
-> We started with points, lines and transforms in the lab — and ended up building a flooded-city rescue game with missions, landmarks, traffic, a minimap and a very dramatic menu.
+> We started with points, lines and transforms in the lab: and ended up building a flooded-city rescue game with missions, landmarks, traffic, a minimap and a very dramatic menu.
 
 <p align="center">
   <img src="media/bracu-campus.jpg" alt="Majhi Jaben cinematic gameplay showing the boat approaching BRAC University" width="860" />
   <br />
-  <sub><strong>Majhi Jaben?!</strong> — Cinematic Edition gameplay screenshot.</sub>
+  <sub><strong>Majhi Jaben?!</strong>: Cinematic Edition gameplay screenshot.</sub>
 </p>
 
 ---
@@ -21,7 +21,7 @@
 
 **Majhi Jaben?!** is a stylized rescue-and-delivery game inspired by Dhaka’s monsoon flooding and our own real experience of traveling through heavy rain during the semester. In the game, the roads are flooded, students are stranded, and the player becomes a **majhi** (boatman) who must carry passengers to safety and to **BRAC University**.
 
-The tone is intentionally playful. One of our favorite jokes is that **BRAC University is the only sunny place in the entire flooded city**, inspired by the classic **Oggy and the Cockroaches** “sunlight spotlight” meme. Even the **main menu fights back** — if you move toward **Exit Game**, the spotlight literally aims at you.
+The tone is intentionally playful. One of our favorite jokes is that **BRAC University is the only sunny place in the entire flooded city**, inspired by the classic **Oggy and the Cockroaches** “sunlight spotlight” meme. Even the **main menu fights back**: if you move toward **Exit Game**, the spotlight literally aims at you.
 
 ---
 
@@ -136,8 +136,8 @@ py "Updated project after CSE423 ended/MajhiJaben_CinematicEdition_NoComments.py
 **Adittya Kumar Chowdhury · Nafisa Lubaba · Usaeed Rahman Tibro**  
 **CSE423: Computer Graphics · BRAC University · Group 07 · Section 16**
 
-The game is inspired by real flooding experiences, but it is still a humorous student project — especially the idea that **BRAC University is the one magically dry and sunny place in the city**.
+The game is inspired by real flooding experiences, but it is still a humorous student project: especially the idea that **BRAC University is the one magically dry and sunny place in the city**.
 
 ---
 
-*From pixels to paddles — and from lab templates to a full rescue game.*
+*From pixels to paddles: and from lab templates to a full rescue game.*
