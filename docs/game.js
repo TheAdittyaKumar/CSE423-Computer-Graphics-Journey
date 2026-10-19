@@ -24,7 +24,7 @@
   const VERT=`attribute vec3 aPos; attribute vec3 aColor; attribute float aKind;
   uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
   varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
-  void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5){
+  void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5&&aKind<1.5){
   float mainWave=sin(.032*(p.z+.18*p.x)-1.80*uTime);
   float crossWave=sin(.047*p.x-.014*p.z+1.13*uTime);
   float chop=sin(.085*p.z+.029*p.x-2.25*uTime);
@@ -33,12 +33,13 @@
   float daylight=clamp((560.-radius)/300.,0.,1.);
   daylight=daylight*daylight*(3.-2.*daylight);
   p.y=8.22+(relative-.22)*(1.-.70*daylight);
-  }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;}`;
+  }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
-  void main(){vec3 c=vColor;if(vKind>.5){float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
+  void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){opacity=.53;float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
     float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
     c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
-  }float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,1.);}`;
+  }else if(vKind>1.5){opacity=.17+.055*sin(uTime*1.9+vWorld.x*.008);}
+  float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,opacity);}`;
   function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
   const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
   if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){throw Error(gl.getProgramInfoLog(prog));}
@@ -84,20 +85,21 @@
     buildings.push({x,z,hw:115+(r+c)%3*12,hd:125+(r*2+c)%3*10,h:160+(r*3+c*2)%5*38,idx:r*6+c});
   }
   const cars=[[-1100,-920,90],[-550,-320,90],[0,-720,90],[550,260,90],[1100,-380,90],[-820,500,0],[760,1050,0],[-260,-1150,0]];
+  // The Python game offsets alternating lanes by 0.22 * 210 world units.
+  const parkedCars=cars.map(([x,z,heading],i)=>({x:x+(Math.abs(heading-90)<.1?(i%2?1:-1)*46.2:0),z:z+(Math.abs(heading-90)>=.1?(i%2?1:-1)*46.2:0),angle:heading,style:i}));
   const trees=[[-1552,335,.86],[-1545,120,.76],[-215,875,.93],[402,890,.82],[-1530,-1330,.72],[1562,-959,.86],[-145,852,.91],[1545,-230,.78],[-1260,-1540,.96],[1541,847,.76],[1545,-365,.87],[-1550,-230,.84],[-1545,-420,.70],[1555,100,.74]];
   const power=[{name:'CENTRAL',x:125,z:-600},{name:'WEST',x:-975,z:500},{name:'EAST',x:1225,z:500}];
+  // Exact campus collision volumes from the original Python, not a single oversized block.
+  const campusSolids=[[-132,1370,89,191],[38,1508,259,66],[206,1462,59,112],[-8,1400,58,66],[-56,1240,38,49],[44,1238,34,49]];
   const homeStarts=[[-275,-1375],[275,-1375],[-825,-875],[825,-875],[-275,-325],[275,-325],[-825,225],[825,225],[-825,775],[825,775],[-1375,-875],[1375,-325],[-1375,225],[1375,225],[-275,-875],[275,-875]];
   const sosStarts=[[0,-1150],[-550,-1150],[550,-1150],[-1100,-600],[1100,-600],[-550,-600],[550,-600],[0,-50],[-1100,-50],[1100,-50],[-550,500],[550,500],[-1100,1050],[1100,1050],[-550,1050],[550,1050]];
   const students=['Adittya','Usaeed','Nafisa','Sujail','Kazmi','Safin','Shammo','Fahim','Rafi','Nabil','Sadia','Tanvir','Mushfiq','Jara','Tahmid','Nusrat','Riad','Faria','Zarin','Adnan'];
   const studentColors=[[.95,.38,.21],[.32,.79,.91],[.91,.68,.21],[.66,.46,.91],[.39,.88,.61],[.92,.44,.68]];
   const currents=[{name:'WEST CURRENT',a:-1260,b:-940,c:-450,d:200,dx:39,dz:4},{name:'CENTRAL CURRENT',a:-150,b:150,c:-950,d:-350,dx:-38,dz:0},{name:'EAST CURRENT',a:430,b:680,c:150,d:850,dx:0,dz:-43},{name:'NORTH CURRENT',a:-700,b:-390,c:710,d:1150,dx:34,dz:0}];
   function valid(x,z,margin=0){if(Math.abs(x)>1615||Math.abs(z)>1615)return false;
-    for(const b of buildings)if(Math.abs(x-b.x)<b.hw+31+margin&&Math.abs(z-b.z)<b.hd+31+margin)return false;
-    // Simplified collision silhouette for the multi-wing BRACU campus.
-    if(x>-225-margin&&x<275+margin&&z>1225-margin&&z<1640+margin)return false;
+    for(const b of buildings)if(Math.abs(x-b.x)<b.hw+25+margin&&Math.abs(z-b.z)<b.hd+25+margin)return false;
+    for(const [cx,cz,hw,hd] of campusSolids)if(Math.abs(x-cx)<=hw+25+margin&&Math.abs(z-cz)<=hd+25+margin)return false;
     if(Math.abs(x-825)<156+margin&&z>1255-margin&&z<1432+margin)return false;
-    for(const [cx,cz,a] of cars){if(Math.abs(x-cx)<60+margin&&Math.abs(z-cz)<60+margin)return false;}
-    for(const [tx,tz,s] of trees){if(distance(x,z,tx,tz)<(8*s+19+margin))return false;}
     return true;
   }
   const homes=[];homeStarts.forEach(([x,z],i)=>{const b=buildings.find(t=>t.x===x&&t.z===z);if(!b)return;
@@ -189,7 +191,7 @@
   // renderCinematicBoatHull and other Python draw functions, not hand-made JS boxes.
   let sourceMeshes=null, sourceLoadError=null;
   async function loadSourceGeometry(){
-    const [iResponse,vResponse]=await Promise.all([fetch('./original-geometry.json'),fetch('./original-geometry.bin')]);
+    const [iResponse,vResponse]=await Promise.all([fetch('./original-geometry.json?v=fidelity5'),fetch('./original-geometry.bin?v=fidelity5')]);
     if(!iResponse.ok||!vResponse.ok)throw new Error('Original source geometry files missing — upload both original-geometry files into docs.');
     const index=await iResponse.json(),bytes=await vResponse.arrayBuffer();
     const source=new Float32Array(bytes),meshes={};
@@ -227,6 +229,29 @@
   const debrisMesh=new Mesh();debrisMesh.box(0,1,0,56,15,33,[.35,.30,.22]);debrisMesh.box(9,8,0,10,8,29,[.48,.34,.23]);debrisMesh.upload();
   const powerMesh=new Mesh();powerMesh.box(0,27,0,36,48,32,[.29,.32,.32]);powerMesh.box(0,30,-18,23,25,4,[.90,.19,.15]);powerMesh.upload();
   const markerGoal=new Mesh();markerGoal.ring(0,0,0,52,6,[.97,.81,.31]);markerGoal.upload();
+  const waterRipple=new Mesh();waterRipple.ring(0,0,0,18,2.4,[.66,.89,.90]);waterRipple.upload();
+  // Procedural transparent BRACU sun aura: the Python version draws pulsing
+  // golden rings and a sunshine cone only over its safe campus district.
+  const sunshineAura=new Mesh();
+  for(let layer=0;layer<3;layer++){
+    const rad=365-layer*36;
+    for(let i=0;i<80;i++){
+      const t=i*TAU/80,u=(i+1)*TAU/80;
+      const pos=(r,a,y)=>[r*Math.cos(a),y,1378+r*Math.sin(a)];
+      sunshineAura.quad(pos(rad-4,t,18.2+layer*.18),pos(rad-4,u,18.2+layer*.18),pos(rad,u,18.2+layer*.18),pos(rad,t,18.2+layer*.18),[1,.87,.39],2);
+    }
+  }
+  for(let i=0;i<64;i++){
+    const t=i*TAU/64,u=(i+1)*TAU/64;
+    sunshineAura.quad([365*Math.cos(t),18.5,1378+365*Math.sin(t)],
+      [365*Math.cos(u),18.5,1378+365*Math.sin(u)],
+      [175*Math.cos(u),760,1415+175*Math.sin(u)],
+      [175*Math.cos(t),760,1415+175*Math.sin(t)],[.97,.94,.70],2);
+  }
+  // Light opening in the otherwise storm-dark sky, behind the campus.
+  sunshineAura.quad([-530,25,1645],[530,25,1645],[360,1370,1645],[-360,1370,1645],[.68,.84,.87],2);
+  sunshineAura.upload();
+  const sunshineSun=new Mesh();sunshineSun.sphere(290,700,1525,33,[.98,.91,.65],8,13);sunshineSun.upload();
   const signalRed=new Mesh();signalRed.sphere(145,120,-68,9,[1,.15,.1],4,10);signalRed.upload();
   const signalGreen=new Mesh();signalGreen.sphere(145,120,-68,9,[.17,1,.38],4,10);signalGreen.upload();
 
@@ -238,12 +263,12 @@
   const legend='BRAC UNIVERSITY', unit=1.53, startX=-6-legend.length*6*unit/2;
   for(let i=0;i<legend.length;i++){const bitmap=font5[legend[i]];if(!bitmap)continue;for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(bitmap[row][col]==='1')campusLettering.quad([startX+(i*6+col)*unit,151-row*unit,1134.0],[startX+(i*6+col+1)*unit,151-row*unit,1134.0],[startX+(i*6+col+1)*unit,152-(row+1)*unit,1134.0],[startX+(i*6+col)*unit,152-(row+1)*unit,1134.0],[.96,.92,.72]);}
   campusLettering.upload();
-  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0};
+  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[]};
   const keys=new Set();
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[]});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[]});
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('hud').classList.remove('hidden');
@@ -288,12 +313,68 @@
   }
   function togglePause(){if(S.mode==='PLAYING'){S.mode='PAUSED';keys.clear();nextModal('PAUSED');}else if(S.mode==='PAUSED'){S.mode='PLAYING';$('modal').classList.add('hidden');}}
   function action(key){switch(key){case 'y':accept();break;case 'n':reject();break;case ' ':boost();break;case 'c':if(S.mode==='PLAYING'){S.camera3=!S.camera3;notify(S.camera3?'Third-person camera':'First-person camera',1.5);}break;case 'p':photo();break;case 'f':repair();break;case 'v':if(S.mode==='PLAYING'){S.wiperTime=1.6;notify('Rain swept from the windshield.',1.4);}break;case 'Escape':if(S.mode==='MENU'&&!$('modal').classList.contains('hidden')){$('modal').classList.add('hidden');}else togglePause();break;}}
-  function moveAllowed(x,z){if(!valid(x,z))return false;for(const d of S.debris)if(distance(x,z,d.x,d.z)<57)return false;
-    for(const car of S.movingCars)if(distance(x,z,car.x,car.z)<70)return false;return true;}
+  function orientedObjectOverlap(x,z,cx,cz,angle,halfLength,halfWidth,margin=2){
+    // Separating-axis test shared by cars, shops, and tea stalls.
+    const a=S.angle*RAD,b=angle*RAD,dx=cx-x,dz=cz-z;
+    const F=[Math.cos(a),Math.sin(a)],L=[-F[1],F[0]];
+    const G=[Math.cos(b),Math.sin(b)],H=[-G[1],G[0]];
+    if(dx*dx+dz*dz>185*185)return false;
+    for(const [ax,az] of [F,L,G,H]){
+      const sep=Math.abs(dx*ax+dz*az);
+      const boatReach=63*Math.abs(F[0]*ax+F[1]*az)+27*Math.abs(L[0]*ax+L[1]*az);
+      const carReach=(halfLength+margin)*Math.abs(G[0]*ax+G[1]*az)+(halfWidth+margin)*Math.abs(H[0]*ax+H[1]*az);
+      if(sep>boatReach+carReach)return false;
+    }
+    return true;
+  }
+  function carOverlap(x,z,cx,cz,angle,style=0){
+    return orientedObjectOverlap(x,z,cx,cz,angle,style%3===1?45:40,20,2);
+  }
+  function circlePostOverlap(x,z,px,pz,r){
+    const a=S.angle*RAD,dx=px-x,dz=pz-z;
+    const along=dx*Math.cos(a)+dz*Math.sin(a),across=-dx*Math.sin(a)+dz*Math.cos(a);
+    const u=clamp(along,-63,63),v=clamp(across,-27,27);
+    return (along-u)**2+(across-v)**2<=r*r;
+  }
+  function overlapStaticProp(x,z){
+    for(const [tx,tz,size] of trees)if(circlePostOverlap(x,z,tx,tz,5*size+3))return true;
+    // Street vendors, campus shops, traffic post and repair enclosures match
+    // the physical dimensions specified in isBoatCollidingWithStreetProps.
+    if(orientedObjectOverlap(x,z,178,885,0,57,61))return true;
+    for(const [cx,cz] of [[-367,873],[320,703]]){
+      if(orientedObjectOverlap(x,z,cx,cz,0,64,63))return true;
+    }
+    if(circlePostOverlap(x,z,145,-55,8))return true;
+    for(const p of power)if(orientedObjectOverlap(x,z,p.x,p.z,0,19,18))return true;
+    return false;
+  }
+  function moveAllowed(x,z){if(!valid(x,z)||overlapStaticProp(x,z))return false;
+    for(const d of S.debris)if(distance(x,z,d.x,d.z)<48)return false;
+    for(const car of [...parkedCars,...S.movingCars]){
+      if(carOverlap(x,z,car.x,car.z,car.angle||0,car.style||0)){
+        // When a moving car happens to overlap the boat, allow moving away;
+        // otherwise players can be trapped inside an invisible collision wall.
+        if(!carOverlap(S.x,S.z,car.x,car.z,car.angle||0,car.style||0)||
+           distance(x,z,car.x,car.z)<=distance(S.x,S.z,car.x,car.z)+.001)return false;
+      }
+    }
+    return true;}
+  function recordMissedPassenger(ride){
+    const age=S.time,wasOnBoat=ride.state==='ONBOARD';
+    if(!wasOnBoat&&ride.type!=='DROWNING')return;
+    if(wasOnBoat){
+      const people=seated(),seat=Math.max(0,people.indexOf(ride)),seats=[[8,-19],[8,19],[67,0]];
+      const [bx,bz]=seats[Math.min(seat,2)],a=S.angle*RAD,c=Math.cos(a),sn=Math.sin(a);
+      const x=S.x+(bx*c-bz*sn)*.62,z=S.z+(bx*sn+bz*c)*.62;
+      const side=seat===0?-1:seat===1?1:(ride.id%2?1:-1);
+      S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age,fromX:x,fromZ:z,x:x-sn*side*47,z:z+c*side*47,y:28,fromBoat:true});
+    }else S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age-.80,fromX:ride.x,fromZ:ride.z,x:ride.x,z:ride.z,y:10,fromBoat:false});
+    if(S.missedEffects.length>6)S.missedEffects.shift();
+  }
   function step(dt){S.time+=dt;S.bobTime+=dt;S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);S.wiperTime=Math.max(0,S.wiperTime-dt);
     S.boost=clamp(S.boost+(S.boostOn?-30:15)*dt,0,100);if(S.boost<=0)S.boostOn=false;
     const forward=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
-    const turn=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0); // screen-left / screen-right after Python-to-WebGL axis conversion
+    const turn=(keys.has('a')||keys.has('arrowleft')?1:0)-(keys.has('d')||keys.has('arrowright')?1:0); // left is counterclockwise in the original, projection mirrored to correct handedness
     if(turn){S.angle=(S.angle+turn*105*dt+360)%360;S.lastMove=S.time;}
     S.rowing=!!forward; if(forward) S.strokeTime=(S.strokeTime+dt)%0.65; else S.strokeTime=0;
     if(forward){const speed=(forward>0?270:180)*(S.boostOn?1.65:1);const dx=Math.cos(S.angle*RAD)*speed*dt*forward,dz=Math.sin(S.angle*RAD)*speed*dt*forward;
@@ -305,7 +386,7 @@
     S.debrisCooldown=Math.max(0,S.debrisCooldown-dt);
     S.current='';for(const zone of currents)if(S.x>=zone.a&&S.x<=zone.b&&S.z>=zone.c&&S.z<=zone.d){S.current=zone.name;const x=S.x+zone.dx*dt,z=S.z+zone.dz*dt;if(moveAllowed(x,z)){S.x=x;S.z=z;}break;}
     S.debris.forEach(d=>{const ph=d.phase+S.time*.65,x=d.x0+Math.sin(ph)*26,z=d.z0+Math.cos(ph*.7)*18;if(distance(x,z,S.x,S.z)>57){d.x=x;d.z=z;}});
-    S.movingCars=[{x:-470+((S.time*30+65)%680<340?(S.time*30+65)%680:680-(S.time*30+65)%680),z:-555},{x:598,z:-490+((S.time*24+190)%720<360?(S.time*24+190)%720:720-(S.time*24+190)%720)}];
+    S.movingCars=[{x:-470+((S.time*30+65)%680<340?(S.time*30+65)%680:680-(S.time*30+65)%680),z:-555,angle:0,style:3},{x:598,z:-490+((S.time*24+190)%720<360?(S.time*24+190)%720:720-(S.time*24+190)%720),angle:90,style:4}];
     S.trafficClock+=dt;if(S.trafficClock>=(S.traffic==='GREEN'?5:4)){S.trafficClock=0;S.traffic=S.traffic==='GREEN'?'RED':'GREEN';}
     const inTraffic=S.x>=-115&&S.x<=115&&S.z>=-165&&S.z<=70;
     if(!inTraffic)S.trafficSafe=[S.x,S.z];
@@ -313,9 +394,15 @@
     if(!S.powerOff){S.powerClock+=dt;if(S.powerClock>=15){S.powerOff=true;S.powerClock=0;notify(`${power[S.powerIndex].name} district power outage!`,2.6);}}
     if(S.request){S.requestLeft-=dt;if(S.requestLeft<=0){S.request=null;S.spawnClock=0;}}
     else {S.spawnClock+=dt;if(S.spawnClock>=9.5){S.spawnClock=0;offerRide();}}
-    for(const r of S.rides){r.timeLeft-=dt;if(r.timeLeft<=0){r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(`${r.name} ran out of time! -75 points`,3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
-    S.rides=S.rides.filter(r=>r.state!=='FAILED');
-    if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;for(const r of arrived){r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;}S.rides=S.rides.filter(r=>r.state!=='DELIVERED');notify(`Delivered ${arrived.length} student(s) to BRACU! +${gained} points`,4);}}
+    for(const r of S.rides){r.timeLeft-=dt;if(r.timeLeft<=0){recordMissedPassenger(r);r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(`${r.name} ran out of time! -75 points`,3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
+    S.rides=S.rides.filter(r=>r.state!=='FAILED');S.missedEffects=S.missedEffects.filter(e=>S.time-e.at<4.35);
+    S.deliveryEffects=S.deliveryEffects.filter(e=>S.time-e.at<1.65);
+    if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;for(const [i,r] of arrived.entries()){
+      const seats=[[8,-19],[8,19],[67,0]], [bx,bz]=seats[Math.min(i,2)],h=S.angle*RAD;
+      const startX=S.x+(bx*Math.cos(h)-bz*Math.sin(h))*.62,startZ=S.z+(bx*Math.sin(h)+bz*Math.cos(h))*.62;
+      S.deliveryEffects.push({at:S.time,x0:startX,z0:startZ,y0:35,x1:clamp(startX*.25+(i-1)*24,-78,78),z1:1164+(i-1)*9,colorId:r.colorId});
+      r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;
+    }S.rides=S.rides.filter(r=>r.state!=='DELIVERED');notify(`Delivered ${arrived.length} student(s) to BRACU! +${gained} points`,4);}}
     const nearby=S.rides.filter(r=>r.state==='WAITING'&&distance(S.x,S.z,r.x,r.z)<=(r.type==='HOME'?72:56)).sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
     if(!nearby||seated().length>=3||S.time-S.lastMove<.38){S.dock=0;S.dockId=-1;}
     else {if(S.dockId!==nearby.id){S.dock=0;S.dockId=nearby.id;}S.dock+=dt;const required=nearby.type==='HOME'?1.3:.65;
@@ -338,6 +425,9 @@
   }
   function refreshHUD(){if(S.mode==='MENU')return;
     $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(900-S.time);$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
+    const trafficLabel=$('traffic-status'),powerLabel=$('power-status');
+    if(trafficLabel){trafficLabel.textContent=`${S.traffic==='GREEN'?'🟢 GREEN':'🔴 RED'} LIGHT`;trafficLabel.className='status-pill '+(S.traffic==='GREEN'?'status-green':'status-red');}
+    if(powerLabel){powerLabel.textContent=S.powerOff?`🔴 BLACKOUT: ${power[S.powerIndex].name} · Find repair box (F)`:'🟢 POWER RESTORED · Streetlights and windows are on';powerLabel.className='status-pill '+(S.powerOff?'status-red':'status-green');}
     $('boost-fill').style.width=`${S.boost}%`;$('boost-number').textContent=`${Math.round(S.boost)}%`;$('passengers').innerHTML=`PASSENGERS ONBOARD <b>${seated().length} / 3</b>`;
     $('request-panel').classList.toggle('hidden',!S.request);
     if(S.request){$('request-name').textContent=S.request.name;$('request-location').textContent=`${S.request.type==='HOME'?'🏠 Home pickup':'🛟 SOS rescue'} · ${S.request.pickup}`;$('request-remaining').textContent=`${Math.ceil(S.requestLeft)}s`;}
@@ -372,7 +462,8 @@
       // Colliding the chase-camera arm against building silhouettes prevents
       // the camera from passing inside a facade (present in the original Python).
       let minFraction=1;
-      for(const b of buildings){
+      const cameraObstacles=[...buildings,...campusSolids.map(([x,z,hw,hd])=>({x,z,hw,hd}))];
+      for(const b of cameraObstacles){
         const minX=b.x-b.hw-16,maxX=b.x+b.hw+16,minZ=b.z-b.hd-16,maxZ=b.z+b.hd+16;
         let tMin=0,tMax=1;const vx=x-S.x,vz=z-S.z;
         for(const [p,v,min,max] of [[S.x,vx,minX,maxX],[S.z,vz,minZ,maxZ]]){
@@ -389,12 +480,24 @@
     if(sourceMeshes){
       for(const group of ['sky','clouds'])render(sourceMeshes[group]); // do not render the source's opaque rectangular sky wall in front of the browser scene
     }
-    render(waterMesh);
     if(sourceMeshes){
-      for(const group of ['streets','buildings','campus','props','landmarks','cars','dock'])render(sourceMeshes[group]);render(campusLettering);
+      const powerState=S.powerOff?['central','west','east'][S.powerIndex]:'lit';
+      render(sourceMeshes.streets);
+      render(sourceMeshes['buildings-'+powerState]);
+      render(sourceMeshes.campus);render(sourceMeshes.props);
+      render(sourceMeshes['lamps-'+powerState]);render(sourceMeshes['powerboxes-'+powerState]);
+      render(sourceMeshes.landmarks);render(sourceMeshes.cars);render(sourceMeshes.dock);
+      render(sourceMeshes['traffic-'+S.traffic.toLowerCase()]);
+      render(campusLettering);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
+    // Semi-transparent animated water is drawn AFTER the original flooded
+    // road textures, so lane markings remain visible underneath the surface.
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
+    render(waterMesh);
+    render(sunshineAura);render(sunshineSun);
+    gl.depthMask(true);gl.disable(gl.BLEND);
     // Keep culling disabled for original double-sided OpenGL line/quad geometry.
     // Foreground boat, dynamic light state and localized mission markers.
     for(const car of S.movingCars)render(carMesh,model(car.x,1,car.z,car.z===-555?0:90,.97));
@@ -413,7 +516,7 @@
     if(S.powerOff){const p=power[S.powerIndex];render(markerGoal,model(p.x,2,p.z,0,.8));}
     if(sourceMeshes){render(markerGoal,model(0,10,1100,0,1.85));}
     // Traffic lights: emissive-like saturated color, red/green changes with the actual timer.
-    render(S.traffic==='RED'?signalRed:signalGreen);
+    if(!sourceMeshes)render(S.traffic==='RED'?signalRed:signalGreen);
     if(S.mode!=='MENU'){
       if(S.camera3){
         render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
@@ -427,6 +530,27 @@
       // Passengers are visible from either camera as smaller seated silhouettes.
       const seats=[[8,-19],[8,19],[67,0]];
       seated().forEach((r,i)=>{const [bx,bz]=seats[i];const settle=clamp((S.time-(r.boardedAt??S.time))/1.25,0,1);const eased=settle*settle*(3-2*settle);const localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(sx,boatY+15+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),.62));});
+      // Original BRACU drop-off: students leave their seats and walk to the dock.
+      for(const e of S.deliveryEffects){
+        const progress=clamp((S.time-e.at)/1.65,0,1),walk=progress*progress*(3-2*progress);
+        const x=e.x0+(e.x1-e.x0)*walk,z=e.z0+(e.z1-e.z0)*walk,y=e.y0+(30-e.y0)*walk+8*Math.sin(Math.PI*progress);
+        render(sourceMeshes?.['student-'+e.colorId]||npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
+      }
+      for(const effect of S.missedEffects){
+        const age=S.time-effect.at;
+        if(age<.80&&effect.fromBoat){
+          const f=Math.min(1,age/.80),p=f*f*(3-2*f),elevation=effect.y*(1-p)+7*p+5*Math.sin(Math.PI*p);
+          const x=effect.fromX+(effect.x-effect.fromX)*p,z=effect.fromZ+(effect.z-effect.fromZ)*p;
+          render(sourceMeshes?.['student-'+effect.colorId]||npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
+        }else if(age<3.85){
+          const sink=age>2.85?36*clamp((age-2.85)/1,0,1):0;
+          const frame=Math.floor(((age*7.2)%TAU)/TAU*24)%24;
+          render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,-sink,effect.z,0,.85));
+          render(waterRipple,model(effect.x,9.5,effect.z,0,.9+age*.12));
+        }else if(age<4.35){
+          render(waterRipple,model(effect.x,9.5,effect.z,0,1+age*.22));
+        }
+      }
       if(S.camera3&&!sourceMeshes?.paddles){for(const sign of [-1,1]){
         const bx=S.x+(8*c-sign*47*s)*.62,bz=S.z+(8*s+sign*47*c)*.62;
         const rocking=(keys.has('w')||keys.has('arrowup'))?Math.sin(S.bobTime*9)*13:4;
@@ -434,6 +558,8 @@
       }}
     }
   }
+  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger};}
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{})});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;

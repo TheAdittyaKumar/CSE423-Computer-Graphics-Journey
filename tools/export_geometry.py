@@ -126,7 +126,6 @@ def props():
  for t in names['CityTeaStalls']:names['drawCityTeaStall'](*t)
  for t in names['CityBRACUShops']:names['drawNeighborhoodShop'](*t)
  for t in names['CityRoadsideProps']:names['drawRoadsideProp'](*t)
- for t in names['getStreetLightPositions']():names['drawStreetLight'](*t)
 
 def cars():
  for i,car in enumerate(names['getSubmergedCarPositions']()):
@@ -134,10 +133,28 @@ def cars():
 
 def scenery():
  names['drawShaheedMinar']();names['drawLandmarkPhotoSpot'](names['LandmarkList'][0])
- names['drawFloodTrafficSignal']()
- for x in names['PowerDistrictList']:names['drawPowerRepairStation'](x)
 
-for n,f in [('buildings',buildings),('streets',fixed),('campus',names['renderBRACUStaticGeometry']),('props',props),('cars',cars),('landmarks',scenery),('sky',names['drawStormySky']),('clouds',names['drawStormClouds']),('clear-sky',names['drawBRACUClearSky']),('boat',names['renderCinematicBoatHull'])]:group(n,f)
+def power_variant(active,index,draw):
+ names['PowerOutageActive']=active
+ names['PowerOutageDistrictIndex']=index
+ draw()
+
+def lamps():
+ for t in names['getStreetLightPositions']():names['drawStreetLight'](*t)
+
+def boxes():
+ for t in names['PowerDistrictList']:names['drawPowerRepairStation'](t)
+
+# The desktop version recompiles windows, lamps and repair boxes as power changes.
+# Export those exact source-code drawing states separately for the browser.
+for n,f in [('streets',fixed),('campus',names['renderBRACUStaticGeometry']),('props',props),('cars',cars),('landmarks',scenery),('sky',names['drawStormySky']),('clouds',names['drawStormClouds']),('boat',names['renderCinematicBoatHull'])]:group(n,f)
+for active,index,suffix in [(False,0,'lit'),(True,0,'central'),(True,1,'west'),(True,2,'east')]:
+ for name,draw in [('buildings',buildings),('lamps',lamps),('powerboxes',boxes)]:
+  group(f'{name}-{suffix}',lambda a=active,i=index,d=draw:power_variant(a,i,d))
+for state in ('GREEN','RED'):
+ names['TrafficState']=state
+ group('traffic-'+state.lower(),names['drawFloodTrafficSignal'])
+
 # Export a snapshot of the original captain model in boat-local space by resetting player at origin.
 names['BoatPositionX']=0;names['BoatPositionY']=0;names['BoatFacingAngle']=0
 for n,f in [('captain',names['drawBoatCaptain']),('paddles',names['drawPlayerHandsAndPaddles']),('dock',names['drawUniversityArrivalDock'])]:group(n,f)
