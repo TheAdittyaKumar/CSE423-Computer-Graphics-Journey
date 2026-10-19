@@ -1,12 +1,8 @@
-# Majhi Jaben?! — browser fidelity v6
+# Majhi Jaben?! — Browser Fidelity v7
 
-A **complete six-file GitHub Pages deployment folder** lives in `docs/`.
+Upload the six files inside `docs/` to the existing GitHub repository's root-level `docs/` directory. Keep the Python originals and repository README unchanged.
 
-- `docs/index.html` — browser UI + menu
-- `docs/styles.css` — layout and HUD styling
-- `docs/menu-scene.js` — illustrated menu and flashlight effect
-- `docs/game.js` — WebGL game logic + new pickup fixes, shop signs, wiper
-- `docs/original-geometry.json` — source-derived geometry ranges
-- `docs/original-geometry.bin` — source-derived geometry vertices
+See `FIDELITY_V7_AUDIT_AND_DEPLOY.md` for every fix, test, remaining limitation, and publishing steps.
 
-Read `FIDELITY_V6_COMPLETE_UPDATE.md` for steps, testing results, and remaining differences from the Python original. The original Python project remains in its existing GitHub folders; this package does not replace it.
+Live GitHub Pages URL (after committing and successful deployment):
+https://theadittyakumar.github.io/CSE423-Computer-Graphics-Journey/

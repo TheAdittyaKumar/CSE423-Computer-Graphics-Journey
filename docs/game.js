@@ -38,7 +38,12 @@
   void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){opacity=.53;float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
     float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
     c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
-  }else if(vKind>1.5){opacity=.17+.055*sin(uTime*1.9+vWorld.x*.008);}
+  }else if(vKind>1.5){
+    float radial=length(vec2(vWorld.x,vWorld.z-1378.));
+    float radialFade=1.0-smoothstep(260.,540.,radial);
+    float heightFade=1.0-smoothstep(480.,1600.,vWorld.y);
+    opacity=(.065+.060*(.5+.5*sin(uTime*1.9+vWorld.x*.008)))*radialFade*(.55+.45*heightFade);
+  }
   float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,opacity);}`;
   function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
   const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
@@ -445,19 +450,27 @@
     }else S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age-.80,fromX:ride.x,fromZ:ride.z,x:ride.x,z:ride.z,y:10,fromBoat:false});
     if(S.missedEffects.length>6)S.missedEffects.shift();
   }
+  // Canvas-space sweep designed to sit against the lower right-hand edge of
+  // the cockpit. The same geometry is used to remove water droplets.
+  function windshieldBlade(w,h){
+    return {x:w*.79,y:h*.965,length:Math.min(w*.39,h*.50)};
+  }
   function updateWindshield(dt){
     if(S.camera3)return;
     const rainFree=distance(S.x,S.z,0,1378)<378;
-    if(!rainFree){S.screenSpawn+=dt;while(S.screenSpawn>=.08){S.screenSpawn-=.08;
+    if(rainFree){S.screenDrops.length=0;S.screenSpawn=0;}
+    if(!rainFree&&!S.wiperActive){S.screenSpawn+=dt;while(S.screenSpawn>=.08){S.screenSpawn-=.08;
       for(let i=0;i<4&&S.screenDrops.length<180;i++)S.screenDrops.push({x:rnd(.07,.93),y:rnd(.10,.87)});
     }}
     if(!S.wiperActive)return;
     S.wiperAngle+=S.wiperDirection*155*dt;
-    const px=.505,py=1-55/800;
+    const w=Math.max(1,weather.clientWidth),h=Math.max(1,weather.clientHeight);
+    const blade=windshieldBlade(w,h);
     S.screenDrops=S.screenDrops.filter(d=>{
-      const dx=(d.x-px)*1000,dy=(py-d.y)*800,rad=Math.hypot(dx,dy);
+      const dx=d.x*w-blade.x,dy=blade.y-d.y*h,rad=Math.hypot(dx,dy);
       const ang=(Math.atan2(dy,dx)/RAD+360)%360;
-      return !(rad<=430&&Math.abs(ang-S.wiperAngle)<=11);
+      const error=Math.abs(((ang-S.wiperAngle+540)%360)-180);
+      return !(rad<=blade.length&&error<=12);
     });
     if(S.wiperDirection>0&&S.wiperAngle>=158){S.wiperAngle=158;S.wiperDirection=-1;}
     else if(S.wiperDirection<0&&S.wiperAngle<=18){S.wiperAngle=18;S.wiperDirection=1;S.wiperActive=false;}
@@ -545,24 +558,35 @@
   function resize(){const ratio=Math.min(devicePixelRatio||1,1.8),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);weather.width=canvas.width;weather.height=canvas.height;}gl.viewport(0,0,canvas.width,canvas.height);}
   const rain=[];for(let i=0;i<260;i++)rain.push({x:Math.random(),y:Math.random(),speed:rnd(.2,.7),len:rnd(.007,.020)});
   function renderRain(dt){const w=weather.width,h=weather.height;wx.clearRect(0,0,w,h);if(S.mode==='PAUSED'||S.mode==='WON'||S.mode==='LOST')return;
-    const clearCampus=distance(S.x,S.z,0,1360)<425,quantity=clearCampus?38:rain.length;
-    wx.strokeStyle=clearCampus?'#d5e6e83d':'#b9e0ed45';wx.lineWidth=Math.max(1,w/1100);
+    const campusDistance=distance(S.x,S.z,0,1378);
+    const rainFraction=clamp((campusDistance-365)/230,0,1);
+    const quantity=Math.round(rain.length*rainFraction);
+    wx.strokeStyle=`rgba(185,224,237,${(.07+.18*rainFraction).toFixed(3)})`;wx.lineWidth=Math.max(.7,w/1400);
     wx.beginPath();for(let i=0;i<quantity;i++){const d=rain[i];d.y=(d.y+d.speed*dt)%1;d.x=(d.x+.06*dt)%1;
       const x=d.x*w,y=d.y*h;
       wx.moveTo(x,y);wx.lineTo(x-w*.004,y+d.len*h);}wx.stroke();
     if(S.mode==='PLAYING'&&!S.camera3){
-      // Scale 1000x800 Python HUD coordinates to full browser resolution.
-      wx.fillStyle='rgba(169,208,241,.58)';
-      for(const d of S.screenDrops){const x=d.x*w,y=d.y*h;
-        wx.fillRect(x-2.5*w/1000,y-7*h/800,5*w/1000,14*h/800);
+      // Subtle glass droplets rather than opaque screen-space rectangles.
+      const pixel=Math.max(.75,Math.min(w/1100,h/750));
+      for(const d of S.screenDrops){
+        const x=d.x*w,y=d.y*h;
+        wx.beginPath();wx.ellipse(x,y,1.35*pixel,3.25*pixel,-.14,0,TAU);
+        wx.fillStyle='rgba(144,187,209,.24)';wx.fill();
+        wx.beginPath();wx.ellipse(x-.55*pixel,y-1.1*pixel,.48*pixel,1.3*pixel,-.14,0,TAU);
+        wx.fillStyle='rgba(221,244,255,.36)';wx.fill();
       }
-      const a=S.wiperAngle*RAD,px=.505*w,py=(1-55/800)*h;
-      const ex=px+Math.cos(a)*430*w/1000,ey=py-Math.sin(a)*430*h/800;
-      wx.lineCap='round';wx.strokeStyle='rgba(4,14,18,.95)';wx.lineWidth=Math.max(5,8*w/1000);
-      wx.beginPath();wx.moveTo(px,py);wx.lineTo(ex,ey);wx.stroke();
-      wx.strokeStyle='rgba(113,128,134,.85)';wx.lineWidth=Math.max(1.2,1.5*w/1000);
-      wx.beginPath();wx.moveTo(px,py);wx.lineTo(ex,ey);wx.stroke();
-      wx.fillStyle='#242b2e';wx.beginPath();wx.arc(px,py,7*w/1000,0,TAU);wx.fill();
+      const blade=windshieldBlade(w,h),a=S.wiperAngle*RAD;
+      const reach=(f)=>[blade.x+Math.cos(a)*blade.length*f,blade.y-Math.sin(a)*blade.length*f];
+      const tip=reach(1),mid=reach(.29);
+      wx.lineCap='round';
+      // Slim driving arm; the rubber blade only occupies its distal portion.
+      wx.strokeStyle='rgba(16,23,27,.76)';wx.lineWidth=3.4*pixel;
+      wx.beginPath();wx.moveTo(blade.x,blade.y);wx.lineTo(...tip);wx.stroke();
+      wx.strokeStyle='rgba(18,23,27,.87)';wx.lineWidth=5.5*pixel;
+      wx.beginPath();wx.moveTo(...mid);wx.lineTo(...tip);wx.stroke();
+      wx.strokeStyle='rgba(132,151,157,.65)';wx.lineWidth=.9*pixel;
+      wx.beginPath();wx.moveTo(...mid);wx.lineTo(...tip);wx.stroke();
+      wx.fillStyle='#252e32';wx.beginPath();wx.arc(blade.x,blade.y,5.2*pixel,0,TAU);wx.fill();
     }
     if(S.flash>0){wx.fillStyle=`rgba(255,252,224,${clamp(S.flash*1.6,0,.6)})`;wx.fillRect(0,0,w,h);}
   }
@@ -586,8 +610,10 @@
         }
         if(tMin<=tMax&&tMin<=1&&tMax>=0&&tMin<minFraction)minFraction=Math.max(.06,tMin-.04);
       }
-      eye=[S.x+(x-S.x)*minFraction,39+(139-39)*minFraction,S.z+(z-S.z)*minFraction];
-      target=[S.x+c*80,36,S.z+s*80];fov=73;
+      const nearWall=clamp((.55-minFraction)/.55,0,1);
+      eye=[S.x+(x-S.x)*minFraction,39+100*minFraction+67*nearWall,S.z+(z-S.z)*minFraction];
+      target=[S.x+c*80,36+10*nearWall,S.z+s*80];
+      fov=73+12*nearWall;
     }else{eye=[S.x-c*24,boatY+41,S.z-s*24];target=[S.x+c*210,boatY+19,S.z+s*210];fov=78;}
     gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target));gl.uniform1f(uniforms.time,S.bobTime*.85);
     gl.disable(gl.CULL_FACE);
@@ -654,9 +680,17 @@
         const shift=32+((S.time*32)%95);
         render(waterRipple,model(S.x-fx*shift,9.25,S.z-fz*shift,0,.36+.24*Math.sin(S.time*2)));
       }
-      // Passengers are visible from either camera as smaller seated silhouettes.
+      // First-person seats are directly in front of the eye: keep passenger
+      // silhouettes visible but lower than the sightline (and below the wiper).
       const seats=[[8,-19],[8,19],[67,0]];
-      seated().forEach((r,i)=>{const [bx,bz]=seats[i];const settle=clamp((S.time-(r.boardedAt??S.time))/1.25,0,1);const eased=settle*settle*(3-2*settle);const localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(sx,boatY+15+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),.62));});
+      seated().forEach((r,i)=>{
+        const [bx,bz]=seats[i],settle=clamp((S.time-(r.boardedAt??S.time))/1.25,0,1);
+        const eased=settle*settle*(3-2*settle),localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;
+        const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;
+        const scale=S.camera3?.62:.36,seatY=S.camera3?boatY+15:boatY+1;
+        render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],
+          model(sx,seatY+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),scale));
+      });
       // Original BRACU drop-off: students leave their seats and walk to the dock.
       for(const e of S.deliveryEffects){
         const progress=clamp((S.time-e.at)/1.65,0,1),walk=progress*progress*(3-2*progress);
@@ -668,11 +702,13 @@
         if(age<.80&&effect.fromBoat){
           const f=Math.min(1,age/.80),p=f*f*(3-2*f),elevation=effect.y*(1-p)+7*p+5*Math.sin(Math.PI*p);
           const x=effect.fromX+(effect.x-effect.fromX)*p,z=effect.fromZ+(effect.z-effect.fromZ)*p;
-          render(sourceMeshes?.['student-'+effect.colorId]||npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
+          if(S.camera3||distance(eye[0],eye[2],x,z)>52)
+            render(sourceMeshes?.['student-'+effect.colorId]||npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
         }else if(age<3.85){
           const sink=age>2.85?36*clamp((age-2.85)/1,0,1):0;
           const frame=Math.floor(((age*7.2)%TAU)/TAU*24)%24;
-          render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,-sink,effect.z,0,.85));
+          if(S.camera3||distance(eye[0],eye[2],effect.x,effect.z)>52)
+            render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,-sink,effect.z,0,.85));
           render(waterRipple,model(effect.x,9.5,effect.z,0,.9+age*.12));
         }else if(age<4.35){
           render(waterRipple,model(effect.x,9.5,effect.z,0,1+age*.22));
@@ -686,7 +722,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger};}
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{})});
+  window.majhiVersion='fidelity7';
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight))});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;
