@@ -104,9 +104,9 @@
   }
   const homes=[];homeStarts.forEach(([x,z],i)=>{const b=buildings.find(t=>t.x===x&&t.z===z);if(!b)return;
     const road=[-1150,-600,-50,500,1050].reduce((p,v)=>Math.abs(v-z)<Math.abs(p-z)?v:p,-1150);
-    const dir=road>z?1:-1, dock=z+dir*(b.hd+110);if(valid(x,dock))homes.push({id:`H${i+1}`,x,z:dock,doorZ:z+dir*(b.hd+30),facadeZ:z+dir*(b.hd+2),frontDir:dir,type:'HOME',name:`Home ${String(i+1).padStart(2,'0')}`});
+    const dir=road>z?1:-1, dock=z+dir*(b.hd+110);if(valid(x,dock))homes.push({id:`H${i+1}`,x,z:dock,doorX:x,doorZ:z+dir*(b.hd+30),personX:x,personZ:z+dir*(b.hd+30),facadeZ:z+dir*(b.hd+2),frontDir:dir,type:'HOME',name:`Home ${String(i+1).padStart(2,'0')}`});
   });
-  const rescues=sosStarts.map(([x,z],i)=>({id:`S${i+1}`,x,z,type:'DROWNING',name:`Flooded Street ${String(i+1).padStart(2,'0')}`})).filter(t=>valid(t.x,t.z));
+  const rescues=sosStarts.map(([x,z],i)=>({id:`S${i+1}`,x,z,type:'DROWNING',personX:x,personZ:z,name:`Flooded Street ${String(i+1).padStart(2,'0')}`})).filter(t=>valid(t.x,t.z));
   // Build environment mesh; source map coordinates and mission markers are preserved.
   const city=new Mesh();
   const cityPalette=[[.45,.53,.56],[.61,.50,.45],[.45,.54,.52],[.55,.49,.56],[.53,.57,.53]];
@@ -191,7 +191,7 @@
   // renderCinematicBoatHull and other Python draw functions, not hand-made JS boxes.
   let sourceMeshes=null, sourceLoadError=null;
   async function loadSourceGeometry(){
-    const [iResponse,vResponse]=await Promise.all([fetch('./original-geometry.json?v=fidelity5'),fetch('./original-geometry.bin?v=fidelity5')]);
+    const [iResponse,vResponse]=await Promise.all([fetch('./original-geometry.json?v=fidelity6'),fetch('./original-geometry.bin?v=fidelity5')]);
     if(!iResponse.ok||!vResponse.ok)throw new Error('Original source geometry files missing — upload both original-geometry files into docs.');
     const index=await iResponse.json(),bytes=await vResponse.arrayBuffer();
     const source=new Float32Array(bytes),meshes={};
@@ -263,22 +263,71 @@
   const legend='BRAC UNIVERSITY', unit=1.53, startX=-6-legend.length*6*unit/2;
   for(let i=0;i<legend.length;i++){const bitmap=font5[legend[i]];if(!bitmap)continue;for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(bitmap[row][col]==='1')campusLettering.quad([startX+(i*6+col)*unit,151-row*unit,1134.0],[startX+(i*6+col+1)*unit,151-row*unit,1134.0],[startX+(i*6+col+1)*unit,152-(row+1)*unit,1134.0],[startX+(i*6+col)*unit,152-(row+1)*unit,1134.0],[.96,.92,.72]);}
   campusLettering.upload();
-  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[]};
+  // The Python shop renderer uses glutStrokeCharacter(), which the offline
+  // triangle exporter cannot export. Rebuild these original signs as world-
+  // space pixel-stroke meshes, attached to the exact original facade planes.
+  const signGlyphs={
+    A:['01110','10001','10001','11111','10001','10001','10001'],
+    B:['11110','10001','10001','11110','10001','10001','11110'],
+    C:['01111','10000','10000','10000','10000','10000','01111'],
+    D:['11110','10001','10001','10001','10001','10001','11110'],
+    E:['11111','10000','10000','11110','10000','10000','11111'],
+    F:['11111','10000','10000','11110','10000','10000','10000'],
+    G:['01111','10000','10000','10111','10001','10001','01110'],
+    H:['10001','10001','10001','11111','10001','10001','10001'],
+    I:['11111','00100','00100','00100','00100','00100','11111'],
+    J:['00111','00010','00010','00010','10010','10010','01100'],
+    K:['10001','10010','10100','11000','10100','10010','10001'],
+    L:['10000','10000','10000','10000','10000','10000','11111'],
+    M:['10001','11011','10101','10101','10001','10001','10001'],
+    N:['10001','11001','10101','10011','10001','10001','10001'],
+    O:['01110','10001','10001','10001','10001','10001','01110'],
+    P:['11110','10001','10001','11110','10000','10000','10000'],
+    Q:['01110','10001','10001','10001','10101','10010','01101'],
+    R:['11110','10001','10001','11110','10100','10010','10001'],
+    S:['01111','10000','10000','01110','00001','00001','11110'],
+    T:['11111','00100','00100','00100','00100','00100','00100'],
+    U:['10001','10001','10001','10001','10001','10001','01110'],
+    V:['10001','10001','10001','10001','10001','01010','00100'],
+    W:['10001','10001','10001','10101','10101','11011','10001'],
+    X:['10001','10001','01010','00100','01010','10001','10001'],
+    Y:['10001','10001','01010','00100','00100','00100','00100'],
+    Z:['11111','00001','00010','00100','01000','10000','11111']
+  };
+  const shopSigns=new Mesh();
+  function paintShopLabel(x,z,baseY,text,maxWidth,height,color){
+    const step=Math.min(maxWidth/Math.max(1,text.length*6),height/7),width=text.length*6*step;
+    const x0=x-width/2,top=baseY+height;
+    for(let k=0;k<text.length;k++){
+      const g=signGlyphs[text[k]];if(!g)continue;
+      for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(g[row][col]==='1'){
+        const l=x0+(k*6+col)*step,r=l+step*.84,t=top-row*step,b=t-step*.88;
+        shopSigns.quad([l,b,z],[r,b,z],[r,t,z],[l,t,z],color);
+      }
+    }
+  }
+  const originalShops=[[-367,885,'ICON STATIONERY','BOOKS  PRINT  COPIES'],[320,715,'FOOD VALLEY','SNACKS  AND  MEALS']];
+  for(const [x,z,name,subtitle] of originalShops){
+    paintShopLabel(x,z-53.55,96,name,116,15.0,[.97,.97,.89]);
+    paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
+  }
+  shopSigns.upload();
+  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[]};
   const keys=new Set();
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[]});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[]});
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
-    $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('hud').classList.remove('hidden');
-    offerRide();notify('Take students to BRAC University before their timers expire!',5);refreshHUD();}
+    $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
+    resolvePickupMoorings();offerRide();notify('Take students to BRAC University before their timers expire!',5);refreshHUD();}
   function offerRide(){if(S.request||S.rides.length>=5)return;
     const id=S.requestId++,type=id%2===0?'HOME':'DROWNING',places=(type==='HOME'?homes:rescues).filter(p=>!S.rides.some(r=>r.locationId===p.id));if(!places.length)return;
     const place=id<2?places[0]:places[Math.floor(Math.random()*places.length)];
     const dist=Math.abs(S.x-place.x)+Math.abs(S.z-place.z)+Math.abs(place.x)+Math.abs(place.z-1080);
     const deadline=clamp(Math.round(43+dist/130+(type==='HOME'?7:0)+rnd(-4,6)),66,118);
-    S.request={id,type,name:students[id%students.length],locationId:place.id,x:place.x,z:place.z,pickup:place.name,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',colorId:id%studentColors.length,warning:false};S.requestLeft=22;}
+    S.request={id,type,name:students[id%students.length],locationId:place.id,x:place.x,z:place.z,pickup:place.name,personX:place.personX,personZ:place.personZ,doorX:place.doorX,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',relocated:place.relocated,colorId:id%studentColors.length,warning:false};S.requestLeft=22;}
   function accept(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming ride request.');return;}
     if(S.rides.length>=5){notify('Your rescue queue is full (5 active requests).');return;}
     S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;refreshHUD();}
@@ -289,7 +338,7 @@
     if(distance(S.x,S.z,825,1080)>125){notify('Move onto the orange landmark photo ring first.');return;}
     const target=Math.atan2(1350-S.z,825-S.x)/RAD,delta=Math.abs(((S.angle-target+540)%360)-180);
     if(delta>30){notify('Face Shaheed Minar, then press P.');return;}
-    S.photo=true;S.flash=.25;S.score+=70;S.photoTime=8;notify('Shaheed Minar photographed! +70 points',4);}
+    S.photo=true;S.flash=.25;S.score+=70;S.photoTime=8;notify('Shaheed Minar photographed! +70 points',4);const info=$('photo-info');if(info){info.classList.remove('hidden');}}
   function repair(){if(S.mode!=='PLAYING')return;if(!S.powerOff){notify('No power outage currently.');return;}
     const p=power[S.powerIndex];if(distance(S.x,S.z,p.x,p.z)>130){notify(`Move closer to the ${p.name} power repair box.`);return;}
     S.score+=100;S.powerOff=false;S.powerClock=0;S.powerIndex=(S.powerIndex+1)%power.length;notify(`${p.name} power restored! +100 points`,3);}
@@ -312,7 +361,7 @@
     }
   }
   function togglePause(){if(S.mode==='PLAYING'){S.mode='PAUSED';keys.clear();nextModal('PAUSED');}else if(S.mode==='PAUSED'){S.mode='PLAYING';$('modal').classList.add('hidden');}}
-  function action(key){switch(key){case 'y':accept();break;case 'n':reject();break;case ' ':boost();break;case 'c':if(S.mode==='PLAYING'){S.camera3=!S.camera3;notify(S.camera3?'Third-person camera':'First-person camera',1.5);}break;case 'p':photo();break;case 'f':repair();break;case 'v':if(S.mode==='PLAYING'){S.wiperTime=1.6;notify('Rain swept from the windshield.',1.4);}break;case 'Escape':if(S.mode==='MENU'&&!$('modal').classList.contains('hidden')){$('modal').classList.add('hidden');}else togglePause();break;}}
+  function action(key){switch(key){case 'y':accept();break;case 'n':reject();break;case ' ':boost();break;case 'c':if(S.mode==='PLAYING'){S.camera3=!S.camera3;notify(S.camera3?'Third-person camera':'First-person camera',1.5);}break;case 'p':photo();break;case 'f':repair();break;case 'v':if(S.mode==='PLAYING'&&!S.wiperActive){S.wiperActive=true;S.wiperDirection=1;S.wiperAngle=18;notify('Windshield wiper activated.',1.4);}break;case 'Escape':if(S.mode==='MENU'&&!$('modal').classList.contains('hidden')){$('modal').classList.add('hidden');}else togglePause();break;}}
   function orientedObjectOverlap(x,z,cx,cz,angle,halfLength,halfWidth,margin=2){
     // Separating-axis test shared by cars, shops, and tea stalls.
     const a=S.angle*RAD,b=angle*RAD,dx=cx-x,dz=cz-z;
@@ -329,6 +378,31 @@
   }
   function carOverlap(x,z,cx,cz,angle,style=0){
     return orientedObjectOverlap(x,z,cx,cz,angle,style%3===1?45:40,20,2);
+  }
+  // Both boats and cars are extended shapes. A centre that is valid in the
+  // original map may be impossible to reach when a car is parked directly at
+  // the pickup ring. Find the nearest safe mooring point near the ORIGINAL
+  // passenger. The passenger stays at the house/water position, not on the car.
+  function pickupMooring(place){
+    const ox=place.x,oz=place.z;
+    const spots=[[0,0],[0,-32],[0,32],[-32,0],[32,0],[-55,0],[55,0],
+      [-45,-35],[45,-35],[-45,35],[45,35],[0,-60],[0,60],[-70,-20],[70,-20],[-70,20],[70,20]];
+    const isSafe=(x,z)=>valid(x,z,5)&&!overlapStaticProp(x,z)&&
+      !parkedCars.some(car=>[0,90].some(heading=>{
+        const save=S.angle;S.angle=heading;
+        const touching=carOverlap(x,z,car.x,car.z,car.angle,car.style);
+        S.angle=save;return touching;
+      }))&&!S.debris.some(d=>distance(x,z,d.x,d.z)<53);
+    for(const [dx,dz] of spots)if(isSafe(ox+dx,oz+dz))return [ox+dx,oz+dz];
+    return [ox,oz];
+  }
+  function resolvePickupMoorings(){
+    for(const place of [...homes,...rescues]){
+      // Do not accumulate offsets each time the player restarts.
+      if(place.originalX===undefined){place.originalX=place.x;place.originalZ=place.z;}
+      [place.x,place.z]=pickupMooring({x:place.originalX,z:place.originalZ});
+      place.relocated=distance(place.originalX,place.originalZ,place.x,place.z)>1;
+    }
   }
   function circlePostOverlap(x,z,px,pz,r){
     const a=S.angle*RAD,dx=px-x,dz=pz-z;
@@ -371,7 +445,24 @@
     }else S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age-.80,fromX:ride.x,fromZ:ride.z,x:ride.x,z:ride.z,y:10,fromBoat:false});
     if(S.missedEffects.length>6)S.missedEffects.shift();
   }
-  function step(dt){S.time+=dt;S.bobTime+=dt;S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);S.wiperTime=Math.max(0,S.wiperTime-dt);
+  function updateWindshield(dt){
+    if(S.camera3)return;
+    const rainFree=distance(S.x,S.z,0,1378)<378;
+    if(!rainFree){S.screenSpawn+=dt;while(S.screenSpawn>=.08){S.screenSpawn-=.08;
+      for(let i=0;i<4&&S.screenDrops.length<180;i++)S.screenDrops.push({x:rnd(.07,.93),y:rnd(.10,.87)});
+    }}
+    if(!S.wiperActive)return;
+    S.wiperAngle+=S.wiperDirection*155*dt;
+    const px=.505,py=1-55/800;
+    S.screenDrops=S.screenDrops.filter(d=>{
+      const dx=(d.x-px)*1000,dy=(py-d.y)*800,rad=Math.hypot(dx,dy);
+      const ang=(Math.atan2(dy,dx)/RAD+360)%360;
+      return !(rad<=430&&Math.abs(ang-S.wiperAngle)<=11);
+    });
+    if(S.wiperDirection>0&&S.wiperAngle>=158){S.wiperAngle=158;S.wiperDirection=-1;}
+    else if(S.wiperDirection<0&&S.wiperAngle<=18){S.wiperAngle=18;S.wiperDirection=1;S.wiperActive=false;}
+  }
+  function step(dt){S.time+=dt;S.bobTime+=dt;S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
     S.boost=clamp(S.boost+(S.boostOn?-30:15)*dt,0,100);if(S.boost<=0)S.boostOn=false;
     const forward=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
     const turn=(keys.has('a')||keys.has('arrowleft')?1:0)-(keys.has('d')||keys.has('arrowright')?1:0); // left is counterclockwise in the original, projection mirrored to correct handedness
@@ -383,7 +474,7 @@
         const x=S.x+dx/n,z=S.z+dz/n;if(moveAllowed(x,z)){S.x=x;S.z=z;}else{const bad=S.debris.some(d=>distance(x,z,d.x,d.z)<57);if(bad&&S.debrisCooldown<=0){S.score=Math.max(0,S.score-25);S.debrisCooldown=1.8;notify('Floating debris! -25 points. Steer around it.',2.7);}break;}}
       S.lastMove=S.time;
     }
-    S.debrisCooldown=Math.max(0,S.debrisCooldown-dt);
+    S.debrisCooldown=Math.max(0,S.debrisCooldown-dt);S.pickupEffects=S.pickupEffects.filter(e=>S.time-e.at<1.15);
     S.current='';for(const zone of currents)if(S.x>=zone.a&&S.x<=zone.b&&S.z>=zone.c&&S.z<=zone.d){S.current=zone.name;const x=S.x+zone.dx*dt,z=S.z+zone.dz*dt;if(moveAllowed(x,z)){S.x=x;S.z=z;}break;}
     S.debris.forEach(d=>{const ph=d.phase+S.time*.65,x=d.x0+Math.sin(ph)*26,z=d.z0+Math.cos(ph*.7)*18;if(distance(x,z,S.x,S.z)>57){d.x=x;d.z=z;}});
     S.movingCars=[{x:-470+((S.time*30+65)%680<340?(S.time*30+65)%680:680-(S.time*30+65)%680),z:-555,angle:0,style:3},{x:598,z:-490+((S.time*24+190)%720<360?(S.time*24+190)%720:720-(S.time*24+190)%720),angle:90,style:4}];
@@ -403,10 +494,20 @@
       S.deliveryEffects.push({at:S.time,x0:startX,z0:startZ,y0:35,x1:clamp(startX*.25+(i-1)*24,-78,78),z1:1164+(i-1)*9,colorId:r.colorId});
       r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;
     }S.rides=S.rides.filter(r=>r.state!=='DELIVERED');notify(`Delivered ${arrived.length} student(s) to BRACU! +${gained} points`,4);}}
-    const nearby=S.rides.filter(r=>r.state==='WAITING'&&distance(S.x,S.z,r.x,r.z)<=(r.type==='HOME'?72:56)).sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
+    // Parked/moving cars occasionally block the only approach to a pickup
+    // without physically overlapping its marker. In that case the captain may
+    // moor along the same roadside up to 120 units from the home marker.
+    // Never extend the range for an unobstructed pickup.
+    function boardingRadius(ride){
+      const ordinary=ride.type==='HOME'?(ride.relocated?83:72):(ride.relocated?65:56);
+      const obstructed=[...parkedCars,...S.movingCars].some(car=>
+        distance(ride.x,ride.z,car.x,car.z)<ordinary+65);
+      return obstructed?Math.max(ordinary,ride.type==='HOME'?122:84):ordinary;
+    }
+    const nearby=S.rides.filter(r=>r.state==='WAITING'&&distance(S.x,S.z,r.x,r.z)<=boardingRadius(r)).sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
     if(!nearby||seated().length>=3||S.time-S.lastMove<.38){S.dock=0;S.dockId=-1;}
     else {if(S.dockId!==nearby.id){S.dock=0;S.dockId=nearby.id;}S.dock+=dt;const required=nearby.type==='HOME'?1.3:.65;
-      if(S.dock>=required){nearby.state='ONBOARD';nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
+      if(S.dock>=required){nearby.state='ONBOARD';S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
     if(S.delivered>=6){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||S.failed>=6){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
@@ -447,9 +548,22 @@
     const clearCampus=distance(S.x,S.z,0,1360)<425,quantity=clearCampus?38:rain.length;
     wx.strokeStyle=clearCampus?'#d5e6e83d':'#b9e0ed45';wx.lineWidth=Math.max(1,w/1100);
     wx.beginPath();for(let i=0;i<quantity;i++){const d=rain[i];d.y=(d.y+d.speed*dt)%1;d.x=(d.x+.06*dt)%1;
-      const x=d.x*w,y=d.y*h;if(S.wiperTime>0&&x>w*.25&&x<w*.78&&y>h*.1&&y<h*.8)continue;
+      const x=d.x*w,y=d.y*h;
       wx.moveTo(x,y);wx.lineTo(x-w*.004,y+d.len*h);}wx.stroke();
-    if(S.wiperTime>0){wx.strokeStyle='#d1effa65';wx.lineWidth=6;wx.beginPath();wx.arc(w*.5,h*.86,Math.min(w,h)*.62,Math.PI*1.21,Math.PI*1.74);wx.stroke();}
+    if(S.mode==='PLAYING'&&!S.camera3){
+      // Scale 1000x800 Python HUD coordinates to full browser resolution.
+      wx.fillStyle='rgba(169,208,241,.58)';
+      for(const d of S.screenDrops){const x=d.x*w,y=d.y*h;
+        wx.fillRect(x-2.5*w/1000,y-7*h/800,5*w/1000,14*h/800);
+      }
+      const a=S.wiperAngle*RAD,px=.505*w,py=(1-55/800)*h;
+      const ex=px+Math.cos(a)*430*w/1000,ey=py-Math.sin(a)*430*h/800;
+      wx.lineCap='round';wx.strokeStyle='rgba(4,14,18,.95)';wx.lineWidth=Math.max(5,8*w/1000);
+      wx.beginPath();wx.moveTo(px,py);wx.lineTo(ex,ey);wx.stroke();
+      wx.strokeStyle='rgba(113,128,134,.85)';wx.lineWidth=Math.max(1.2,1.5*w/1000);
+      wx.beginPath();wx.moveTo(px,py);wx.lineTo(ex,ey);wx.stroke();
+      wx.fillStyle='#242b2e';wx.beginPath();wx.arc(px,py,7*w/1000,0,TAU);wx.fill();
+    }
     if(S.flash>0){wx.fillStyle=`rgba(255,252,224,${clamp(S.flash*1.6,0,.6)})`;wx.fillRect(0,0,w,h);}
   }
   function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a),boatY=12+Math.sin(S.bobTime*2.8)*1.3;
@@ -488,7 +602,7 @@
       render(sourceMeshes['lamps-'+powerState]);render(sourceMeshes['powerboxes-'+powerState]);
       render(sourceMeshes.landmarks);render(sourceMeshes.cars);render(sourceMeshes.dock);
       render(sourceMeshes['traffic-'+S.traffic.toLowerCase()]);
-      render(campusLettering);
+      render(campusLettering);render(shopSigns);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
@@ -506,12 +620,16 @@
     for(const r of S.rides)if(r.state==='WAITING'){
       const bounce=Math.sin(S.bobTime*4+r.id)*2;
       const home=r.type==='HOME';
-      const px=home?r.x:r.x,pz=home?(r.doorZ??r.z):r.z;
+      const px=r.personX??r.x,pz=r.personZ??r.z;
       if(home){render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(px,19+.6*Math.sin(S.bobTime*3+r.id),pz,-90+Math.sin(S.bobTime*2+r.id)*5,.63));}
-      else {const frame=Math.floor(((S.time*2)%Math.PI)/Math.PI*24)%24;const anim=sourceMeshes?.['struggling-'+frame];if(anim)render(anim,model(px,0,pz,0,1));else render(npcMeshes[r.colorId],model(px,8+bounce,pz,-90,.70));}
+      else {const frame=Math.floor((S.time*3.25)%24);const anim=sourceMeshes?.['struggling-'+frame];if(anim)render(anim,model(px,0,pz,0,1));else render(npcMeshes[r.colorId],model(px,8+bounce,pz,-90,.70));}
       render(markerMesh,model(r.x,3+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
     }
     if(S.request){/* Offered riders appear on the map, not in the city until accepted. */}
+    for(const splash of S.pickupEffects){const age=S.time-splash.at;
+      render(waterRipple,model(splash.x,10,splash.z,0,.6+age*1.8));
+      render(waterRipple,model(splash.x,10.3,splash.z,0,.35+age*1.15));
+    }
     if(!S.photo)render(markerGoal,model(825,1,1080,0,1));
     if(S.powerOff){const p=power[S.powerIndex];render(markerGoal,model(p.x,2,p.z,0,.8));}
     if(sourceMeshes){render(markerGoal,model(0,10,1100,0,1.85));}
@@ -526,6 +644,15 @@
         // Like the desktop edition, the actual boat is drawn in first person.
         render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
         if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['first-rowing-'+f]||sourceMeshes['firstperson-hands'],model(S.x,boatY-12,S.z,S.angle,1));}
+      }
+      if(S.rowing){
+        // Paddle-tip splashes and a short wake behind the moving sampan.
+        const fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
+        for(const side of [-1,1]){
+          render(waterRipple,model(S.x+side*lx*39+fx*18,9.4,S.z+side*lz*39+fz*18,0,.20+.10*Math.abs(Math.sin(S.strokeTime*TAU/.65))));
+        }
+        const shift=32+((S.time*32)%95);
+        render(waterRipple,model(S.x-fx*shift,9.25,S.z-fz*shift,0,.36+.24*Math.sin(S.time*2)));
       }
       // Passengers are visible from either camera as smaller seated silhouettes.
       const seats=[[8,-19],[8,19],[67,0]];
@@ -559,7 +686,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger};}
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{})});
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{})});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;
