@@ -38,7 +38,7 @@
       </header>
       <div class="center-crosshair" aria-hidden="true">+</div>
       <div class="hud-bottom">
-        <section class="map-panel glass"><div class="section-heading"><span>FLOOD ROUTE MAP</span><span class="online-dot">● LIVE</span></div><canvas id="minimap" width="240" height="240" aria-label="Map showing boat and objective locations"></canvas><div class="map-legend"><span><i class="legend-dot boat-dot"></i> YOU</span><span><i class="legend-dot student-dot"></i> PICKUP</span><span><i class="legend-dot campus-dot"></i> BRACU</span></div></section>
+        <section class="map-panel glass"><div class="section-heading"><span>FLOOD ROUTE MAP</span><span class="online-dot">● LIVE</span></div><canvas id="minimap" width="240" height="240" aria-label="Map showing boat and objective locations"></canvas><div class="map-legend"><span><i class="legend-icon boat-dot">▲</i> YOU</span><span><i class="legend-icon home-dot">◆</i> HOME</span><span><i class="legend-icon sos-dot">!</i> SOS</span><span><i class="legend-icon campus-dot">■</i> BRACU</span><span><i class="legend-icon dock-dot">▼</i> DOCK</span><span><i class="legend-icon repair-dot">✚</i> REPAIR</span><span><i class="legend-icon photo-dot">★</i> PHOTO</span></div></section>
         <section class="middle-panel">
           <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
           <div class="objective glass"><span id="objective-title">ACCEPT A RESCUE REQUEST</span><strong id="objective-detail">Bring students safely to BRAC University</strong><div class="meter"><div id="dock-fill"></div></div></div>
@@ -52,7 +52,7 @@
     <section class="overlay" id="menu">
       <canvas id="menu-scene" aria-hidden="true"></canvas>
       <button id="menu-close" title="Exit game" aria-label="Exit game">✕</button>
-      <div class="menu-left"><div class="eyebrow">BRAC UNIVERSITY · CSE423 · GROUP 07</div><h1>MAJHI<br><em>JABEN?!</em></h1><p class="menu-subtitle">DHAKA IS UNDERWATER.<br><span>YOUR NEXT CLASS ISN'T.</span></p><p class="menu-description">Row through a rain-soaked city. Rescue stranded students. Dodge the debris. Deliver everyone to BRAC University before time runs out.</p><div class="edition-pill">◈ FIDELITY PASS V6 · ORIGINAL PYTHON SCENE MODELS</div></div>
+      <div class="menu-left"><div class="eyebrow">BRAC UNIVERSITY · CSE423 · GROUP 07</div><h1>MAJHI<br><em>JABEN?!</em></h1><p class="menu-subtitle">DHAKA IS UNDERWATER.<br><span>YOUR NEXT CLASS ISN'T.</span></p><p class="menu-description">Row through a rain-soaked city. Rescue stranded students. Dodge the debris. Deliver everyone to BRAC University before time runs out.</p><div class="edition-pill">◈ FIDELITY PASS V8 · ORIGINAL PYTHON SCENE MODELS</div></div>
       <div class="menu-right"><div class="menu-card"><p class="overline">THE CITY NEEDS A MAJHI</p><button id="play-button" class="menu-primary">▶ &nbsp; START RESCUE</button><button id="help-button" class="menu-secondary">⌨ &nbsp; HOW TO PLAY</button><button id="exit-button" class="menu-secondary exit-button">✕ &nbsp; EXIT GAME</button><a class="menu-secondary link-button" href="https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey" target="_blank" rel="noopener noreferrer">↗ &nbsp; VIEW SOURCE ON GITHUB</a><p class="menu-note">No download. No login. Keyboard or touch.</p><p class="menu-note" id="engine-status" aria-live="polite">Loading game engine…</p></div></div>
       <footer class="menu-footer">An adaptation of <strong>Majhi Jaben?!</strong> by Adittya Kumar Chowdhury, Nafisa Lubaba & Usaeed Rahman Tibro.</footer>
     </section>
@@ -116,7 +116,7 @@
     });
   })();
   </script>
-  <script src="./menu-scene.js?v=fidelity7" defer></script>
-  <script src="./game.js?v=fidelity7" defer onerror="window.majhiStartupError('Game script missing', 'Verify docs/game.js exists in your GitHub repository.')"></script>
+  <script src="./menu-scene.js?v=fidelity8" defer></script>
+  <script src="./game.js?v=fidelity8" defer onerror="window.majhiStartupError('Game script missing', 'Verify docs/game.js exists in your GitHub repository.')"></script>
 </body>
 </html>

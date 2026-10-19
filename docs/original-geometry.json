@@ -426,5 +426,13 @@
   "struggling-23": {
     "start": 516039,
     "count": 2448
+  },
+  "moving-car-3": {
+    "start": 518487,
+    "count": 1194
+  },
+  "moving-car-4": {
+    "start": 519681,
+    "count": 1194
   }
 }

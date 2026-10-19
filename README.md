@@ -1,8 +1,9 @@
-# Majhi Jaben?! — Browser Fidelity v7
+# Majhi Jaben?! — Fidelity v8 (Browser Edition)
 
-Upload the six files inside `docs/` to the existing GitHub repository's root-level `docs/` directory. Keep the Python originals and repository README unchanged.
+This GitHub Pages-ready `docs/` directory contains the **complete six-file web game** adapted from the Python CSE423 Cinematic Edition. The project remains owned by its original credited team.
 
-See `FIDELITY_V7_AUDIT_AND_DEPLOY.md` for every fix, test, remaining limitation, and publishing steps.
+Read [`FIDELITY_V8_AUDIT_AND_DEPLOY.md`](FIDELITY_V8_AUDIT_AND_DEPLOY.md) for the full changes, deployment steps, and testing limitations.
 
-Live GitHub Pages URL (after committing and successful deployment):
-https://theadittyakumar.github.io/CSE423-Computer-Graphics-Journey/
+**Deployment:** Replace all six existing files in the repository's `docs/` directory. Do **not** overwrite the repository's root README or original Python files.
+
+**Controls:** W/A/S/D steer, Y accept ride, N decline, C camera, V wiper, Space boost, F repair, P photo, Esc pause. Board by stopping near students and waiting; deliver to the BRACU dock.

@@ -35,14 +35,31 @@
   p.y=8.22+(relative-.22)*(1.-.70*daylight);
   }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
-  void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){opacity=.53;float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
+  void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
+    opacity=mix(.53,.12,daylight);c=mix(c,vec3(.24,.31,.30),.55*daylight);float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
     float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
     c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
+  }else if(vKind>3.5&&vKind<4.5){
+    // Warm streetlight halo: its shell is translucent, while its bulb is the
+    // original static source geometry and never has to be re-drawn.
+    opacity=.085;
+  }else if(vKind>2.5&&vKind<3.5){
+    // Real 3D rain streaks retain translucency rather than opaque HUD marks.
+    opacity=.64;
+  }else if(vKind>5.5){
+    // BRACU alone is genuinely dry: a soft, raised grassy courtyard blends
+    // into the flood instead of ending at a rectangular map boundary.
+    float radial=length(vec2(vWorld.x,vWorld.z-1378.));
+    opacity=1.0-smoothstep(230.,365.,radial);
+    c=mix(c,vec3(.33,.43,.30),.26);
+  }else if(vKind>4.5){
+    opacity=.38;
   }else if(vKind>1.5){
     float radial=length(vec2(vWorld.x,vWorld.z-1378.));
     float radialFade=1.0-smoothstep(260.,540.,radial);
     float heightFade=1.0-smoothstep(480.,1600.,vWorld.y);
-    opacity=(.065+.060*(.5+.5*sin(uTime*1.9+vWorld.x*.008)))*radialFade*(.55+.45*heightFade);
+    opacity=(.13+.085*(.5+.5*sin(uTime*1.9+vWorld.x*.008)))*radialFade*(.62+.38*heightFade);
+    c=mix(c,vec3(1.,.96,.78),.19);
   }
   float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,opacity);}`;
   function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
@@ -256,11 +273,96 @@
   // Light opening in the otherwise storm-dark sky, behind the campus.
   sunshineAura.quad([-530,25,1645],[530,25,1645],[360,1370,1645],[-360,1370,1645],[.68,.84,.87],2);
   sunshineAura.upload();
+  // A sunlit, dry campus island, with a gradual edge into flooded streets.
+  // The delivery dock remains in the water at z=1080 and is never covered.
+  const campusGround=new Mesh();campusGround.disk(0,17.1,1378,365,[.31,.40,.30],112);
+  campusGround.data.forEach((_,i)=>{if(i%7===6)campusGround.data[i]=6;});
+  campusGround.upload();
   const sunshineSun=new Mesh();sunshineSun.sphere(290,700,1525,33,[.98,.91,.65],8,13);sunshineSun.upload();
   const signalRed=new Mesh();signalRed.sphere(145,120,-68,9,[1,.15,.1],4,10);signalRed.upload();
   const signalGreen=new Mesh();signalGreen.sphere(145,120,-68,9,[.17,1,.38],4,10);signalGreen.upload();
 
 
+  // Physical 3D rain inspired by drawRainAndSplashEffects(): 330 falling
+  // world droplets and 108 replenishing droplets near the boat, plus impact
+  // rings on the moving water. The canvas layer remains for a very subtle
+  // near-camera rain mist and windshield condensation only.
+  const stormDrops=Array.from({length:330},()=>({x:rnd(-1650,1650),z:rnd(-1650,1650),y:rnd(100,950)}));
+  const nearDrops=Array.from({length:108},(_,i)=>({x:0,z:0,y:rnd(60,540),index:i}));
+  const stormGeometry=new Mesh(),stormSplash=new Mesh();
+  stormSplash.ring(0,0,0,1,0.10,[.80,.96,.97],24);
+  // Its translucent material is handled by kind 5 in the fragment shader.
+  stormSplash.data.forEach((_,i)=>{if(i%7===6)stormSplash.data[i]=5;});
+  stormSplash.upload();
+  stormGeometry.buffer=gl.createBuffer();
+  function campusRainWeight(x,z){const d=distance(x,z,0,1378);return clamp((d-350)/230,0,1);}
+  function updateWorldRain(dt){
+    for(const [index,d] of stormDrops.entries()){
+      d.y-=540*dt;
+      if(d.y<=10){
+        if(campusRainWeight(d.x,d.z)>.5&&S.rainSplashes.length<75&&Math.random()<.29)
+          S.rainSplashes.push({x:d.x,z:d.z,age:0});
+        d.x=rnd(-1650,1650);d.z=rnd(-1650,1650);d.y=rnd(560,980);
+      }
+    }
+    for(const d of nearDrops){
+      d.y-=540*dt;
+      if(d.y<=10){
+        if(campusRainWeight(d.x,d.z)>.3&&S.rainSplashes.length<75&&Math.random()<.20)
+          S.rainSplashes.push({x:d.x,z:d.z,age:0});
+        d.y+=480+rnd(0,250);
+      }
+      d.x=S.x+((d.index*151)%930)-465;
+      d.z=S.z+((d.index*269+37)%1050)-525;
+    }
+    for(const e of S.rainSplashes)e.age+=dt;
+    S.rainSplashes=S.rainSplashes.filter(e=>e.age<.55);
+  }
+  function uploadStormRain(){
+    // Each streak is a hair-thin 3D ribbon, angled by the prevailing wind.
+    const data=[];
+    function v(x,y,z,color){data.push(x,y,z,...color,3);}
+    for(const [i,d] of [...stormDrops,...nearDrops].entries()){
+      const wet=campusRainWeight(d.x,d.z);
+      if(wet<.10||i>=330&&i%3===0&&wet<.90)continue;
+      const bright=(.57+.06*(i%4))*wet;
+      const color=[bright*.76,bright*.91,bright];
+      const length=17+(i%5)*4;
+      // two thin triangles produce a readable line from multiple viewpoints
+      const x=d.x,y=d.y,z=d.z;
+      v(x,y,z,color);v(x+2.6,y-length,z-1.2,color);v(x+1.45,y-length*.38,z+.34,color);
+    }
+    const arr=new Float32Array(data);stormGeometry.length=arr.length/7;
+    gl.bindBuffer(gl.ARRAY_BUFFER,stormGeometry.buffer);
+    gl.bufferData(gl.ARRAY_BUFFER,arr,gl.DYNAMIC_DRAW);
+  }
+  // Translucent world-space halos are only drawn when their district has power.
+  const streetlights=[];
+  const VROADS=[-1100,-550,0,550,1100],HROADS=[-1150,-600,-50,500,1050];
+  const vz=[-1650,...HROADS,1650],vx=[-1650,...VROADS,1650];
+  for(const x of VROADS)for(let i=0;i<vz.length-1;i++)streetlights.push([x+(x<=0?133:-133),(vz[i]+vz[i+1])/2]);
+  for(const z of HROADS)for(let i=0;i<vx.length-1;i++)streetlights.push([(vx[i]+vx[i+1])/2,z+(z>=0?-133:133)]);
+  const litHalo=new Mesh();litHalo.sphere(0,0,0,16,[1,.76,.40],6,11);
+  litHalo.data.forEach((_,i)=>{if(i%7===6)litHalo.data[i]=4;});litHalo.upload();
+  const lampReflection=new Mesh();lampReflection.ring(0,0,0,19,7,[.91,.71,.38],24);
+  lampReflection.data.forEach((_,i)=>{if(i%7===6)lampReflection.data[i]=4;});lampReflection.upload();
+  function lightOffAt(x){if(!S.powerOff)return false;
+    return S.powerIndex===0?Math.abs(x)<=500:S.powerIndex===1?x< -500:x>500;}
+
+  // The desktop edition only gives frustrated motorists to two broken cars.
+  // Capture its waving arm shape in 24 time-varying frames.
+  const driverFrames=Array.from({length:24},(_,frame)=>{
+    const m=new Mesh(),wave=Math.sin(frame/24*TAU);
+    m.box(0,10,0,13,22,10,[.91,.66,.19]);
+    m.box(0,26,0,12,6,11,[.18,.26,.31]);
+    m.sphere(0,36,0,7,[.65,.47,.31],5,9);
+    const a=(15+27*wave)*RAD;
+    const x=6+Math.sin(a)*12,y=24+Math.cos(a)*12;
+    // Arm and hand move with the source's 3-Hz frustration animation.
+    m.box(x, y,0,4,24,4,[.9,.65,.42]);m.sphere(6+Math.sin(a)*24,24+Math.cos(a)*24,0,3.5,[.9,.65,.42],4,7);
+    return m.upload();
+  });
+  // More detailed source-exported vehicle geometry is used for moving cars.
   // BRAC UNIVERSITY facade lettering (original GLUT stroke text cannot be baked as triangles).
   // Characters are small actual 3D meshes on the south-facing entrance fascia.
   const campusLettering=new Mesh();
@@ -317,12 +419,12 @@
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
   }
   shopSigns.upload();
-  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[]};
+  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[]};
   const keys=new Set();
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[]});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[]});
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
@@ -450,10 +552,12 @@
     }else S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age-.80,fromX:ride.x,fromZ:ride.z,x:ride.x,z:ride.z,y:10,fromBoat:false});
     if(S.missedEffects.length>6)S.missedEffects.shift();
   }
-  // Canvas-space sweep designed to sit against the lower right-hand edge of
-  // the cockpit. The same geometry is used to remove water droplets.
+  // Original Python windshield: pivot (505,55) in its 1000x800 virtual
+  // frame and a 430-unit blade. Adapt via uniform letterbox scaling so the
+  // wiper covers the *center* of ultrawide screens, not the right-hand side.
   function windshieldBlade(w,h){
-    return {x:w*.79,y:h*.965,length:Math.min(w*.39,h*.50)};
+    const factor=Math.min(w/1000,h/800);
+    return {x:w*.505,y:h-55*factor,length:430*factor};
   }
   function updateWindshield(dt){
     if(S.camera3)return;
@@ -463,19 +567,23 @@
       for(let i=0;i<4&&S.screenDrops.length<180;i++)S.screenDrops.push({x:rnd(.07,.93),y:rnd(.10,.87)});
     }}
     if(!S.wiperActive)return;
+    const previousAngle=S.wiperAngle;
     S.wiperAngle+=S.wiperDirection*155*dt;
     const w=Math.max(1,weather.clientWidth),h=Math.max(1,weather.clientHeight);
     const blade=windshieldBlade(w,h);
+    // Remove every droplet crossed between the old and new blade angles.
+    // This matters at low FPS, when the blade jumps several degrees per tick.
+    const low=Math.min(previousAngle,S.wiperAngle)-11;
+    const high=Math.max(previousAngle,S.wiperAngle)+11;
     S.screenDrops=S.screenDrops.filter(d=>{
       const dx=d.x*w-blade.x,dy=blade.y-d.y*h,rad=Math.hypot(dx,dy);
-      const ang=(Math.atan2(dy,dx)/RAD+360)%360;
-      const error=Math.abs(((ang-S.wiperAngle+540)%360)-180);
-      return !(rad<=blade.length&&error<=12);
+      const angle=(Math.atan2(dy,dx)/RAD+360)%360;
+      return !(rad<=blade.length+5&&angle>=low&&angle<=high);
     });
     if(S.wiperDirection>0&&S.wiperAngle>=158){S.wiperAngle=158;S.wiperDirection=-1;}
     else if(S.wiperDirection<0&&S.wiperAngle<=18){S.wiperAngle=18;S.wiperDirection=1;S.wiperActive=false;}
   }
-  function step(dt){S.time+=dt;S.bobTime+=dt;S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
+  function step(dt){S.time+=dt;S.bobTime+=dt;updateWorldRain(dt);S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
     S.boost=clamp(S.boost+(S.boostOn?-30:15)*dt,0,100);if(S.boost<=0)S.boostOn=false;
     const forward=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
     const turn=(keys.has('a')||keys.has('arrowleft')?1:0)-(keys.has('d')||keys.has('arrowright')?1:0); // left is counterclockwise in the original, projection mirrored to correct handedness
@@ -524,18 +632,35 @@
     if(S.delivered>=6){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||S.failed>=6){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
-  function refreshMap(){const w=map.width,h=map.height,px=x=>12+(x+1650)/3300*(w-24),py=z=>h-12-(z+1650)/3300*(h-24);
+  function refreshMap(){
+    const w=map.width,h=map.height,px=x=>12+(x+1650)/3300*(w-24),py=z=>h-12-(z+1650)/3300*(h-24);
     ctx.clearRect(0,0,w,h);ctx.fillStyle='#0b2a37';ctx.fillRect(0,0,w,h);
-    ctx.strokeStyle='#345565';ctx.lineWidth=4;for(const x of [-1100,-550,0,550,1100]){ctx.beginPath();ctx.moveTo(px(x),py(-1650));ctx.lineTo(px(x),py(1650));ctx.stroke();}for(const z of [-1150,-600,-50,500,1050]){ctx.beginPath();ctx.moveTo(px(-1650),py(z));ctx.lineTo(px(1650),py(z));ctx.stroke();}
+    ctx.strokeStyle='#345565';ctx.lineWidth=4;
+    for(const x of [-1100,-550,0,550,1100]){ctx.beginPath();ctx.moveTo(px(x),py(-1650));ctx.lineTo(px(x),py(1650));ctx.stroke();}
+    for(const z of [-1150,-600,-50,500,1050]){ctx.beginPath();ctx.moveTo(px(-1650),py(z));ctx.lineTo(px(1650),py(z));ctx.stroke();}
     ctx.fillStyle='#4c6270';for(const b of buildings)ctx.fillRect(px(b.x-b.hw),py(b.z+b.hd),(2*b.hw)/3300*(w-24),(2*b.hd)/3300*(h-24));
     ctx.fillStyle='#91d89b';ctx.fillRect(px(-220),py(1620),px(270)-px(-220),py(1230)-py(1620));
-    function dot(x,z,r,c){ctx.beginPath();ctx.arc(px(x),py(z),r,0,TAU);ctx.fillStyle=c;ctx.fill();}
-    dot(0,1080,5,'#a7f2a8');
-    for(const r of S.rides)if(r.state==='WAITING'){dot(r.x,r.z,5,'#ff8865');ctx.strokeStyle='#fff0cf';ctx.lineWidth=1;ctx.beginPath();ctx.arc(px(r.x),py(r.z),7,0,TAU);ctx.stroke();}
-    if(S.request)dot(S.request.x,S.request.z,3,'#a9afb3');
-    if(S.powerOff){const p=power[S.powerIndex];dot(p.x,p.z,4,'#fa6661');}
-    if(!S.photo)dot(825,1080,4,'#ffb95f');
-    const a=S.angle*RAD;ctx.save();ctx.translate(px(S.x),py(S.z));ctx.rotate(-a+Math.PI/2);ctx.beginPath();ctx.moveTo(0,-10);ctx.lineTo(-6,7);ctx.lineTo(0,4);ctx.lineTo(6,7);ctx.closePath();ctx.fillStyle='#ffda8b';ctx.fill();ctx.restore();
+    // Each mission uses a separate shape + color, matching the desktop
+    // HOME / SOS / BRACU / DOCK / REPAIR / LANDMARK symbol legend.
+    function marker(x,z,kind,small=false){
+      const X=px(x),Y=py(z);ctx.save();ctx.translate(X,Y);
+      ctx.lineWidth=1.4;ctx.strokeStyle='#0a202b';
+      if(kind==='HOME'){ctx.fillStyle='#f4b56d';ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(6,0);ctx.lineTo(0,6);ctx.lineTo(-6,0);ctx.closePath();ctx.fill();ctx.stroke();}
+      else if(kind==='SOS'){ctx.fillStyle='#ff7162';ctx.beginPath();ctx.arc(0,0,6,0,TAU);ctx.fill();ctx.stroke();ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#152831';ctx.fillText('!',0,.5);}
+      else if(kind==='CAMPUS'){ctx.fillStyle='#9ae4a3';ctx.fillRect(-5,-5,10,10);}
+      else if(kind==='DOCK'){ctx.fillStyle='#65cfea';ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(-6,-5);ctx.lineTo(6,-5);ctx.closePath();ctx.fill();ctx.stroke();}
+      else if(kind==='REPAIR'){ctx.fillStyle='#ffd17c';ctx.fillRect(-2,-7,4,14);ctx.fillRect(-7,-2,14,4);ctx.strokeRect(-7,-2,14,4);}
+      else if(kind==='PHOTO'){ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#d8b7f4';ctx.fillText('★',0,0);}
+      else if(kind==='PENDING'){ctx.strokeStyle='#a9b7c3';ctx.lineWidth=1.7;ctx.beginPath();ctx.arc(0,0,small?3:5,0,TAU);ctx.stroke();}
+      ctx.restore();
+    }
+    marker(0,1360,'CAMPUS');marker(0,1080,'DOCK');
+    for(const r of S.rides)if(r.state==='WAITING')marker(r.x,r.z,r.type==='HOME'?'HOME':'SOS');
+    if(S.request)marker(S.request.x,S.request.z,'PENDING',true);
+    if(S.powerOff){const station=power[S.powerIndex];marker(station.x,station.z,'REPAIR');}
+    if(!S.photo)marker(825,1080,'PHOTO');
+    const a=S.angle*RAD;ctx.save();ctx.translate(px(S.x),py(S.z));ctx.rotate(-a+Math.PI/2);
+    ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(-7,8);ctx.lineTo(0,4);ctx.lineTo(7,8);ctx.closePath();ctx.fillStyle='#ffda8b';ctx.fill();ctx.strokeStyle='#10212d';ctx.stroke();ctx.restore();
   }
   function refreshHUD(){if(S.mode==='MENU')return;
     $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(900-S.time);$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
@@ -556,12 +681,12 @@
   }
   function skyColor(){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);}
   function resize(){const ratio=Math.min(devicePixelRatio||1,1.8),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);weather.width=canvas.width;weather.height=canvas.height;}gl.viewport(0,0,canvas.width,canvas.height);}
-  const rain=[];for(let i=0;i<260;i++)rain.push({x:Math.random(),y:Math.random(),speed:rnd(.2,.7),len:rnd(.007,.020)});
+  const rain=[];for(let i=0;i<100;i++)rain.push({x:Math.random(),y:Math.random(),speed:rnd(.2,.7),len:rnd(.008,.023)});
   function renderRain(dt){const w=weather.width,h=weather.height;wx.clearRect(0,0,w,h);if(S.mode==='PAUSED'||S.mode==='WON'||S.mode==='LOST')return;
     const campusDistance=distance(S.x,S.z,0,1378);
     const rainFraction=clamp((campusDistance-365)/230,0,1);
     const quantity=Math.round(rain.length*rainFraction);
-    wx.strokeStyle=`rgba(185,224,237,${(.07+.18*rainFraction).toFixed(3)})`;wx.lineWidth=Math.max(.7,w/1400);
+    wx.strokeStyle=`rgba(185,224,237,${(.065+.115*rainFraction).toFixed(3)})`;wx.lineWidth=Math.max(.7,w/1400);
     wx.beginPath();for(let i=0;i<quantity;i++){const d=rain[i];d.y=(d.y+d.speed*dt)%1;d.x=(d.x+.06*dt)%1;
       const x=d.x*w,y=d.y*h;
       wx.moveTo(x,y);wx.lineTo(x-w*.004,y+d.len*h);}wx.stroke();
@@ -636,11 +761,40 @@
     // road textures, so lane markings remain visible underneath the surface.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
     render(waterMesh);
+    render(campusGround);
     render(sunshineAura);render(sunshineSun);
+    gl.depthMask(true);gl.disable(gl.BLEND);
+    // World-space rain is composited over city and water. Small ripples spawn
+    // only when a descending world droplet strikes water outside BRACU.
+    if(S.mode==='PLAYING'){
+      uploadStormRain();gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
+      render(stormGeometry);
+      for(const splash of S.rainSplashes){
+        if(distance(S.x,S.z,splash.x,splash.z)>510)continue;
+        render(stormSplash,model(splash.x,9.65,splash.z,0,1.8+splash.age*26));
+      }
+      gl.depthMask(true);gl.disable(gl.BLEND);
+    }
+    // Warm light scattering around operational streetlamps, dynamically
+    // omitted in the affected blackout district.
+    gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
+    for(const [x,z] of streetlights){if(lightOffAt(x)||distance(S.x,S.z,x,z)>680||distance(x,z,0,1378)<378)continue;
+      render(litHalo,model(x,107,z-15,0,1));
+      render(lampReflection,model(x,9.25,z-15,0,1));
+    }
     gl.depthMask(true);gl.disable(gl.BLEND);
     // Keep culling disabled for original double-sided OpenGL line/quad geometry.
     // Foreground boat, dynamic light state and localized mission markers.
-    for(const car of S.movingCars)render(carMesh,model(car.x,1,car.z,car.z===-555?0:90,.97));
+    for(const car of S.movingCars){const mesh=sourceMeshes?.['moving-car-'+(car.style%5)]||carMesh;
+      render(mesh,model(car.x,0,car.z,car.angle,.98));
+      // A gentle wake behind slow-moving vehicles; collisions unchanged.
+      render(waterRipple,model(car.x-24*Math.cos(car.angle*RAD),9.4,car.z-24*Math.sin(car.angle*RAD),0,.55));
+    }
+    for(const i of [1,4]){const car=parkedCars[i],a=car.angle*RAD;
+      const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
+      const f=Math.floor((S.bobTime*3+i*1.8)/TAU*24)%24;
+      render(driverFrames[(f+24)%24],model(dx,9,dz,car.angle,1));
+    }
     S.debris.forEach((d,i)=>render(sourceMeshes?.['debris-'+(i%3)]||debrisMesh,model(d.x,0,d.z,(i*57)%360,1)));
     if(!sourceMeshes)for(let i=0;i<power.length;i++){const p=power[i];render(powerMesh,model(p.x,0,p.z,0,1));}
     for(const r of S.rides)if(r.state==='WAITING'){
@@ -687,7 +841,7 @@
         const [bx,bz]=seats[i],settle=clamp((S.time-(r.boardedAt??S.time))/1.25,0,1);
         const eased=settle*settle*(3-2*settle),localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;
         const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;
-        const scale=S.camera3?.62:.36,seatY=S.camera3?boatY+15:boatY+1;
+        const scale=S.camera3?.62:.51,seatY=S.camera3?boatY+15:boatY+15;
         render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],
           model(sx,seatY+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),scale));
       });
@@ -721,9 +875,9 @@
       }}
     }
   }
-  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger};}
-  window.majhiVersion='fidelity7';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight))});
+  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights};}
+  window.majhiVersion='fidelity8';
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;

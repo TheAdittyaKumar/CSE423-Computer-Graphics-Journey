@@ -25,3 +25,16 @@
 .photo-info strong { font-size:12px; color:#f5cd78; letter-spacing:.12em; }
 .photo-info p { font-size:13px; line-height:1.5; color:#d9e4e7; }
 .photo-info small { color:#ffda91; font-weight:800; }
+
+/* v8: legible category-specific minimap symbols with compact wrapping */
+.map-legend{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 5px;font-size:8px;line-height:1.4;justify-content:unset;}
+.map-legend span{white-space:nowrap;display:flex;align-items:center;gap:3px;}
+.legend-icon{font-style:normal;font-weight:900;font-size:11px;width:12px;display:inline-block;text-align:center;}
+.map-legend .boat-dot{color:#ffdf8c;background:transparent}
+.map-legend .home-dot{color:#f2b563;background:transparent}
+.map-legend .sos-dot{color:#ff7462;background:transparent}
+.map-legend .campus-dot{color:#a4f5ac;background:transparent}
+.map-legend .dock-dot{color:#64cbe6;background:transparent}
+.map-legend .repair-dot{color:#ffd17c;background:transparent}
+.map-legend .photo-dot{color:#d6b6e9;background:transparent}
+@media(max-width:720px){.map-legend{grid-template-columns:repeat(3,minmax(0,1fr));font-size:6px;gap:1px}.legend-icon{font-size:8px;width:8px}}
