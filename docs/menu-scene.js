@@ -7,11 +7,73 @@
  const menu=document.querySelector('#menu'), canvas=document.querySelector('#menu-scene');
  if(!menu||!canvas)return;
  const ctx=canvas.getContext('2d'); let hover='START', exitPulse=0, clickFlash=0, last=0;
+ // The illustration is letterboxed independently of the HTML menu buttons.
+ // Keep this transform so DOM button centers can be mapped into artboard space.
+ const sceneTransform={scale:1,offsetX:0,offsetY:0};
+ let highlightedButton=null;
  const $$=id=>document.getElementById(id);
  function color(rgb,a=1){return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${a})`;}
  function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(x,y,w,h);}
  function poly(points,fill,stroke=null,width=1){ctx.beginPath();ctx.moveTo(...points[0]);points.slice(1).forEach(p=>ctx.lineTo(...p));ctx.closePath();if(fill){ctx.fillStyle=fill;ctx.fill();}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke();}}
  function line(points,stroke,width=2){ctx.beginPath();ctx.moveTo(...points[0]);points.slice(1).forEach(p=>ctx.lineTo(...p));ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.lineJoin='round';ctx.lineCap='round';ctx.stroke();}
+ // Convert a DOM button center into the *same* virtual 1000x800 space used
+ // for the boat and flashlight. This works on desktop, laptop and mobile.
+ function targetFor(id,fallback){
+   const element=$$(id);
+   if(!element)return fallback;
+   const button=element.getBoundingClientRect(), artboard=canvas.getBoundingClientRect();
+   if(!button.width||!button.height||!artboard.width||!artboard.height)return fallback;
+   const canvasX=((button.left+button.width*.5-artboard.left)*canvas.width/artboard.width);
+   const canvasY=((button.top+button.height*.5-artboard.top)*canvas.height/artboard.height);
+   return [(canvasX-sceneTransform.offsetX)/sceneTransform.scale,
+           (canvasY-sceneTransform.offsetY)/sceneTransform.scale];
+ }
+ function lightMenuButton(name){
+   const id=name==='HELP'?'help-button':name==='EXIT'?'exit-button':name==='CLOSE'?'menu-close':'play-button';
+   if(id===highlightedButton)return;
+   if(highlightedButton){const old=$$(highlightedButton);if(old){old.style.boxShadow='';old.style.filter='';}}
+   highlightedButton=id;
+   const button=$$(id);
+   if(button){
+     button.style.boxShadow='0 0 0 1px rgba(255,237,181,.28), 0 0 24px rgba(255,222,149,.24), 0 0 50px rgba(255,220,140,.10)';
+     button.style.filter='brightness(1.06)';
+   }
+ }
+ // Transparent tapered beam; unlike the old fixed 715px target, it can reach
+ // HTML controls outside the original virtual artboard. The cone is drawn behind
+ // the real buttons, which get a subtle matching glow at their edges.
+ function drawAimedBeam(origin,target,intensity=1){
+   const [sx,sy]=origin,[tx,ty]=target;
+   const dx=tx-sx,dy=ty-sy,dist=Math.hypot(dx,dy)||1;
+   const nx=-dy/dist,ny=dx/dist;
+   const farWidth=Math.min(76,20+dist*.058);
+   const innerWidth=Math.min(31,7+dist*.020);
+   ctx.save();
+   ctx.beginPath();
+   ctx.moveTo(sx+nx*5,sy+ny*5);
+   ctx.lineTo(tx+nx*farWidth,ty+ny*farWidth);
+   ctx.lineTo(tx-nx*farWidth,ty-ny*farWidth);
+   ctx.lineTo(sx-nx*5,sy-ny*5);
+   ctx.closePath();ctx.clip();
+   const haze=ctx.createLinearGradient(sx,sy,tx,ty);
+   haze.addColorStop(0,`rgba(255,247,209,${.40*intensity})`);
+   haze.addColorStop(.45,`rgba(255,227,160,${.18*intensity})`);
+   haze.addColorStop(.85,`rgba(255,224,150,${.12*intensity})`);
+   haze.addColorStop(1,`rgba(255,224,151,${.08*intensity})`);
+   ctx.fillStyle=haze;
+   ctx.fillRect(Math.min(sx,tx)-farWidth-5,Math.min(sy,ty)-farWidth-5,
+                Math.abs(dx)+2*farWidth+10,Math.abs(dy)+2*farWidth+10);
+   ctx.restore();
+   poly([[sx+nx*3,sy+ny*3],[tx+nx*innerWidth,ty+ny*innerWidth],
+         [tx-nx*innerWidth,ty-ny*innerWidth],[sx-nx*3,sy-ny*3]],
+        `rgba(255,245,205,${.055*intensity})`);
+   line([origin,target],`rgba(255,242,199,${.65*intensity})`,1.7);
+   const glow=ctx.createRadialGradient(tx,ty,0,tx,ty,100);
+   glow.addColorStop(0,`rgba(255,239,185,${.29*intensity})`);
+   glow.addColorStop(.24,`rgba(255,232,165,${.13*intensity})`);
+   glow.addColorStop(1,'rgba(255,226,150,0)');
+   ctx.fillStyle=glow;ctx.beginPath();ctx.arc(tx,ty,100,0,Math.PI*2);ctx.fill();
+ }
  function ellipse(x,y,rx,ry,fill){ctx.beginPath();ctx.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),0,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();}
  function ring(x,y,rx,ry,stroke,width=1){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke();}
  function draw(t){
@@ -53,8 +115,15 @@
    line([[374,by-71],[392,by-67],[408,by-63]],'#394247',11);
    ellipse(412,by-63,8,8,'#ecdfac');
    line([[277,by-35],[290,by+12],[310,by+17]],'#855538',8);
-   // Correct flashlight pivot and target vary with the hovered menu item.
-   const pivot=[412,by-63];const target=hover==='HELP'?[715,410]:hover==='EXIT'?[504,400]:[715,325];
+   // Aim the torch toward the actual menu button, not a fixed position on
+   // the original 1000x800 canvas. The right-hand HTML card moves with the viewport.
+   const pivot=[412,by-63];
+   const target=hover==='HELP'?targetFor('help-button',[1090,410]):
+                hover==='EXIT'?targetFor('exit-button',[1090,470]):
+                hover==='CLOSE'?targetFor('menu-close',[1210,85]):
+                targetFor('play-button',[1090,335]);
+   lightMenuButton(hover);
+   drawAimedBeam(pivot,target,hover==='EXIT'||hover==='CLOSE'?1.25:1);
    if(hover==='EXIT'||hover==='CLOSE'||exitPulse>0){
      const alpha=Math.max(exitPulse,hover==='EXIT'||hover==='CLOSE'?.9:0);
      const radial=ctx.createRadialGradient(pivot[0],pivot[1],2,pivot[0],pivot[1],650);
@@ -72,10 +141,6 @@
      haze.addColorStop(1,'rgba(255,248,221,0)');
      ctx.beginPath();ctx.arc(pivot[0],pivot[1],825,0,Math.PI*2);
      ctx.fillStyle=haze;ctx.fill();
-   } else {
-     const [tx,ty]=target,dx=tx-pivot[0],dy=ty-pivot[1],d=Math.hypot(dx,dy),px=-dy/d,py=dx/d;
-     poly([[pivot[0]+px*5,pivot[1]+py*5],[tx+px*34,ty+py*34],[tx-px*34,ty-py*34],[pivot[0]-px*5,pivot[1]-py*5]],'#ffe0a029');
-     line([pivot,target],'#ffe8adad',1.5);ellipse(tx,ty,18,18,'#ffdc6833');ellipse(tx,ty,7,7,'#ffedb1e0');
    }
    ellipse(pivot[0],pivot[1],8,8,'#fff2d1');
    // Wind and storm streaks, matching the deterministic scatter in the Python menu.
@@ -103,6 +168,7 @@
    const offsetX=(cw-1000*unit)*.54;
    const offsetY=(ch-800*unit)*.50;
    ctx.setTransform(unit,0,0,unit,offsetX,offsetY);
+   sceneTransform.scale=unit;sceneTransform.offsetX=offsetX;sceneTransform.offsetY=offsetY;
    exitPulse=Math.max(0,exitPulse-dt*.7);clickFlash=Math.max(0,clickFlash-dt*.65);
    draw(t);requestAnimationFrame(tick);}
  for(const [id,name] of [['play-button','START'],['help-button','HELP'],['exit-button','EXIT'],['menu-close','CLOSE']]){const el=$$(id);if(!el)continue;el.addEventListener('pointerenter',()=>{hover=name;});el.addEventListener('focus',()=>{hover=name;});el.addEventListener('pointerleave',()=>{hover='START';});}
