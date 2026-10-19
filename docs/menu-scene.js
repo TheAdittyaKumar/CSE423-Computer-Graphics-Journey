@@ -59,9 +59,19 @@
      const alpha=Math.max(exitPulse,hover==='EXIT'||hover==='CLOSE'?.9:0);
      const radial=ctx.createRadialGradient(pivot[0],pivot[1],2,pivot[0],pivot[1],650);
      radial.addColorStop(0,`rgba(255,255,250,${.98*alpha})`);radial.addColorStop(.15,`rgba(255,254,226,${.78*alpha})`);radial.addColorStop(.55,`rgba(255,237,176,${.4*alpha})`);radial.addColorStop(1,'rgba(255,241,204,0)');
-     ctx.fillStyle=radial;ctx.fillRect(0,0,1000,800);
+     // Paint a feathered CIRCLE, never a full-artboard rectangle. The latter
+     // exposes the 1000x800 source canvas edges on widescreen monitors.
+     ctx.beginPath();ctx.arc(pivot[0],pivot[1],650,0,Math.PI*2);
+     ctx.fillStyle=radial;ctx.fill();
      for(let i=0;i<12;i++){const a=i*Math.PI/6;line([[pivot[0]+Math.cos(a)*20,pivot[1]+Math.sin(a)*20],[pivot[0]+Math.cos(a)*(i%2?240:340),pivot[1]+Math.sin(a)*(i%2?240:340)]],`rgba(255,255,216,${.52*alpha})`,i%2?3:7);}
-     rect(0,0,1000,800,`rgba(255,251,231,${.15*alpha})`);
+     // A soft atmosphere lift still gives the original blinding effect, with
+     // alpha falling to ZERO before the glow boundary (no box or hard seam).
+     const haze=ctx.createRadialGradient(pivot[0],pivot[1],0,pivot[0],pivot[1],825);
+     haze.addColorStop(0,`rgba(255,251,231,${.21*alpha})`);
+     haze.addColorStop(.46,`rgba(255,248,221,${.10*alpha})`);
+     haze.addColorStop(1,'rgba(255,248,221,0)');
+     ctx.beginPath();ctx.arc(pivot[0],pivot[1],825,0,Math.PI*2);
+     ctx.fillStyle=haze;ctx.fill();
    } else {
      const [tx,ty]=target,dx=tx-pivot[0],dy=ty-pivot[1],d=Math.hypot(dx,dy),px=-dy/d,py=dx/d;
      poly([[pivot[0]+px*5,pivot[1]+py*5],[tx+px*34,ty+py*34],[tx-px*34,ty-py*34],[pivot[0]-px*5,pivot[1]-py*5]],'#ffe0a029');
@@ -70,7 +80,17 @@
    ellipse(pivot[0],pivot[1],8,8,'#fff2d1');
    // Wind and storm streaks, matching the deterministic scatter in the Python menu.
    for(let i=0;i<275;i++){const x=(i*73+19)%2600-800,y=(i*149+Math.floor(t*95))%790;if(x>413&&x<694&&y<525)continue;line([[x,y],[x-5,y+19]],'#acd0dc60',1.2);}
-   if(clickFlash>0)rect(0,0,1000,800,`rgba(255,255,242,${clickFlash*.8})`);
+   if(clickFlash>0){
+     // The exit-click flash is radial too: a square alpha overlay caused the
+     // visible rectangular 'flashlight box' in the previous release.
+     const flash=ctx.createRadialGradient(pivot[0],pivot[1],0,pivot[0],pivot[1],925);
+     flash.addColorStop(0,`rgba(255,255,244,${clickFlash*.92})`);
+     flash.addColorStop(.22,`rgba(255,251,225,${clickFlash*.60})`);
+     flash.addColorStop(.60,`rgba(255,240,195,${clickFlash*.16})`);
+     flash.addColorStop(1,'rgba(255,240,195,0)');
+     ctx.beginPath();ctx.arc(pivot[0],pivot[1],925,0,Math.PI*2);
+     ctx.fillStyle=flash;ctx.fill();
+   }
  }
  function tick(now){const t=now/1000;const dt=last?Math.min((now-last)/1000,.08):0;last=now;if(menu.classList.contains('hidden')){requestAnimationFrame(tick);return;}const dpr=Math.min(devicePixelRatio||1,2),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}// Keep the source illustration's 5:4 proportions at every browser width.
    // Independent x/y stretching made the boat, spotlight and BRACU look squashed.
