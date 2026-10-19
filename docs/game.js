@@ -109,6 +109,30 @@
   const cars=[[-1100,-920,90],[-550,-320,90],[0,-720,90],[550,260,90],[1100,-380,90],[-820,500,0],[760,1050,0],[-260,-1150,0]];
   // The Python game offsets alternating lanes by 0.22 * 210 world units.
   const parkedCars=cars.map(([x,z,heading],i)=>({x:x+(Math.abs(heading-90)<.1?(i%2?1:-1)*46.2:0),z:z+(Math.abs(heading-90)>=.1?(i%2?1:-1)*46.2:0),angle:heading,style:i}));
+  // The two slow cars use the original Python's own route ranges and progress.
+  const slowCars=[{axis:'x',fixed:-555,min:-470,max:-130,speed:30,phase:65,style:3},
+                  {axis:'z',fixed:598,min:-490,max:-130,speed:24,phase:190,style:4}];
+  function carAtProgress(car,progress){
+    const travel=car.max-car.min,offset=((progress%(2*travel))+(2*travel))%(2*travel);
+    const forward=offset<=travel,along=car.min+(forward?offset:2*travel-offset);
+    return car.axis==='x'?{x:along,z:car.fixed,angle:forward?0:180,style:car.style}:
+      {x:car.fixed,z:along,angle:forward?90:270,style:car.style};
+  }
+  function updateSlowCars(dt){
+    S.movingCars=slowCars.map((car,i)=>{
+      const current=S.carProgress[i],future=current+car.speed*dt;
+      let blocked=false;
+      const steps=Math.max(1,Math.ceil(car.speed*dt/5));
+      for(let part=1;part<=steps;part++){
+        const point=carAtProgress(car,current+(future-current)*(part/steps));
+        if(orientedObjectOverlap(S.x,S.z,point.x,point.z,point.angle,
+                                 point.style%3===1?45:40,20,12)){blocked=true;break;}
+      }
+      S.carStopped[i]=blocked;
+      if(!blocked)S.carProgress[i]=future;
+      return {...carAtProgress(car,S.carProgress[i]),stopped:blocked};
+    });
+  }
   const trees=[[-1552,335,.86],[-1545,120,.76],[-215,875,.93],[402,890,.82],[-1530,-1330,.72],[1562,-959,.86],[-145,852,.91],[1545,-230,.78],[-1260,-1540,.96],[1541,847,.76],[1545,-365,.87],[-1550,-230,.84],[-1545,-420,.70],[1555,100,.74]];
   const power=[{name:'CENTRAL',x:125,z:-600},{name:'WEST',x:-975,z:500},{name:'EAST',x:1225,z:500}];
   // Exact campus collision volumes from the original Python, not a single oversized block.
@@ -213,7 +237,7 @@
   // renderCinematicBoatHull and other Python draw functions, not hand-made JS boxes.
   let sourceMeshes=null, sourceLoadError=null;
   async function loadSourceGeometry(){
-    const [iResponse,vResponse]=await Promise.all([fetch('./original-geometry.json?v=fidelity6'),fetch('./original-geometry.bin?v=fidelity5')]);
+    const [iResponse,vResponse]=await Promise.all([fetch('./original-geometry.json?v=fidelity9'),fetch('./original-geometry.bin?v=fidelity9')]);
     if(!iResponse.ok||!vResponse.ok)throw new Error('Original source geometry files missing — upload both original-geometry files into docs.');
     const index=await iResponse.json(),bytes=await vResponse.arrayBuffer();
     const source=new Float32Array(bytes),meshes={};
@@ -250,6 +274,20 @@
   const markerMesh=new Mesh();markerMesh.ring(0,0,0,36,6,[.97,.43,.27]);markerMesh.upload();
   const debrisMesh=new Mesh();debrisMesh.box(0,1,0,56,15,33,[.35,.30,.22]);debrisMesh.box(9,8,0,10,8,29,[.48,.34,.23]);debrisMesh.upload();
   const powerMesh=new Mesh();powerMesh.box(0,27,0,36,48,32,[.29,.32,.32]);powerMesh.box(0,30,-18,23,25,4,[.90,.19,.15]);powerMesh.upload();
+  // Python's distinct water-current direction clues: repeated arrows move
+  // with each zone's current, but never affect collision geometry.
+  const currentArrows=new Mesh();
+  for(const zone of currents){
+    const forwardX=zone.dx/(Math.hypot(zone.dx,zone.dz)||1),forwardZ=zone.dz/(Math.hypot(zone.dx,zone.dz)||1);
+    const acrossX=-forwardZ,acrossZ=forwardX;
+    for(let xi=zone.a+65;xi<zone.b-30;xi+=94)for(let zi=zone.c+65;zi<zone.d-30;zi+=97){
+      const x=xi,z=zi,y=10.25;
+      currentArrows.tri([x+forwardX*17,y,z+forwardZ*17],
+        [x-forwardX*12+acrossX*10,y,z-forwardZ*12+acrossZ*10],
+        [x-forwardX*12-acrossX*10,y,z-forwardZ*12-acrossZ*10],[.26,.72,.75]);
+    }
+  }
+  currentArrows.upload();
   const markerGoal=new Mesh();markerGoal.ring(0,0,0,52,6,[.97,.81,.31]);markerGoal.upload();
   const waterRipple=new Mesh();waterRipple.ring(0,0,0,18,2.4,[.66,.89,.90]);waterRipple.upload();
   // Procedural transparent BRACU sun aura: the Python version draws pulsing
@@ -419,12 +457,12 @@
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
   }
   shopSigns.upload();
-  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[]};
+  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
   const keys=new Set();
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[]});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0});
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
@@ -459,16 +497,16 @@
         <li><b>Stop your boat</b> at a pickup until the ring fills. Hold still about 1.3 seconds for a home pickup or 0.65 seconds for a rescue.</li>
         <li>Carry up to <b>3 passengers</b> to the golden dock just south of BRAC University.</li>
         <li><kbd>Space</kbd> toggles boat boost; <kbd>C</kbd> changes camera; <kbd>P</kbd> photographs Shaheed Minar from its marked spot; <kbd>F</kbd> repairs an outage box; <kbd>V</kbd> wipes rain.</li>
-        <li>Watch the red traffic signal and avoid collisions with cars, buildings and debris. <kbd>Esc</kbd> pauses.</li></ul>`;
+        <li>Watch the red traffic signal and avoid collisions with cars, buildings and debris. <kbd>F3</kbd> adjusts quality; <kbd>F4</kbd> toggles frame statistics; <kbd>Esc</kbd> pauses.</li></ul>`;
       $('modal-main').textContent=type==='PAUSED'?'RESUME GAME':'GOT IT';$('modal-secondary').classList.toggle('hidden',type!=='PAUSED');
     } else {
       const won=type==='WON';$('modal-eyebrow').textContent=won?'MISSION COMPLETE':'MISSION OVER';$('modal-title').textContent=won?'THE CAMPUS IS SAFE!':'THE CITY GOT THE BETTER OF US';
-      $('modal-content').innerHTML=`<p>${won?'Beautiful rowing. You delivered six students safely!':S.gameOverReason}</p><p><b>Final score:</b> ${S.score} &nbsp; · &nbsp; <b>Delivered:</b> ${S.delivered} &nbsp; · &nbsp; <b>Missed:</b> ${S.failed}</p><p>You can restart whenever you like. The original PyOpenGL desktop edition is preserved in the GitHub repository.</p>`;
+      $('modal-content').innerHTML=`<p>${won?'Beautiful rowing. You delivered six students safely!':S.gameOverReason}</p><p><b>Final score:</b> ${S.score} &nbsp; · &nbsp; <b>Delivered:</b> ${S.delivered} &nbsp; · &nbsp; <b>Missed:</b> ${S.failed}</p><p><b>Water rescues:</b> ${S.rescued} &nbsp; · &nbsp; <b>Traffic violations:</b> ${S.violations} &nbsp; · &nbsp; <b>Time:</b> ${formatTime(S.time)}</p><p>You can restart whenever you like. The original PyOpenGL desktop edition is preserved in the GitHub repository.</p>`;
       $('modal-main').textContent='PLAY AGAIN';
     }
   }
   function togglePause(){if(S.mode==='PLAYING'){S.mode='PAUSED';keys.clear();nextModal('PAUSED');}else if(S.mode==='PAUSED'){S.mode='PLAYING';$('modal').classList.add('hidden');}}
-  function action(key){switch(key){case 'y':accept();break;case 'n':reject();break;case ' ':boost();break;case 'c':if(S.mode==='PLAYING'){S.camera3=!S.camera3;notify(S.camera3?'Third-person camera':'First-person camera',1.5);}break;case 'p':photo();break;case 'f':repair();break;case 'v':if(S.mode==='PLAYING'&&!S.wiperActive){S.wiperActive=true;S.wiperDirection=1;S.wiperAngle=18;notify('Windshield wiper activated.',1.4);}break;case 'Escape':if(S.mode==='MENU'&&!$('modal').classList.contains('hidden')){$('modal').classList.add('hidden');}else togglePause();break;}}
+  function action(key){switch(key){case 'y':accept();break;case 'n':reject();break;case ' ':boost();break;case 'c':if(S.mode==='PLAYING'){S.camera3=!S.camera3;notify(S.camera3?'Third-person camera':'First-person camera',1.5);}break;case 'p':photo();break;case 'f':repair();break;case 'v':if(S.mode==='PLAYING'&&!S.wiperActive){S.wiperActive=true;S.wiperDirection=1;S.wiperAngle=18;notify('Windshield wiper activated.',1.4);}break;case 'f3':S.quality=S.quality==='HIGH'?'BALANCED':'HIGH';notify(`Graphics quality: ${S.quality}`,2);break;case 'f4':S.frameProfile=!S.frameProfile;notify(`Frame profiler ${S.frameProfile?'enabled':'disabled'}`,2);break;case 'Escape':if(S.mode==='MENU'&&!$('modal').classList.contains('hidden')){$('modal').classList.add('hidden');}else togglePause();break;}}
   function orientedObjectOverlap(x,z,cx,cz,angle,halfLength,halfWidth,margin=2){
     // Separating-axis test shared by cars, shops, and tea stalls.
     const a=S.angle*RAD,b=angle*RAD,dx=cx-x,dz=cz-z;
@@ -598,7 +636,7 @@
     S.debrisCooldown=Math.max(0,S.debrisCooldown-dt);S.pickupEffects=S.pickupEffects.filter(e=>S.time-e.at<1.15);
     S.current='';for(const zone of currents)if(S.x>=zone.a&&S.x<=zone.b&&S.z>=zone.c&&S.z<=zone.d){S.current=zone.name;const x=S.x+zone.dx*dt,z=S.z+zone.dz*dt;if(moveAllowed(x,z)){S.x=x;S.z=z;}break;}
     S.debris.forEach(d=>{const ph=d.phase+S.time*.65,x=d.x0+Math.sin(ph)*26,z=d.z0+Math.cos(ph*.7)*18;if(distance(x,z,S.x,S.z)>57){d.x=x;d.z=z;}});
-    S.movingCars=[{x:-470+((S.time*30+65)%680<340?(S.time*30+65)%680:680-(S.time*30+65)%680),z:-555,angle:0,style:3},{x:598,z:-490+((S.time*24+190)%720<360?(S.time*24+190)%720:720-(S.time*24+190)%720),angle:90,style:4}];
+    updateSlowCars(dt);
     S.trafficClock+=dt;if(S.trafficClock>=(S.traffic==='GREEN'?5:4)){S.trafficClock=0;S.traffic=S.traffic==='GREEN'?'RED':'GREEN';}
     const inTraffic=S.x>=-115&&S.x<=115&&S.z>=-165&&S.z<=70;
     if(!inTraffic)S.trafficSafe=[S.x,S.z];
@@ -606,7 +644,7 @@
     if(!S.powerOff){S.powerClock+=dt;if(S.powerClock>=15){S.powerOff=true;S.powerClock=0;notify(`${power[S.powerIndex].name} district power outage!`,2.6);}}
     if(S.request){S.requestLeft-=dt;if(S.requestLeft<=0){S.request=null;S.spawnClock=0;}}
     else {S.spawnClock+=dt;if(S.spawnClock>=9.5){S.spawnClock=0;offerRide();}}
-    for(const r of S.rides){r.timeLeft-=dt;if(r.timeLeft<=0){recordMissedPassenger(r);r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(`${r.name} ran out of time! -75 points`,3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
+    for(const r of S.rides){r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(r.state==='ONBOARD'?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
     S.rides=S.rides.filter(r=>r.state!=='FAILED');S.missedEffects=S.missedEffects.filter(e=>S.time-e.at<4.35);
     S.deliveryEffects=S.deliveryEffects.filter(e=>S.time-e.at<1.65);
     if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;for(const [i,r] of arrived.entries()){
@@ -614,7 +652,7 @@
       const startX=S.x+(bx*Math.cos(h)-bz*Math.sin(h))*.62,startZ=S.z+(bx*Math.sin(h)+bz*Math.cos(h))*.62;
       S.deliveryEffects.push({at:S.time,x0:startX,z0:startZ,y0:35,x1:clamp(startX*.25+(i-1)*24,-78,78),z1:1164+(i-1)*9,colorId:r.colorId});
       r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;
-    }S.rides=S.rides.filter(r=>r.state!=='DELIVERED');notify(`Delivered ${arrived.length} student(s) to BRACU! +${gained} points`,4);}}
+    }S.rides=S.rides.filter(r=>r.state!=='DELIVERED');S.deliveryBanner={at:S.time,count:arrived.length,points:gained};notify(`Delivered ${arrived.length} student(s) to BRACU! +${gained} points`,4);}}
     // Parked/moving cars occasionally block the only approach to a pickup
     // without physically overlapping its marker. In that case the captain may
     // moor along the same roadside up to 120 units from the home marker.
@@ -629,50 +667,76 @@
     if(!nearby||seated().length>=3||S.time-S.lastMove<.38){S.dock=0;S.dockId=-1;}
     else {if(S.dockId!==nearby.id){S.dock=0;S.dockId=nearby.id;}S.dock+=dt;const required=nearby.type==='HOME'?1.3:.65;
       if(S.dock>=required){nearby.state='ONBOARD';S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
-    if(S.delivered>=6){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||S.failed>=6){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
+    if(S.delivered>=6){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
   function refreshMap(){
-    const w=map.width,h=map.height,px=x=>12+(x+1650)/3300*(w-24),py=z=>h-12-(z+1650)/3300*(h-24);
+    const w=map.width,h=map.height,px=x=>19+(x+1650)/3300*(w-38),py=z=>h-19-(z+1650)/3300*(h-38);
     ctx.clearRect(0,0,w,h);ctx.fillStyle='#0b2a37';ctx.fillRect(0,0,w,h);
-    ctx.strokeStyle='#345565';ctx.lineWidth=4;
+    ctx.strokeStyle='#345565';ctx.lineWidth=5;
     for(const x of [-1100,-550,0,550,1100]){ctx.beginPath();ctx.moveTo(px(x),py(-1650));ctx.lineTo(px(x),py(1650));ctx.stroke();}
     for(const z of [-1150,-600,-50,500,1050]){ctx.beginPath();ctx.moveTo(px(-1650),py(z));ctx.lineTo(px(1650),py(z));ctx.stroke();}
-    ctx.fillStyle='#4c6270';for(const b of buildings)ctx.fillRect(px(b.x-b.hw),py(b.z+b.hd),(2*b.hw)/3300*(w-24),(2*b.hd)/3300*(h-24));
+    ctx.fillStyle='#4c6270';for(const b of buildings)ctx.fillRect(px(b.x-b.hw),py(b.z+b.hd),(2*b.hw)/3300*(w-38),(2*b.hd)/3300*(h-38));
     ctx.fillStyle='#91d89b';ctx.fillRect(px(-220),py(1620),px(270)-px(-220),py(1230)-py(1620));
     // Each mission uses a separate shape + color, matching the desktop
     // HOME / SOS / BRACU / DOCK / REPAIR / LANDMARK symbol legend.
     function marker(x,z,kind,small=false){
       const X=px(x),Y=py(z);ctx.save();ctx.translate(X,Y);
-      ctx.lineWidth=1.4;ctx.strokeStyle='#0a202b';
-      if(kind==='HOME'){ctx.fillStyle='#f4b56d';ctx.beginPath();ctx.moveTo(0,-6);ctx.lineTo(6,0);ctx.lineTo(0,6);ctx.lineTo(-6,0);ctx.closePath();ctx.fill();ctx.stroke();}
-      else if(kind==='SOS'){ctx.fillStyle='#ff7162';ctx.beginPath();ctx.arc(0,0,6,0,TAU);ctx.fill();ctx.stroke();ctx.font='bold 9px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#152831';ctx.fillText('!',0,.5);}
-      else if(kind==='CAMPUS'){ctx.fillStyle='#9ae4a3';ctx.fillRect(-5,-5,10,10);}
-      else if(kind==='DOCK'){ctx.fillStyle='#65cfea';ctx.beginPath();ctx.moveTo(0,7);ctx.lineTo(-6,-5);ctx.lineTo(6,-5);ctx.closePath();ctx.fill();ctx.stroke();}
-      else if(kind==='REPAIR'){ctx.fillStyle='#ffd17c';ctx.fillRect(-2,-7,4,14);ctx.fillRect(-7,-2,14,4);ctx.strokeRect(-7,-2,14,4);}
-      else if(kind==='PHOTO'){ctx.font='bold 15px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#d8b7f4';ctx.fillText('★',0,0);}
-      else if(kind==='PENDING'){ctx.strokeStyle='#a9b7c3';ctx.lineWidth=1.7;ctx.beginPath();ctx.arc(0,0,small?3:5,0,TAU);ctx.stroke();}
+      ctx.lineWidth=2.1;ctx.strokeStyle='#0a202b';
+      if(kind==='HOME'){ctx.fillStyle='#f4b56d';ctx.beginPath();ctx.moveTo(0,-9);ctx.lineTo(9,0);ctx.lineTo(0,9);ctx.lineTo(-9,0);ctx.closePath();ctx.fill();ctx.stroke();}
+      else if(kind==='SOS'){ctx.fillStyle='#ff7162';ctx.beginPath();ctx.arc(0,0,9,0,TAU);ctx.fill();ctx.stroke();ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#152831';ctx.fillText('!',0,.5);}
+      else if(kind==='CAMPUS'){ctx.fillStyle='#9ae4a3';ctx.fillRect(-8,-8,16,16);}
+      else if(kind==='DOCK'){ctx.fillStyle='#65cfea';ctx.beginPath();ctx.moveTo(0,10);ctx.lineTo(-9,-7);ctx.lineTo(9,-7);ctx.closePath();ctx.fill();ctx.stroke();}
+      else if(kind==='REPAIR'){ctx.fillStyle='#ffd17c';ctx.fillRect(-3,-10,6,20);ctx.fillRect(-10,-3,20,6);ctx.strokeRect(-10,-3,20,6);}
+      else if(kind==='PHOTO'){ctx.font='bold 21px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#d8b7f4';ctx.fillText('★',0,0);}
+      else if(kind==='PENDING'){ctx.strokeStyle='#a9b7c3';ctx.lineWidth=1.7;ctx.beginPath();ctx.arc(0,0,small?6:9,0,TAU);ctx.stroke();}
       ctx.restore();
     }
     marker(0,1360,'CAMPUS');marker(0,1080,'DOCK');
     for(const r of S.rides)if(r.state==='WAITING')marker(r.x,r.z,r.type==='HOME'?'HOME':'SOS');
-    if(S.request)marker(S.request.x,S.request.z,'PENDING',true);
+    if(S.request){marker(S.request.x,S.request.z,'PENDING',true);ctx.beginPath();ctx.arc(px(S.request.x),py(S.request.z),12+3*Math.sin(S.time*6),0,TAU);ctx.strokeStyle='#d9c48d';ctx.lineWidth=2.1;ctx.stroke();}
     if(S.powerOff){const station=power[S.powerIndex];marker(station.x,station.z,'REPAIR');}
     if(!S.photo)marker(825,1080,'PHOTO');
     const a=S.angle*RAD;ctx.save();ctx.translate(px(S.x),py(S.z));ctx.rotate(-a+Math.PI/2);
-    ctx.beginPath();ctx.moveTo(0,-11);ctx.lineTo(-7,8);ctx.lineTo(0,4);ctx.lineTo(7,8);ctx.closePath();ctx.fillStyle='#ffda8b';ctx.fill();ctx.strokeStyle='#10212d';ctx.stroke();ctx.restore();
+    ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(-10,11);ctx.lineTo(0,6);ctx.lineTo(10,11);ctx.closePath();ctx.fillStyle='#ffda8b';ctx.fill();ctx.strokeStyle='#10212d';ctx.stroke();ctx.restore();
   }
   function refreshHUD(){if(S.mode==='MENU')return;
     $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(900-S.time);$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
     const trafficLabel=$('traffic-status'),powerLabel=$('power-status');
+    const perf=$('performance-status');if(perf){perf.classList.toggle('hidden',!S.frameProfile);if(S.frameProfile)perf.textContent=`${S.frameMS.toFixed(1)}ms frame · worst ${S.frameWorst.toFixed(1)}ms · ${S.quality}`;}
     if(trafficLabel){trafficLabel.textContent=`${S.traffic==='GREEN'?'🟢 GREEN':'🔴 RED'} LIGHT`;trafficLabel.className='status-pill '+(S.traffic==='GREEN'?'status-green':'status-red');}
     if(powerLabel){powerLabel.textContent=S.powerOff?`🔴 BLACKOUT: ${power[S.powerIndex].name} · Find repair box (F)`:'🟢 POWER RESTORED · Streetlights and windows are on';powerLabel.className='status-pill '+(S.powerOff?'status-red':'status-green');}
+    const onboardForTimer=seated().slice().sort((a,b)=>a.timeLeft-b.timeLeft);
+    const deadlineBox=$('delivery-deadlines');deadlineBox.classList.toggle('hidden',!onboardForTimer.length);
+    if(onboardForTimer.length){
+      const short=onboardForTimer[0].timeLeft;
+      $('shortest-deadline').textContent=formatTime(short);
+      deadlineBox.classList.toggle('urgent',short<=25);
+      $('passenger-deadlines').replaceChildren(...onboardForTimer.map(r=>{
+        const el=document.createElement('div');el.className='deadline-person'+(r.timeLeft<=25?' urgent':'');
+        const label=document.createElement('span');label.textContent=r.name;
+        const remaining=document.createElement('b');remaining.textContent=formatTime(r.timeLeft);
+        el.append(label,remaining);return el;
+      }));
+    }
+    const ridesSorted=S.rides.slice().sort((a,b)=>a.timeLeft-b.timeLeft);
+    $('active-rides').classList.toggle('hidden',!ridesSorted.length);
+    $('queue-count').textContent=`${ridesSorted.length}/5`;
+    $('ride-queue').replaceChildren(...ridesSorted.map(r=>{
+      const row=document.createElement('div');row.className='queue-ride'+(r.timeLeft<=25?' urgent':'');
+      const type=r.state==='ONBOARD'?'⛵ ONBOARD':r.type==='DROWNING'?'🛟 SOS':'⌂ HOME';
+      const name=document.createElement('span');name.textContent=`${type} · ${r.name}`;
+      const t=document.createElement('strong');t.textContent=formatTime(r.timeLeft);row.append(name,t);return row;
+    }));
+    const banner=$('delivery-celebration'),bannerActive=S.deliveryBanner&&S.time-S.deliveryBanner.at<2.65;
+    banner.classList.toggle('hidden',!bannerActive);
+    if(bannerActive)banner.textContent=`★ ${S.deliveryBanner.count} STUDENT${S.deliveryBanner.count===1?'':'S'} ARRIVED AT BRACU · +${S.deliveryBanner.points} POINTS ★`;
     $('boost-fill').style.width=`${S.boost}%`;$('boost-number').textContent=`${Math.round(S.boost)}%`;$('passengers').innerHTML=`PASSENGERS ONBOARD <b>${seated().length} / 3</b>`;
     $('request-panel').classList.toggle('hidden',!S.request);
     if(S.request){$('request-name').textContent=S.request.name;$('request-location').textContent=`${S.request.type==='HOME'?'🏠 Home pickup':'🛟 SOS rescue'} · ${S.request.pickup}`;$('request-remaining').textContent=`${Math.ceil(S.requestLeft)}s`;}
     const waiting=S.rides.filter(r=>r.state==='WAITING'),onboard=seated();const nearest=waiting.sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
-    if(onboard.length){$('objective-title').textContent=`${onboard.length} PASSENGER${onboard.length===1?'':'S'} ONBOARD`;$('objective-detail').textContent=`Head to BRAC University · ${Math.round(distance(S.x,S.z,0,1080))} units`;}
-    else if(nearest){$('objective-title').textContent=`PICK UP ${nearest.name.toUpperCase()}`;$('objective-detail').textContent=`${nearest.pickup} · ${Math.round(distance(S.x,S.z,nearest.x,nearest.z))} units`;}
+    if(onboard.length){const soonest=Math.min(...onboard.map(r=>r.timeLeft));$('objective-title').textContent=`${onboard.length} PASSENGER${onboard.length===1?'':'S'} ONBOARD · ${formatTime(soonest)} LEFT`;$('objective-detail').textContent=`Deliver to BRACU · ${Math.round(distance(S.x,S.z,0,1080))} units · Nearest deadline ${formatTime(soonest)}`;}
+    else if(nearest){$('objective-title').textContent=`PICK UP ${nearest.name.toUpperCase()} · ${formatTime(nearest.timeLeft)} LEFT`;$('objective-detail').textContent=`${nearest.pickup} · ${Math.round(distance(S.x,S.z,nearest.x,nearest.z))} units`;}
     else{$('objective-title').textContent='ACCEPT A RESCUE REQUEST';$('objective-detail').textContent='Pick up students and bring them to BRACU';}
     if(S.current){$('objective-title').textContent+=` · ${S.current}`;}
     const docking=nearest&&S.dockId===nearest.id?S.dock/(nearest.type==='HOME'?1.3:.65):0;$('dock-fill').style.width=`${Math.min(100,docking*100)}%`;
@@ -750,6 +814,11 @@
       render(sourceMeshes.streets);
       render(sourceMeshes['buildings-'+powerState]);
       render(sourceMeshes.campus);render(sourceMeshes.props);
+      // Reconstructed source-derived animated shopkeeper/customer poses.
+      for(const style of [0,2]){
+        const frame=Math.floor((S.bobTime/2.513)*12)%12;
+        render(sourceMeshes[`shoppeople-${style}-${frame}`]);
+      }
       render(sourceMeshes['lamps-'+powerState]);render(sourceMeshes['powerboxes-'+powerState]);
       render(sourceMeshes.landmarks);render(sourceMeshes.cars);render(sourceMeshes.dock);
       render(sourceMeshes['traffic-'+S.traffic.toLowerCase()]);
@@ -761,6 +830,7 @@
     // road textures, so lane markings remain visible underneath the surface.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
     render(waterMesh);
+    render(currentArrows);
     render(campusGround);
     render(sunshineAura);render(sunshineSun);
     gl.depthMask(true);gl.disable(gl.BLEND);
@@ -769,7 +839,7 @@
     if(S.mode==='PLAYING'){
       uploadStormRain();gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
       render(stormGeometry);
-      for(const splash of S.rainSplashes){
+      for(const [splashIndex,splash] of S.rainSplashes.entries()){if(S.quality==='BALANCED'&&splashIndex%2)continue;
         if(distance(S.x,S.z,splash.x,splash.z)>510)continue;
         render(stormSplash,model(splash.x,9.65,splash.z,0,1.8+splash.age*26));
       }
@@ -787,8 +857,10 @@
     // Foreground boat, dynamic light state and localized mission markers.
     for(const car of S.movingCars){const mesh=sourceMeshes?.['moving-car-'+(car.style%5)]||carMesh;
       render(mesh,model(car.x,0,car.z,car.angle,.98));
-      // A gentle wake behind slow-moving vehicles; collisions unchanged.
-      render(waterRipple,model(car.x-24*Math.cos(car.angle*RAD),9.4,car.z-24*Math.sin(car.angle*RAD),0,.55));
+      if(!car.stopped){
+        const fx=Math.cos(car.angle*RAD),fz=Math.sin(car.angle*RAD);
+        for(let n=0;n<3;n++)render(waterRipple,model(car.x-(30+n*20)*fx,9.4,car.z-(30+n*20)*fz,0,.47+n*.27));
+      }
     }
     for(const i of [1,4]){const car=parkedCars[i],a=car.angle*RAD;
       const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
@@ -813,6 +885,13 @@
     if(!S.photo)render(markerGoal,model(825,1,1080,0,1));
     if(S.powerOff){const p=power[S.powerIndex];render(markerGoal,model(p.x,2,p.z,0,.8));}
     if(sourceMeshes){render(markerGoal,model(0,10,1100,0,1.85));}
+    if(S.deliveryBanner&&S.time-S.deliveryBanner.at<2.65){
+      const age=S.time-S.deliveryBanner.at;
+      for(let k=0;k<3;k++){
+        const radius=.8+age*.8+k*.36;
+        render(markerGoal,model(0,10.1+k*.1,1100,0,radius));
+      }
+    }
     // Traffic lights: emissive-like saturated color, red/green changes with the actual timer.
     if(!sourceMeshes)render(S.traffic==='RED'?signalRed:signalGreen);
     if(S.mode!=='MENU'){
@@ -876,13 +955,13 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights};}
-  window.majhiVersion='fidelity8';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length});
+  window.majhiVersion='fidelity9';
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;
-    try{draw();renderRain(dt);}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
-    hudClock+=dt;if(hudClock>.11){hudClock=0;if(S.mode!=='MENU')refreshHUD();}
+    const frameStart=performance.now();try{draw();renderRain(dt);}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
+    S.frameMS=performance.now()-frameStart;S.frameWorst=Math.max(S.frameWorst*.999,S.frameMS);hudClock+=dt;if(hudClock>.11){hudClock=0;if(S.mode!=='MENU')refreshHUD();}
   }
   $('play-button').onclick=reset;
   $('help-button').onclick=()=>nextModal('HELP');
@@ -891,7 +970,7 @@
   $('modal-main').onclick=()=>{if(S.mode==='WON'||S.mode==='LOST')reset();else $('modal').classList.add('hidden');if(S.mode==='PAUSED')S.mode='PLAYING';};
   $('modal-secondary').onclick=reset;
   document.addEventListener('keydown',e=>{
-    const k=e.key===' '?' ':e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright','escape'].includes(k))e.preventDefault();
+    const k=e.key===' '?' ':e.key.toLowerCase();if([' ','arrowup','arrowdown','arrowleft','arrowright','escape','f3','f4'].includes(k))e.preventDefault();
     if(e.repeat&&[' ','y','n','f','p','c','v'].includes(k))return;
     if(S.mode==='PLAYING'&&['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))keys.add(k);
     if(k==='escape')action('Escape');else if(S.mode==='PLAYING')action(k);

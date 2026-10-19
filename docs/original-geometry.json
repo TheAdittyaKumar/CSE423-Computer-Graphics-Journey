@@ -9,430 +9,526 @@
   },
   "props": {
     "start": 31914,
-    "count": 46542
+    "count": 43410
   },
   "cars": {
-    "start": 78456,
+    "start": 75324,
     "count": 10200
   },
   "landmarks": {
-    "start": 88656,
+    "start": 85524,
     "count": 2592
   },
   "sky": {
-    "start": 91248,
+    "start": 88116,
     "count": 54
   },
   "clouds": {
-    "start": 91302,
+    "start": 88170,
     "count": 11088
   },
   "boat": {
-    "start": 102390,
+    "start": 99258,
     "count": 765
   },
   "buildings-lit": {
-    "start": 103155,
+    "start": 100023,
     "count": 40896
   },
   "lamps-lit": {
-    "start": 144051,
+    "start": 140919,
     "count": 27924
   },
   "powerboxes-lit": {
-    "start": 171975,
+    "start": 168843,
     "count": 1368
   },
   "buildings-central": {
-    "start": 173343,
+    "start": 170211,
     "count": 40896
   },
   "lamps-central": {
-    "start": 214239,
+    "start": 211107,
     "count": 26196
   },
   "powerboxes-central": {
-    "start": 240435,
+    "start": 237303,
     "count": 1368
   },
   "buildings-west": {
-    "start": 241803,
+    "start": 238671,
     "count": 40896
   },
   "lamps-west": {
-    "start": 282699,
+    "start": 279567,
     "count": 27924
   },
   "powerboxes-west": {
-    "start": 310623,
+    "start": 307491,
     "count": 1368
   },
   "buildings-east": {
-    "start": 311991,
+    "start": 308859,
     "count": 40896
   },
   "lamps-east": {
-    "start": 352887,
+    "start": 349755,
     "count": 27924
   },
   "powerboxes-east": {
-    "start": 380811,
+    "start": 377679,
     "count": 1368
   },
   "traffic-green": {
-    "start": 382179,
+    "start": 379047,
     "count": 786
   },
   "traffic-red": {
-    "start": 382965,
+    "start": 379833,
     "count": 786
   },
   "captain": {
-    "start": 383751,
+    "start": 380619,
     "count": 1752
   },
   "paddles": {
-    "start": 385503,
+    "start": 382371,
     "count": 1248
   },
   "dock": {
-    "start": 386751,
+    "start": 383619,
     "count": 768
   },
   "firstperson-hands": {
-    "start": 387519,
+    "start": 384387,
     "count": 1236
   },
   "student-0": {
-    "start": 388755,
+    "start": 385623,
     "count": 1776
   },
   "student-1": {
-    "start": 390531,
+    "start": 387399,
     "count": 1776
   },
   "student-2": {
-    "start": 392307,
+    "start": 389175,
     "count": 1776
   },
   "student-3": {
-    "start": 394083,
+    "start": 390951,
     "count": 1776
   },
   "student-4": {
-    "start": 395859,
+    "start": 392727,
     "count": 1776
   },
   "student-5": {
-    "start": 397635,
+    "start": 394503,
     "count": 1776
   },
   "debris-0": {
-    "start": 399411,
+    "start": 396279,
     "count": 240
   },
   "debris-1": {
-    "start": 399651,
+    "start": 396519,
     "count": 240
   },
   "debris-2": {
-    "start": 399891,
+    "start": 396759,
     "count": 228
   },
   "rowing-0": {
-    "start": 400119,
+    "start": 396987,
     "count": 1248
   },
   "first-rowing-0": {
-    "start": 401367,
+    "start": 398235,
     "count": 1236
   },
   "rowing-1": {
-    "start": 402603,
+    "start": 399471,
     "count": 1248
   },
   "first-rowing-1": {
-    "start": 403851,
+    "start": 400719,
     "count": 1236
   },
   "rowing-2": {
-    "start": 405087,
+    "start": 401955,
     "count": 1248
   },
   "first-rowing-2": {
-    "start": 406335,
+    "start": 403203,
     "count": 1236
   },
   "rowing-3": {
-    "start": 407571,
+    "start": 404439,
     "count": 1248
   },
   "first-rowing-3": {
-    "start": 408819,
+    "start": 405687,
     "count": 1236
   },
   "rowing-4": {
-    "start": 410055,
+    "start": 406923,
     "count": 1248
   },
   "first-rowing-4": {
-    "start": 411303,
+    "start": 408171,
     "count": 1236
   },
   "rowing-5": {
-    "start": 412539,
+    "start": 409407,
     "count": 1248
   },
   "first-rowing-5": {
-    "start": 413787,
+    "start": 410655,
     "count": 1236
   },
   "rowing-6": {
-    "start": 415023,
+    "start": 411891,
     "count": 1248
   },
   "first-rowing-6": {
-    "start": 416271,
+    "start": 413139,
     "count": 1236
   },
   "rowing-7": {
-    "start": 417507,
+    "start": 414375,
     "count": 1248
   },
   "first-rowing-7": {
-    "start": 418755,
+    "start": 415623,
     "count": 1236
   },
   "rowing-8": {
-    "start": 419991,
+    "start": 416859,
     "count": 1248
   },
   "first-rowing-8": {
-    "start": 421239,
+    "start": 418107,
     "count": 1236
   },
   "rowing-9": {
-    "start": 422475,
+    "start": 419343,
     "count": 1248
   },
   "first-rowing-9": {
-    "start": 423723,
+    "start": 420591,
     "count": 1236
   },
   "rowing-10": {
-    "start": 424959,
+    "start": 421827,
     "count": 1248
   },
   "first-rowing-10": {
-    "start": 426207,
+    "start": 423075,
     "count": 1236
   },
   "rowing-11": {
-    "start": 427443,
+    "start": 424311,
     "count": 1248
   },
   "first-rowing-11": {
-    "start": 428691,
+    "start": 425559,
     "count": 1236
   },
   "rowing-12": {
-    "start": 429927,
+    "start": 426795,
     "count": 1248
   },
   "first-rowing-12": {
-    "start": 431175,
+    "start": 428043,
     "count": 1236
   },
   "rowing-13": {
-    "start": 432411,
+    "start": 429279,
     "count": 1248
   },
   "first-rowing-13": {
-    "start": 433659,
+    "start": 430527,
     "count": 1236
   },
   "rowing-14": {
-    "start": 434895,
+    "start": 431763,
     "count": 1248
   },
   "first-rowing-14": {
-    "start": 436143,
+    "start": 433011,
     "count": 1236
   },
   "rowing-15": {
-    "start": 437379,
+    "start": 434247,
     "count": 1248
   },
   "first-rowing-15": {
-    "start": 438627,
+    "start": 435495,
     "count": 1236
   },
   "rowing-16": {
-    "start": 439863,
+    "start": 436731,
     "count": 1248
   },
   "first-rowing-16": {
-    "start": 441111,
+    "start": 437979,
     "count": 1236
   },
   "rowing-17": {
-    "start": 442347,
+    "start": 439215,
     "count": 1248
   },
   "first-rowing-17": {
-    "start": 443595,
+    "start": 440463,
     "count": 1236
   },
   "rowing-18": {
-    "start": 444831,
+    "start": 441699,
     "count": 1248
   },
   "first-rowing-18": {
-    "start": 446079,
+    "start": 442947,
     "count": 1236
   },
   "rowing-19": {
-    "start": 447315,
+    "start": 444183,
     "count": 1248
   },
   "first-rowing-19": {
-    "start": 448563,
+    "start": 445431,
     "count": 1236
   },
   "rowing-20": {
-    "start": 449799,
+    "start": 446667,
     "count": 1248
   },
   "first-rowing-20": {
-    "start": 451047,
+    "start": 447915,
     "count": 1236
   },
   "rowing-21": {
-    "start": 452283,
+    "start": 449151,
     "count": 1248
   },
   "first-rowing-21": {
-    "start": 453531,
+    "start": 450399,
     "count": 1236
   },
   "rowing-22": {
-    "start": 454767,
+    "start": 451635,
     "count": 1248
   },
   "first-rowing-22": {
-    "start": 456015,
+    "start": 452883,
     "count": 1236
   },
   "rowing-23": {
-    "start": 457251,
+    "start": 454119,
     "count": 1248
   },
   "first-rowing-23": {
-    "start": 458499,
+    "start": 455367,
     "count": 1236
   },
   "struggling-0": {
-    "start": 459735,
+    "start": 456603,
     "count": 2448
   },
   "struggling-1": {
-    "start": 462183,
+    "start": 459051,
     "count": 2448
   },
   "struggling-2": {
-    "start": 464631,
+    "start": 461499,
     "count": 2448
   },
   "struggling-3": {
-    "start": 467079,
+    "start": 463947,
     "count": 2448
   },
   "struggling-4": {
-    "start": 469527,
+    "start": 466395,
     "count": 2448
   },
   "struggling-5": {
-    "start": 471975,
+    "start": 468843,
     "count": 2448
   },
   "struggling-6": {
-    "start": 474423,
+    "start": 471291,
     "count": 2448
   },
   "struggling-7": {
-    "start": 476871,
+    "start": 473739,
     "count": 2448
   },
   "struggling-8": {
-    "start": 479319,
+    "start": 476187,
     "count": 2448
   },
   "struggling-9": {
-    "start": 481767,
+    "start": 478635,
     "count": 2448
   },
   "struggling-10": {
-    "start": 484215,
+    "start": 481083,
     "count": 2448
   },
   "struggling-11": {
-    "start": 486663,
+    "start": 483531,
     "count": 2448
   },
   "struggling-12": {
-    "start": 489111,
+    "start": 485979,
     "count": 2448
   },
   "struggling-13": {
-    "start": 491559,
+    "start": 488427,
     "count": 2448
   },
   "struggling-14": {
-    "start": 494007,
+    "start": 490875,
     "count": 2448
   },
   "struggling-15": {
-    "start": 496455,
+    "start": 493323,
     "count": 2448
   },
   "struggling-16": {
-    "start": 498903,
+    "start": 495771,
     "count": 2448
   },
   "struggling-17": {
-    "start": 501351,
+    "start": 498219,
     "count": 2448
   },
   "struggling-18": {
-    "start": 503799,
+    "start": 500667,
     "count": 2448
   },
   "struggling-19": {
-    "start": 506247,
+    "start": 503115,
     "count": 2448
   },
   "struggling-20": {
-    "start": 508695,
+    "start": 505563,
     "count": 2448
   },
   "struggling-21": {
-    "start": 511143,
+    "start": 508011,
     "count": 2448
   },
   "struggling-22": {
-    "start": 513591,
+    "start": 510459,
     "count": 2448
   },
   "struggling-23": {
-    "start": 516039,
+    "start": 512907,
     "count": 2448
   },
   "moving-car-3": {
-    "start": 518487,
+    "start": 515355,
     "count": 1194
   },
   "moving-car-4": {
-    "start": 519681,
+    "start": 516549,
     "count": 1194
+  },
+  "shoppeople-0-0": {
+    "start": 517743,
+    "count": 738
+  },
+  "shoppeople-0-1": {
+    "start": 518481,
+    "count": 738
+  },
+  "shoppeople-0-2": {
+    "start": 519219,
+    "count": 738
+  },
+  "shoppeople-0-3": {
+    "start": 519957,
+    "count": 738
+  },
+  "shoppeople-0-4": {
+    "start": 520695,
+    "count": 738
+  },
+  "shoppeople-0-5": {
+    "start": 521433,
+    "count": 738
+  },
+  "shoppeople-0-6": {
+    "start": 522171,
+    "count": 738
+  },
+  "shoppeople-0-7": {
+    "start": 522909,
+    "count": 738
+  },
+  "shoppeople-0-8": {
+    "start": 523647,
+    "count": 738
+  },
+  "shoppeople-0-9": {
+    "start": 524385,
+    "count": 738
+  },
+  "shoppeople-0-10": {
+    "start": 525123,
+    "count": 738
+  },
+  "shoppeople-0-11": {
+    "start": 525861,
+    "count": 738
+  },
+  "shoppeople-2-0": {
+    "start": 526599,
+    "count": 2394
+  },
+  "shoppeople-2-1": {
+    "start": 528993,
+    "count": 2394
+  },
+  "shoppeople-2-2": {
+    "start": 531387,
+    "count": 2394
+  },
+  "shoppeople-2-3": {
+    "start": 533781,
+    "count": 2394
+  },
+  "shoppeople-2-4": {
+    "start": 536175,
+    "count": 2394
+  },
+  "shoppeople-2-5": {
+    "start": 538569,
+    "count": 2394
+  },
+  "shoppeople-2-6": {
+    "start": 540963,
+    "count": 2394
+  },
+  "shoppeople-2-7": {
+    "start": 543357,
+    "count": 2394
+  },
+  "shoppeople-2-8": {
+    "start": 545751,
+    "count": 2394
+  },
+  "shoppeople-2-9": {
+    "start": 548145,
+    "count": 2394
+  },
+  "shoppeople-2-10": {
+    "start": 550539,
+    "count": 2394
+  },
+  "shoppeople-2-11": {
+    "start": 552933,
+    "count": 2394
   }
 }

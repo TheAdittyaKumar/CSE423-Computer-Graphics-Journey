@@ -38,3 +38,35 @@
 .map-legend .repair-dot{color:#ffd17c;background:transparent}
 .map-legend .photo-dot{color:#d6b6e9;background:transparent}
 @media(max-width:720px){.map-legend{grid-template-columns:repeat(3,minmax(0,1fr));font-size:6px;gap:1px}.legend-icon{font-size:8px;width:8px}}
+
+/* Fidelity v9: urgent deadlines are visible at all times after boarding. */
+.delivery-deadlines{margin-top:12px;padding:10px 11px;border:1px solid #d9ba71a6;background:#2d2e233b;border-radius:9px}
+.deadline-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;color:#f4dd9b;font-size:10px;font-weight:900;letter-spacing:.08em}
+.deadline-summary strong{font-size:22px;color:#fff1bc;letter-spacing:.01em;font-variant-numeric:tabular-nums}
+.deadline-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:7px}
+.deadline-person{background:#162c33;border:1px solid #678085;padding:6px 8px;border-radius:6px;display:flex;justify-content:space-between;gap:6px;font-size:12px}
+.deadline-person b{color:#f4d591;font-variant-numeric:tabular-nums}
+.delivery-deadlines.urgent,.deadline-person.urgent,.queue-ride.urgent{background:#65251e!important;border-color:#fa8c76!important;color:#fff0ed!important}
+.delivery-deadlines.urgent .deadline-summary strong,.deadline-person.urgent b{color:#ffd1bb}
+.active-rides{position:absolute;z-index:2;top:225px;left:clamp(10px,1.65vw,23px);width:min(285px,30vw);padding:11px 12px;max-height:215px;overflow:hidden}
+.queue-head{font-size:11px;letter-spacing:.1em;font-weight:900;color:#b8d2d7;display:flex;justify-content:space-between}
+.queue-ride{display:flex;justify-content:space-between;align-items:center;gap:7px;font-size:11px;padding:5px 7px;margin-top:5px;border:1px solid #405f6a;border-radius:5px;background:#0a2a37a6}
+.queue-ride strong{color:#f5cb7a;font-variant-numeric:tabular-nums;font-size:12px}
+.delivery-celebration{background:#2d3d23ee;color:#f7e6a6;border:1px solid #ffdb80;border-radius:10px;text-align:center;padding:12px 18px;font-weight:900;letter-spacing:.08em;font-size:12px;box-shadow:0 0 23px #ffdb8055}
+.performance-status{margin-top:5px;color:#b0d6da;font:700 10px ui-monospace,monospace}
+/* A larger, legible minimap + symbol key. Visual priority over decorative compactness. */
+.map-panel{width:330px;max-width:30vw;padding:12px 13px}
+#minimap{margin:9px auto 8px}
+.map-panel .section-heading{font-size:12px;letter-spacing:.1em}
+.map-legend{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 7px;font-size:11px;font-weight:800;line-height:1.55}
+.map-legend span{gap:5px;white-space:nowrap}
+.map-legend .legend-icon{font-size:15px;width:17px;flex-shrink:0}
+@media(max-width:1200px){.map-panel{width:278px;max-width:27vw}.active-rides{top:215px;width:260px}.deadline-person{font-size:10px}.map-legend{font-size:9px;gap:5px}.map-legend .legend-icon{font-size:12px}}
+@media(max-width:980px){.map-panel{width:240px;max-width:29vw}.active-rides{top:208px;width:220px}.map-legend{grid-template-columns:repeat(2,minmax(0,1fr));font-size:10px}.map-legend .legend-icon{font-size:13px}}
+@media(max-width:720px){.map-panel{width:155px;max-width:none}.map-legend{grid-template-columns:repeat(2,minmax(0,1fr));font-size:8px;gap:3px}.map-legend .legend-icon{font-size:10px;width:10px}.active-rides{top:205px;width:175px;font-size:8px;padding:6px;max-height:140px}.queue-ride{font-size:8px;padding:3px}.queue-ride strong{font-size:9px}.deadline-list{display:flex;flex-wrap:wrap}.deadline-person{font-size:10px;flex:1}.deadline-summary strong{font-size:17px}.delivery-deadlines{padding:5px;margin-top:5px}.middle-panel{max-width:calc(100% - 165px)}.delivery-celebration{font-size:9px;padding:6px}}
+@media(max-height:740px) and (min-width:721px){.map-panel{width:230px}.map-legend{grid-template-columns:repeat(3,minmax(0,1fr));font-size:9px}.active-rides{top:205px;max-height:145px}.deadline-list{gap:3px}.deadline-person{padding:3px 5px}}
+
+/* The active queue follows the top-left status box as its height grows. */
+.status-panel .active-rides{position:static;width:100%;max-width:none;margin-top:10px;padding:8px 10px;max-height:160px;background:rgba(12,35,45,.76);box-shadow:none;overflow-y:auto}
+.status-panel .queue-ride{margin-top:4px;padding:4px 7px}
+@media(max-width:720px){.status-panel .active-rides{margin-top:5px;padding:4px;max-height:105px}.status-panel .queue-ride{font-size:8px}}

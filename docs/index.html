@@ -24,7 +24,13 @@
             <div><small>DELIVERED</small><strong id="delivered">0 / 6</strong></div>
             <div><small>MISSED</small><strong id="failed">0 / 6</strong></div>
           </div>
+          <div class="delivery-deadlines hidden" id="delivery-deadlines" aria-live="off">
+            <div class="deadline-summary"><span>RETURN TO BRAC UNIVERSITY</span><strong id="shortest-deadline">--:--</strong></div>
+            <div id="passenger-deadlines" class="deadline-list"></div>
+          </div>
           <div class="world-statuses" aria-live="off"><span class="status-pill status-green" id="traffic-status">🟢 GREEN LIGHT</span><span class="status-pill status-red" id="power-status">🔴 BLACKOUT: CENTRAL</span></div>
+          <div id="performance-status" class="performance-status hidden"></div>
+      <section class="active-rides glass hidden" id="active-rides" aria-label="Active rescue queue"><div class="queue-head">ACTIVE RESCUES <b id="queue-count">0/5</b></div><div id="ride-queue"></div></section>
         </section>
         <section class="right-top">
           <div class="glass request-panel hidden" id="request-panel" aria-live="polite">
@@ -38,13 +44,13 @@
       </header>
       <div class="center-crosshair" aria-hidden="true">+</div>
       <div class="hud-bottom">
-        <section class="map-panel glass"><div class="section-heading"><span>FLOOD ROUTE MAP</span><span class="online-dot">● LIVE</span></div><canvas id="minimap" width="240" height="240" aria-label="Map showing boat and objective locations"></canvas><div class="map-legend"><span><i class="legend-icon boat-dot">▲</i> YOU</span><span><i class="legend-icon home-dot">◆</i> HOME</span><span><i class="legend-icon sos-dot">!</i> SOS</span><span><i class="legend-icon campus-dot">■</i> BRACU</span><span><i class="legend-icon dock-dot">▼</i> DOCK</span><span><i class="legend-icon repair-dot">✚</i> REPAIR</span><span><i class="legend-icon photo-dot">★</i> PHOTO</span></div></section>
+        <section class="map-panel glass"><div class="section-heading"><span>FLOOD ROUTE MAP</span><span class="online-dot">● LIVE</span></div><canvas id="minimap" width="360" height="360" aria-label="Map showing boat and objective locations"></canvas><div class="map-legend" aria-label="Map symbol legend"><span><i class="legend-icon boat-dot">▲</i> YOU</span><span><i class="legend-icon home-dot">◆</i> HOME</span><span><i class="legend-icon sos-dot">!</i> SOS</span><span><i class="legend-icon campus-dot">■</i> BRACU</span><span><i class="legend-icon dock-dot">▼</i> DOCK</span><span><i class="legend-icon repair-dot">✚</i> REPAIR</span><span><i class="legend-icon photo-dot">★</i> PHOTO</span></div></section>
         <section class="middle-panel">
-          <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+          <div id="delivery-celebration" class="delivery-celebration hidden" role="status"></div><div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
           <div class="objective glass"><span id="objective-title">ACCEPT A RESCUE REQUEST</span><strong id="objective-detail">Bring students safely to BRAC University</strong><div class="meter"><div id="dock-fill"></div></div></div>
           <div class="boost-row"><span>⚡ PADDLE BOOST</span><div class="boost-track"><div id="boost-fill"></div></div><span id="boost-number">100%</span></div>
         </section>
-        <section class="control-panel glass"><div class="section-heading">CONTROLS</div><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Row & steer</div><div><kbd>SPACE</kbd> Toggle boost</div><div><kbd>C</kbd> Camera <kbd>P</kbd> Photo</div><div><kbd>F</kbd> Repair <kbd>V</kbd> Wiper</div><div><kbd>ESC</kbd> Pause / help</div><div class="passengers" id="passengers">PASSENGERS ONBOARD <b>0 / 3</b></div></section>
+        <section class="control-panel glass"><div class="section-heading">CONTROLS</div><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Row & steer</div><div><kbd>SPACE</kbd> Toggle boost</div><div><kbd>C</kbd> Camera <kbd>P</kbd> Photo</div><div><kbd>F</kbd> Repair <kbd>V</kbd> Wiper</div><div><kbd>ESC</kbd> Pause · <kbd>F3</kbd> Quality · <kbd>F4</kbd> FPS</div><div class="passengers" id="passengers">PASSENGERS ONBOARD <b>0 / 3</b></div></section>
       </div>
       <div id="touch-controls" aria-label="Touch game controls"><div class="touch-dpad"><button data-hold="w">▲</button><div><button data-hold="a">◀</button><button data-hold="s">▼</button><button data-hold="d">▶</button></div></div><div class="touch-actions"><button data-key=" ">BOOST</button><button data-key="f">REPAIR</button><button data-key="p">PHOTO</button></div></div>
     </div>
@@ -52,7 +58,7 @@
     <section class="overlay" id="menu">
       <canvas id="menu-scene" aria-hidden="true"></canvas>
       <button id="menu-close" title="Exit game" aria-label="Exit game">✕</button>
-      <div class="menu-left"><div class="eyebrow">BRAC UNIVERSITY · CSE423 · GROUP 07</div><h1>MAJHI<br><em>JABEN?!</em></h1><p class="menu-subtitle">DHAKA IS UNDERWATER.<br><span>YOUR NEXT CLASS ISN'T.</span></p><p class="menu-description">Row through a rain-soaked city. Rescue stranded students. Dodge the debris. Deliver everyone to BRAC University before time runs out.</p><div class="edition-pill">◈ FIDELITY PASS V8 · ORIGINAL PYTHON SCENE MODELS</div></div>
+      <div class="menu-left"><div class="eyebrow">BRAC UNIVERSITY · CSE423 · GROUP 07</div><h1>MAJHI<br><em>JABEN?!</em></h1><p class="menu-subtitle">DHAKA IS UNDERWATER.<br><span>YOUR NEXT CLASS ISN'T.</span></p><p class="menu-description">Row through a rain-soaked city. Rescue stranded students. Dodge the debris. Deliver everyone to BRAC University before time runs out.</p><div class="edition-pill">◈ FIDELITY PASS V9 · ORIGINAL PYTHON SCENE MODELS</div></div>
       <div class="menu-right"><div class="menu-card"><p class="overline">THE CITY NEEDS A MAJHI</p><button id="play-button" class="menu-primary">▶ &nbsp; START RESCUE</button><button id="help-button" class="menu-secondary">⌨ &nbsp; HOW TO PLAY</button><button id="exit-button" class="menu-secondary exit-button">✕ &nbsp; EXIT GAME</button><a class="menu-secondary link-button" href="https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey" target="_blank" rel="noopener noreferrer">↗ &nbsp; VIEW SOURCE ON GITHUB</a><p class="menu-note">No download. No login. Keyboard or touch.</p><p class="menu-note" id="engine-status" aria-live="polite">Loading game engine…</p></div></div>
       <footer class="menu-footer">An adaptation of <strong>Majhi Jaben?!</strong> by Adittya Kumar Chowdhury, Nafisa Lubaba & Usaeed Rahman Tibro.</footer>
     </section>
@@ -116,7 +122,7 @@
     });
   })();
   </script>
-  <script src="./menu-scene.js?v=fidelity8" defer></script>
-  <script src="./game.js?v=fidelity8" defer onerror="window.majhiStartupError('Game script missing', 'Verify docs/game.js exists in your GitHub repository.')"></script>
+  <script src="./menu-scene.js?v=fidelity9" defer></script>
+  <script src="./game.js?v=fidelity9" defer onerror="window.majhiStartupError('Game script missing', 'Verify docs/game.js exists in your GitHub repository.')"></script>
 </body>
 </html>
