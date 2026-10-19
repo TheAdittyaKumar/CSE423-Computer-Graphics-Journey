@@ -15,15 +15,16 @@
  function ellipse(x,y,rx,ry,fill){ctx.beginPath();ctx.ellipse(x,y,Math.max(.1,rx),Math.max(.1,ry),0,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();}
  function ring(x,y,rx,ry,stroke,width=1){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke();}
  function draw(t){
-   ctx.clearRect(0,0,1000,800);
-   const g=ctx.createLinearGradient(0,0,0,800);g.addColorStop(0,'#112636');g.addColorStop(.56,'#0c2935');g.addColorStop(1,'#062f3c');ctx.fillStyle=g;ctx.fillRect(0,0,1000,800);
+   // Extend the scene beyond its original 1000px artboard so widescreen
+   // layouts do not have visible vertical seams at the sides.
+   const g=ctx.createLinearGradient(0,0,0,800);g.addColorStop(0,'#112636');g.addColorStop(.56,'#0c2935');g.addColorStop(1,'#062f3c');ctx.fillStyle=g;ctx.fillRect(-800,0,2600,800);
    // The flooded Dhaka skyline from the Python source.
-   for(let i=0;i<13;i++){let x=i*84-40,h=110+(i*57)%210;
+   for(let i=-12;i<26;i++){let x=i*84-40,h=110+(((i*57)%210)+210)%210;
      rect(x,560-h,74,h,i%2?'#17313b':'#1b3942');
      for(let row=0;row<Math.floor(h/37);row++)for(let col=0;col<3;col++)if((i*7+row*5+col*3)%6===0)rect(x+11+col*18,570-h+row*36,10,12,'#797356');
    }
-   rect(0,520,1000,280,'#073846');rect(0,520,1000,32,'#164853');
-   for(let i=0;i<90;i++){let x=(i*137+29)%1000,y=555+(i*47+Math.floor(t*9))%244;line([[x,y],[x+14+i%5*8,y]],'#598e9680',.8);}
+   rect(-800,520,2600,280,'#073846');rect(-800,520,2600,32,'#164853');
+   for(let i=0;i<230;i++){let x=(i*137+29)%2600-800,y=555+(i*47+Math.floor(t*9))%244;line([[x,y],[x+14+i%5*8,y]],'#598e9680',.8);}
    // The illuminated BRAC University island / sanctuary.
    const sunshine=ctx.createLinearGradient(570,170,570,500);sunshine.addColorStop(0,'#f9e9bd00');sunshine.addColorStop(1,'#f9df8b45');poly([[440,110],[690,110],[710,532],[410,532]],sunshine);
    ellipse(556,438,158,197,'#f2d79113');ring(557,535,152,33,'#dfb461b0',3);
@@ -68,10 +69,22 @@
    }
    ellipse(pivot[0],pivot[1],8,8,'#fff2d1');
    // Wind and storm streaks, matching the deterministic scatter in the Python menu.
-   for(let i=0;i<125;i++){const x=(i*73+19)%1000,y=(i*149+Math.floor(t*95))%790;if(x>413&&x<694&&y<525)continue;line([[x,y],[x-5,y+19]],'#acd0dc60',1.2);}
+   for(let i=0;i<275;i++){const x=(i*73+19)%2600-800,y=(i*149+Math.floor(t*95))%790;if(x>413&&x<694&&y<525)continue;line([[x,y],[x-5,y+19]],'#acd0dc60',1.2);}
    if(clickFlash>0)rect(0,0,1000,800,`rgba(255,255,242,${clickFlash*.8})`);
  }
- function tick(now){const t=now/1000;const dt=last?Math.min((now-last)/1000,.08):0;last=now;if(menu.classList.contains('hidden')){requestAnimationFrame(tick);return;}const dpr=Math.min(devicePixelRatio||1,2),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}ctx.setTransform(canvas.width/1000,0,0,canvas.height/800,0,0);exitPulse=Math.max(0,exitPulse-dt*.7);clickFlash=Math.max(0,clickFlash-dt*.65);draw(t);requestAnimationFrame(tick);}
+ function tick(now){const t=now/1000;const dt=last?Math.min((now-last)/1000,.08):0;last=now;if(menu.classList.contains('hidden')){requestAnimationFrame(tick);return;}const dpr=Math.min(devicePixelRatio||1,2),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*dpr)||canvas.height!==Math.round(h*dpr)){canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);}// Keep the source illustration's 5:4 proportions at every browser width.
+   // Independent x/y stretching made the boat, spotlight and BRACU look squashed.
+   const cw=canvas.width,ch=canvas.height;
+   ctx.setTransform(1,0,0,1,0,0);
+   const backdrop=ctx.createLinearGradient(0,0,0,ch);
+   backdrop.addColorStop(0,'#112636');backdrop.addColorStop(.60,'#0c2935');backdrop.addColorStop(1,'#062f3c');
+   ctx.fillStyle=backdrop;ctx.fillRect(0,0,cw,ch);
+   const unit=Math.min(cw/1000,ch/800);
+   const offsetX=(cw-1000*unit)*.54;
+   const offsetY=(ch-800*unit)*.50;
+   ctx.setTransform(unit,0,0,unit,offsetX,offsetY);
+   exitPulse=Math.max(0,exitPulse-dt*.7);clickFlash=Math.max(0,clickFlash-dt*.65);
+   draw(t);requestAnimationFrame(tick);}
  for(const [id,name] of [['play-button','START'],['help-button','HELP'],['exit-button','EXIT'],['menu-close','CLOSE']]){const el=$$(id);if(!el)continue;el.addEventListener('pointerenter',()=>{hover=name;});el.addEventListener('focus',()=>{hover=name;});el.addEventListener('pointerleave',()=>{hover='START';});}
  function exit(){hover='EXIT';exitPulse=1;clickFlash=1;const status=$$('engine-status');status.textContent='The Majhi shines his flashlight at you! Close this tab if you want to leave.';status.style.color='#ffddab';setTimeout(()=>{hover='START';},1900);}
  $$('exit-button')?.addEventListener('click',exit);$$('menu-close')?.addEventListener('click',exit);
