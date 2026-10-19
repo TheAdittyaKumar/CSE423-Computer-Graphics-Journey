@@ -50,13 +50,68 @@
 
     <section class="overlay" id="menu">
       <div class="menu-left"><div class="eyebrow">BRAC UNIVERSITY · CSE423 · GROUP 07</div><h1>MAJHI<br><em>JABEN?!</em></h1><p class="menu-subtitle">DHAKA IS UNDERWATER.<br><span>YOUR NEXT CLASS ISN'T.</span></p><p class="menu-description">Row through a rain-soaked city. Rescue stranded students. Dodge the debris. Deliver everyone to BRAC University before time runs out.</p><div class="edition-pill">◈ INDEPENDENT WEBGL BROWSER EDITION</div></div>
-      <div class="menu-right"><div class="menu-card"><p class="overline">THE CITY NEEDS A MAJHI</p><button id="play-button" class="menu-primary">▶ &nbsp; START RESCUE</button><button id="help-button" class="menu-secondary">⌨ &nbsp; HOW TO PLAY</button><a class="menu-secondary link-button" href="https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey" target="_blank" rel="noopener noreferrer">↗ &nbsp; VIEW SOURCE ON GITHUB</a><p class="menu-note">No download. No login. Keyboard or touch.</p></div></div>
+      <div class="menu-right"><div class="menu-card"><p class="overline">THE CITY NEEDS A MAJHI</p><button id="play-button" class="menu-primary">▶ &nbsp; START RESCUE</button><button id="help-button" class="menu-secondary">⌨ &nbsp; HOW TO PLAY</button><a class="menu-secondary link-button" href="https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey" target="_blank" rel="noopener noreferrer">↗ &nbsp; VIEW SOURCE ON GITHUB</a><p class="menu-note">No download. No login. Keyboard or touch.</p><p class="menu-note" id="engine-status" aria-live="polite">Loading game engine…</p></div></div>
       <footer class="menu-footer">An adaptation of <strong>Majhi Jaben?!</strong> by Adittya Kumar Chowdhury, Nafisa Lubaba & Usaeed Rahman Tibro.</footer>
     </section>
 
     <section id="modal" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="Game menu"><div class="dialog glass"><div class="eyebrow" id="modal-eyebrow">MISSION GUIDE</div><h2 id="modal-title">HOW TO PLAY</h2><div id="modal-content"></div><div class="modal-actions"><button id="modal-main" class="btn btn-primary">CONTINUE</button><button id="modal-secondary" class="btn btn-ghost hidden">RESTART</button></div></div></section>
     <div id="error" class="fatal hidden" role="alert"><h2>WebGL unavailable</h2><p>This browser cannot render the 3D game. Try an updated version of Chrome, Edge or Firefox with hardware acceleration enabled.</p></div>
   </main>
-  <script src="./game.js" defer></script>
+  <script>
+  /* Menu bootstrap: remain responsive if WebGL initialization or game.js fails. */
+  (() => {
+    const byId = id => document.getElementById(id);
+    const status = byId('engine-status');
+    let startupIssue = '';
+    function report(title, detail) {
+      startupIssue = title + (detail ? ' — ' + detail : '');
+      status.textContent = startupIssue;
+      status.style.color = '#ffbc9c';
+      console.error('[Majhi Jaben startup]', startupIssue);
+    }
+    window.majhiStartupError = report;
+    function showHelp() {
+      byId('modal-eyebrow').textContent = 'MISSION GUIDE';
+      byId('modal-title').textContent = 'HOW TO PLAY';
+      byId('modal-content').innerHTML = `
+        <p>Rescue stranded students and deliver <b>6 students</b> to BRAC University within <b>15 minutes</b>.</p>
+        <ul><li><kbd>W</kbd>/<kbd>↑</kbd> forward, <kbd>S</kbd>/<kbd>↓</kbd> backward, <kbd>A</kbd>/<kbd>←</kbd> and <kbd>D</kbd>/<kbd>→</kbd> steer.</li>
+        <li><kbd>Y</kbd> accepts a rescue request; <kbd>N</kbd> rejects it. Follow pickup markers on the minimap.</li>
+        <li>Stop inside a pickup ring and wait for boarding. Carry up to 3 students at a time to the university dock.</li>
+        <li><kbd>Space</kbd> toggles boost; <kbd>C</kbd> changes camera; <kbd>F</kbd> repairs power; <kbd>P</kbd> takes a landmark photo; <kbd>Esc</kbd> pauses.</li></ul>`;
+      byId('modal-main').textContent = 'BACK TO MENU';
+      byId('modal-secondary').classList.add('hidden');
+      byId('modal').classList.remove('hidden');
+    }
+    byId('help-button').onclick = showHelp;
+    byId('modal-main').onclick = () => byId('modal').classList.add('hidden');
+    byId('play-button').onclick = () => {
+      const engine = window.MajhiDiagnostics;
+      if (engine && typeof engine.start === 'function') engine.start();
+      else if (!startupIssue) report('Game is still loading', 'Wait a moment, then try again.');
+      else status.textContent = startupIssue;
+    };
+    window.addEventListener('error', event => {
+      if (event.filename && /game\.js/.test(event.filename)) {
+        const location = event.lineno ? ' (line ' + event.lineno + ')' : '';
+        report('Game script error' + location, event.message || 'Check the browser Console.');
+      }
+    });
+    window.addEventListener('unhandledrejection', event => {
+      report('Game engine error', String(event.reason || 'Unexpected failure'));
+    });
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (window.MajhiDiagnostics) {
+          status.textContent = '✓ Game engine ready';
+          status.style.color = '#a7dbc6';
+        } else if (!startupIssue) {
+          report('Game engine did not start', 'Check that docs/game.js was uploaded, and that WebGL is enabled.');
+        }
+      }, 1500);
+    });
+  })();
+  </script>
+  <script src="./game.js?v=2" defer onerror="window.majhiStartupError('Game script missing', 'Verify docs/game.js exists in your GitHub repository.')"></script>
 </body>
 </html>

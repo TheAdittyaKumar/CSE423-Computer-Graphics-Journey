@@ -6,8 +6,12 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const canvas=$('world'), weather=$('weather'), wx=weather.getContext('2d');
-  const gl=canvas.getContext('webgl',{antialias:true,alpha:true,depth:true,powerPreference:'high-performance'});
-  if(!gl){$('error').classList.remove('hidden');return;}
+  const options={antialias:true,alpha:true,depth:true,powerPreference:'high-performance'};
+  const gl=canvas.getContext('webgl',options)||canvas.getContext('experimental-webgl',options);
+  if(!gl){
+    window.majhiStartupError?.('WebGL unavailable', 'Enable graphics acceleration or try Chrome, Edge, or Firefox on a computer that supports WebGL.');
+    return;
+  }
   const TAU=Math.PI*2,RAD=Math.PI/180, BOUNDS=1650, WATER=0;
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
   const distance=(x,z,X,Z)=>Math.hypot(x-X,z-Z);
