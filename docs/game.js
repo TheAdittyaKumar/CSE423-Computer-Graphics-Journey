@@ -16,13 +16,17 @@
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
   const distance=(x,z,X,Z)=>Math.hypot(x-X,z-Z);
   const rnd=(min,max)=>min+Math.random()*(max-min);
+  // WebGL 1 requires matching precision for uniforms and varyings shared by shaders.
+  // Select the best fragment precision available, then declare it on both sides.
+  const precisionSupport=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT);
+  const sharedPrecision=precisionSupport&&precisionSupport.precision>0?'highp':'mediump';
   const VERT=`attribute vec3 aPos; attribute vec3 aColor; attribute float aKind;
-  uniform mat4 uView,uProj,uModel;uniform float uTime;
-  varying vec3 vColor,vWorld;varying float vKind,vDist;
+  uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
+  varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
   void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5){
   p.y+=1.6*sin(p.x*.023+uTime*1.7)*cos(p.z*.019-uTime*1.4)+.8*sin(p.x*.071+p.z*.055+uTime*2.8);
   }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;}`;
-  const FRAG=`precision mediump float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
+  const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
   void main(){vec3 c=vColor;if(vKind>.5){float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
     float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
     c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
