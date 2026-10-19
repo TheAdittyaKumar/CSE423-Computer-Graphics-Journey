@@ -1,5 +1,6 @@
-/* Majhi Jaben?! — independent browser adaptation of the CSE423 PyOpenGL game.
- * WebGL 1, no external packages, no server, no asset downloads.
+/* Majhi Jaben?! — source-geometry browser port of the CSE423 PyOpenGL game.
+ * Static geometry and character meshes exported from ORIGINAL Python rendering functions.
+ * WebGL 1, no external packages or servers.
  * Original project: https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey
  */
 (() => {
@@ -24,7 +25,14 @@
   uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
   varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
   void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5){
-  p.y+=1.6*sin(p.x*.023+uTime*1.7)*cos(p.z*.019-uTime*1.4)+.8*sin(p.x*.071+p.z*.055+uTime*2.8);
+  float mainWave=sin(.032*(p.z+.18*p.x)-1.80*uTime);
+  float crossWave=sin(.047*p.x-.014*p.z+1.13*uTime);
+  float chop=sin(.085*p.z+.029*p.x-2.25*uTime);
+  float relative=max(.22,.58+6.9*(.5+.5*mainWave)+1.25*crossWave+.60*chop+1.55*pow(max(0.,mainWave),6.));
+  float radius=length(vec2(p.x,p.z-1378.));
+  float daylight=clamp((560.-radius)/300.,0.,1.);
+  daylight=daylight*daylight*(3.-2.*daylight);
+  p.y=8.22+(relative-.22)*(1.-.70*daylight);
   }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
   void main(){vec3 c=vColor;if(vKind>.5){float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
@@ -94,7 +102,7 @@
   }
   const homes=[];homeStarts.forEach(([x,z],i)=>{const b=buildings.find(t=>t.x===x&&t.z===z);if(!b)return;
     const road=[-1150,-600,-50,500,1050].reduce((p,v)=>Math.abs(v-z)<Math.abs(p-z)?v:p,-1150);
-    const dir=road>z?1:-1, dock=z+dir*(b.hd+110);if(valid(x,dock))homes.push({id:`H${i+1}`,x,z:dock,type:'HOME',name:`Home ${String(i+1).padStart(2,'0')}`});
+    const dir=road>z?1:-1, dock=z+dir*(b.hd+110);if(valid(x,dock))homes.push({id:`H${i+1}`,x,z:dock,doorZ:z+dir*(b.hd+30),facadeZ:z+dir*(b.hd+2),frontDir:dir,type:'HOME',name:`Home ${String(i+1).padStart(2,'0')}`});
   });
   const rescues=sosStarts.map(([x,z],i)=>({id:`S${i+1}`,x,z,type:'DROWNING',name:`Flooded Street ${String(i+1).padStart(2,'0')}`})).filter(t=>valid(t.x,t.z));
   // Build environment mesh; source map coordinates and mission markers are preserved.
@@ -173,9 +181,33 @@
   city.box(0,1,-170,205,.8,8,[.96,.80,.39]);
   city.cylinder(145,49,-55,5,102,[.56,.55,.47],8);city.box(145,106,-55,22,52,21,[.23,.29,.28]);
   city.upload();
-  const waterMesh=new Mesh(), SIZE=1700,STEP=96;
-  for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){const c=[.061+(.008*Math.sin(x*.01+z*.03)),.187,.252];waterMesh.quad([x,-2,z],[x+STEP,-2,z],[x+STEP,-2,z+STEP],[x,-2,z+STEP],c,1);}waterMesh.upload();
+  const waterMesh=new Mesh(), SIZE=1700,STEP=48;
+  for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){const c=[.061+(.008*Math.sin(x*.01+z*.03)),.187,.252];waterMesh.quad([x,8,z],[x+STEP,8,z],[x+STEP,8,z+STEP],[x,8,z+STEP],c,1);}waterMesh.upload();
   // Local meshes drawn with per-instance transforms.
+  // OFFLINE EXPORTED SOURCE GEOMETRY. The binary comes from the original
+  // renderSingleBuildingGeometry, renderBRACUStaticGeometry, drawCityTree,
+  // renderCinematicBoatHull and other Python draw functions, not hand-made JS boxes.
+  let sourceMeshes=null, sourceLoadError=null;
+  async function loadSourceGeometry(){
+    const [iResponse,vResponse]=await Promise.all([fetch('./original-geometry.json'),fetch('./original-geometry.bin')]);
+    if(!iResponse.ok||!vResponse.ok)throw new Error('Original source geometry files missing — upload both original-geometry files into docs.');
+    const index=await iResponse.json(),bytes=await vResponse.arrayBuffer();
+    const source=new Float32Array(bytes),meshes={};
+    for(const [name,range] of Object.entries(index)){
+      const start=range.start*7,end=(range.start+range.count)*7;
+      if(end>source.length)throw Error('Original geometry data truncated: '+name);
+      const mesh=new Mesh();mesh.length=range.count;mesh.buffer=gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+      gl.bufferData(gl.ARRAY_BUFFER,source.subarray(start,end),gl.STATIC_DRAW);
+      meshes[name]=mesh;
+    }
+    sourceMeshes=meshes;
+    window.majhiSourcePort={loaded:true,groups:Object.keys(index),vertexCount:source.length/7};
+    console.info('Original Python scene geometry loaded:',window.majhiSourcePort);
+    const status=$('engine-status');if(status){status.textContent='✓ Original game geometry loaded';status.style.color='#a7dbc6';}
+  }
+  loadSourceGeometry().catch(e=>{sourceLoadError=e.message;console.error('Original source geometry:',e);
+    window.majhiStartupError?.('Original geometry failed to load',e.message);});
   const boatMesh=new Mesh();
   const stations=[[-100,10],[-92,29],[-66,37],[-24,41],[25,42],[72,35],[100,24],[123,1]];
   for(const side of [-1,1])for(let i=0;i<stations.length-1;i++){
@@ -203,7 +235,7 @@
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[]});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[]});
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('hud').classList.remove('hidden');
@@ -213,7 +245,7 @@
     const place=id<2?places[0]:places[Math.floor(Math.random()*places.length)];
     const dist=Math.abs(S.x-place.x)+Math.abs(S.z-place.z)+Math.abs(place.x)+Math.abs(place.z-1080);
     const deadline=clamp(Math.round(43+dist/130+(type==='HOME'?7:0)+rnd(-4,6)),66,118);
-    S.request={id,type,name:students[id%students.length],locationId:place.id,x:place.x,z:place.z,pickup:place.name,timeLeft:deadline,state:'OFFERED',colorId:id%studentColors.length,warning:false};S.requestLeft=22;}
+    S.request={id,type,name:students[id%students.length],locationId:place.id,x:place.x,z:place.z,pickup:place.name,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',colorId:id%studentColors.length,warning:false};S.requestLeft=22;}
   function accept(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming ride request.');return;}
     if(S.rides.length>=5){notify('Your rescue queue is full (5 active requests).');return;}
     S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;refreshHUD();}
@@ -321,25 +353,49 @@
     if(S.wiperTime>0){wx.strokeStyle='#d1effa65';wx.lineWidth=6;wx.beginPath();wx.arc(w*.5,h*.86,Math.min(w,h)*.62,Math.PI*1.21,Math.PI*1.74);wx.stroke();}
     if(S.flash>0){wx.fillStyle=`rgba(255,252,224,${clamp(S.flash*1.6,0,.6)})`;wx.fillRect(0,0,w,h);}
   }
-  function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a),boatY=9+Math.sin(S.bobTime*2.8)*1.3;
+  function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a),boatY=12+Math.sin(S.bobTime*2.8)*1.3;
     const lerp=((S.angle-S.heading+540)%360)-180;S.heading=(S.heading+lerp*.16+360)%360;
     const ca=S.camera3?S.heading*RAD:a;
     let eye,target,fov;
     if(S.mode==='MENU'){
       const t=performance.now()*.00012;eye=[720*Math.cos(t),520,-1100+570*Math.sin(t)];target=[0,60,600];fov=70;
     }else if(S.camera3){const x=S.x-Math.cos(ca)*228,z=S.z-Math.sin(ca)*228;
-      eye=[x,139,z];target=[S.x+c*80,36,S.z+s*80];fov=73;
+      // Colliding the chase-camera arm against building silhouettes prevents
+      // the camera from passing inside a facade (present in the original Python).
+      let minFraction=1;
+      for(const b of buildings){
+        const minX=b.x-b.hw-16,maxX=b.x+b.hw+16,minZ=b.z-b.hd-16,maxZ=b.z+b.hd+16;
+        let tMin=0,tMax=1;const vx=x-S.x,vz=z-S.z;
+        for(const [p,v,min,max] of [[S.x,vx,minX,maxX],[S.z,vz,minZ,maxZ]]){
+          if(Math.abs(v)<1e-6){if(p<min||p>max){tMin=2;break;}}
+          else {let a=(min-p)/v,b=(max-p)/v;if(a>b)[a,b]=[b,a];tMin=Math.max(tMin,a);tMax=Math.min(tMax,b);}
+        }
+        if(tMin<=tMax&&tMin<=1&&tMax>=0&&tMin<minFraction)minFraction=Math.max(.06,tMin-.04);
+      }
+      eye=[S.x+(x-S.x)*minFraction,39+(139-39)*minFraction,S.z+(z-S.z)*minFraction];
+      target=[S.x+c*80,36,S.z+s*80];fov=73;
     }else{eye=[S.x-c*24,boatY+41,S.z-s*24];target=[S.x+c*210,boatY+19,S.z+s*210];fov=78;}
-    gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target));gl.uniform1f(uniforms.time,S.bobTime);
-    gl.disable(gl.CULL_FACE);render(waterMesh);gl.enable(gl.CULL_FACE);render(city);
+    gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target));gl.uniform1f(uniforms.time,S.bobTime*.85);
+    gl.disable(gl.CULL_FACE);
+    if(sourceMeshes){
+      for(const group of ['sky','clouds','clear-sky'])render(sourceMeshes[group]);
+    }
+    render(waterMesh);
+    if(sourceMeshes){
+      for(const group of ['streets','buildings','campus','props','landmarks','cars','dock'])render(sourceMeshes[group]);
+    } else if(!sourceLoadError){
+      // While original geometry downloads, render no incorrect placeholder city.
+    }
+    // Keep culling disabled for original double-sided OpenGL line/quad geometry.
     // Foreground boat, dynamic light state and localized mission markers.
-    for(let i=0;i<cars.length;i++){const [x,z,angle]=cars[i];render(carMesh,model(x,-3+(i%3),z,angle,.95));}
     for(const car of S.movingCars)render(carMesh,model(car.x,1,car.z,car.z===-555?0:90,.97));
-    S.debris.forEach((d,i)=>render(debrisMesh,model(d.x,0,d.z,(i*57)%360,1)));
-    for(let i=0;i<power.length;i++){const p=power[i];render(powerMesh,model(p.x,0,p.z,0,1));}
+    S.debris.forEach((d,i)=>render(sourceMeshes?.['debris-'+(i%3)]||debrisMesh,model(d.x,0,d.z,(i*57)%360,1)));
+    if(!sourceMeshes)for(let i=0;i<power.length;i++){const p=power[i];render(powerMesh,model(p.x,0,p.z,0,1));}
     for(const r of S.rides)if(r.state==='WAITING'){
       const bounce=Math.sin(S.bobTime*4+r.id)*2;
-      render(npcMeshes[r.colorId],model(r.x,3+bounce,r.z,-90,.92));
+      const home=r.type==='HOME';
+      const px=home?r.x:r.x,pz=home?(r.doorZ??r.z):r.z;
+      render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(px,home?19:15+bounce,pz,home?-90:-90,home?.63:.70));
       render(markerMesh,model(r.x,3+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
     }
     if(S.request){/* Offered riders appear on the map, not in the city until accepted. */}
@@ -348,11 +404,19 @@
     // Traffic lights: emissive-like saturated color, red/green changes with the actual timer.
     render(S.traffic==='RED'?signalRed:signalGreen);
     if(S.mode!=='MENU'){
-      if(S.camera3){gl.disable(gl.CULL_FACE);render(boatMesh,model(S.x,boatY,S.z,S.angle,.62));gl.enable(gl.CULL_FACE);}
+      if(S.camera3){
+        render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
+        if(sourceMeshes?.captain)render(sourceMeshes.captain,model(S.x,boatY-12,S.z,S.angle,1));
+        if(sourceMeshes?.paddles)render(sourceMeshes.paddles,model(S.x,boatY-12,S.z,S.angle,1));
+      }else{
+        // Like the desktop edition, the actual boat is drawn in first person.
+        render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
+        if(sourceMeshes?.['firstperson-hands'])render(sourceMeshes['firstperson-hands'],model(S.x,boatY-12,S.z,S.angle,1));
+      }
       // Passengers are visible from either camera as smaller seated silhouettes.
       const seats=[[8,-19],[8,19],[67,0]];
-      seated().forEach((r,i)=>{const [bx,bz]=seats[i];const sx=S.x+(bx*c-bz*s)*.62,sz=S.z+(bx*s+bz*c)*.62;render(npcMeshes[r.colorId],model(sx,boatY+8,sz,S.angle,.36));});
-      if(S.camera3){for(const sign of [-1,1]){
+      seated().forEach((r,i)=>{const [bx,bz]=seats[i];const sx=S.x+(bx*c-bz*s)*.62,sz=S.z+(bx*s+bz*c)*.62;render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(sx,boatY+16,sz,S.angle,.62));});
+      if(S.camera3&&!sourceMeshes?.paddles){for(const sign of [-1,1]){
         const bx=S.x+(8*c-sign*47*s)*.62,bz=S.z+(8*s+sign*47*c)*.62;
         const rocking=(keys.has('w')||keys.has('arrowup'))?Math.sin(S.bobTime*9)*13:4;
         render(paddleMesh,model(bx,boatY+10,bz,S.angle+sign*(23+rocking),.48));
@@ -386,6 +450,6 @@
   });
   document.querySelectorAll('[data-key]').forEach(btn=>btn.addEventListener('click',()=>action(btn.dataset.key)));
   // Read-only diagnostics to make browser smoke tests deterministic.
-  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),renderer:'WebGL1'}),start:reset};
+  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),renderer:'WebGL1 / Python source geometry',sourceGeometryLoaded:!!sourceMeshes,sourceLoadError}),start:reset};
   requestAnimationFrame(loop);
 })();

@@ -1,0 +1,94 @@
+{
+  "buildings": {
+    "start": 0,
+    "count": 40896
+  },
+  "streets": {
+    "start": 40896,
+    "count": 1356
+  },
+  "campus": {
+    "start": 42252,
+    "count": 30558
+  },
+  "props": {
+    "start": 72810,
+    "count": 72738
+  },
+  "cars": {
+    "start": 145548,
+    "count": 10200
+  },
+  "landmarks": {
+    "start": 155748,
+    "count": 4746
+  },
+  "sky": {
+    "start": 160494,
+    "count": 54
+  },
+  "clouds": {
+    "start": 160548,
+    "count": 11088
+  },
+  "clear-sky": {
+    "start": 171636,
+    "count": 54
+  },
+  "boat": {
+    "start": 171690,
+    "count": 765
+  },
+  "captain": {
+    "start": 172455,
+    "count": 1752
+  },
+  "paddles": {
+    "start": 174207,
+    "count": 1248
+  },
+  "dock": {
+    "start": 175455,
+    "count": 768
+  },
+  "firstperson-hands": {
+    "start": 176223,
+    "count": 1236
+  },
+  "student-0": {
+    "start": 177459,
+    "count": 1776
+  },
+  "student-1": {
+    "start": 179235,
+    "count": 1776
+  },
+  "student-2": {
+    "start": 181011,
+    "count": 1776
+  },
+  "student-3": {
+    "start": 182787,
+    "count": 1776
+  },
+  "student-4": {
+    "start": 184563,
+    "count": 1776
+  },
+  "student-5": {
+    "start": 186339,
+    "count": 1776
+  },
+  "debris-0": {
+    "start": 188115,
+    "count": 240
+  },
+  "debris-1": {
+    "start": 188355,
+    "count": 240
+  },
+  "debris-2": {
+    "start": 188595,
+    "count": 228
+  }
+}
