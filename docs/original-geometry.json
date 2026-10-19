@@ -90,5 +90,293 @@
   "debris-2": {
     "start": 188595,
     "count": 228
+  },
+  "rowing-0": {
+    "start": 188823,
+    "count": 1248
+  },
+  "first-rowing-0": {
+    "start": 190071,
+    "count": 1236
+  },
+  "rowing-1": {
+    "start": 191307,
+    "count": 1248
+  },
+  "first-rowing-1": {
+    "start": 192555,
+    "count": 1236
+  },
+  "rowing-2": {
+    "start": 193791,
+    "count": 1248
+  },
+  "first-rowing-2": {
+    "start": 195039,
+    "count": 1236
+  },
+  "rowing-3": {
+    "start": 196275,
+    "count": 1248
+  },
+  "first-rowing-3": {
+    "start": 197523,
+    "count": 1236
+  },
+  "rowing-4": {
+    "start": 198759,
+    "count": 1248
+  },
+  "first-rowing-4": {
+    "start": 200007,
+    "count": 1236
+  },
+  "rowing-5": {
+    "start": 201243,
+    "count": 1248
+  },
+  "first-rowing-5": {
+    "start": 202491,
+    "count": 1236
+  },
+  "rowing-6": {
+    "start": 203727,
+    "count": 1248
+  },
+  "first-rowing-6": {
+    "start": 204975,
+    "count": 1236
+  },
+  "rowing-7": {
+    "start": 206211,
+    "count": 1248
+  },
+  "first-rowing-7": {
+    "start": 207459,
+    "count": 1236
+  },
+  "rowing-8": {
+    "start": 208695,
+    "count": 1248
+  },
+  "first-rowing-8": {
+    "start": 209943,
+    "count": 1236
+  },
+  "rowing-9": {
+    "start": 211179,
+    "count": 1248
+  },
+  "first-rowing-9": {
+    "start": 212427,
+    "count": 1236
+  },
+  "rowing-10": {
+    "start": 213663,
+    "count": 1248
+  },
+  "first-rowing-10": {
+    "start": 214911,
+    "count": 1236
+  },
+  "rowing-11": {
+    "start": 216147,
+    "count": 1248
+  },
+  "first-rowing-11": {
+    "start": 217395,
+    "count": 1236
+  },
+  "rowing-12": {
+    "start": 218631,
+    "count": 1248
+  },
+  "first-rowing-12": {
+    "start": 219879,
+    "count": 1236
+  },
+  "rowing-13": {
+    "start": 221115,
+    "count": 1248
+  },
+  "first-rowing-13": {
+    "start": 222363,
+    "count": 1236
+  },
+  "rowing-14": {
+    "start": 223599,
+    "count": 1248
+  },
+  "first-rowing-14": {
+    "start": 224847,
+    "count": 1236
+  },
+  "rowing-15": {
+    "start": 226083,
+    "count": 1248
+  },
+  "first-rowing-15": {
+    "start": 227331,
+    "count": 1236
+  },
+  "rowing-16": {
+    "start": 228567,
+    "count": 1248
+  },
+  "first-rowing-16": {
+    "start": 229815,
+    "count": 1236
+  },
+  "rowing-17": {
+    "start": 231051,
+    "count": 1248
+  },
+  "first-rowing-17": {
+    "start": 232299,
+    "count": 1236
+  },
+  "rowing-18": {
+    "start": 233535,
+    "count": 1248
+  },
+  "first-rowing-18": {
+    "start": 234783,
+    "count": 1236
+  },
+  "rowing-19": {
+    "start": 236019,
+    "count": 1248
+  },
+  "first-rowing-19": {
+    "start": 237267,
+    "count": 1236
+  },
+  "rowing-20": {
+    "start": 238503,
+    "count": 1248
+  },
+  "first-rowing-20": {
+    "start": 239751,
+    "count": 1236
+  },
+  "rowing-21": {
+    "start": 240987,
+    "count": 1248
+  },
+  "first-rowing-21": {
+    "start": 242235,
+    "count": 1236
+  },
+  "rowing-22": {
+    "start": 243471,
+    "count": 1248
+  },
+  "first-rowing-22": {
+    "start": 244719,
+    "count": 1236
+  },
+  "rowing-23": {
+    "start": 245955,
+    "count": 1248
+  },
+  "first-rowing-23": {
+    "start": 247203,
+    "count": 1236
+  },
+  "struggling-0": {
+    "start": 248439,
+    "count": 2448
+  },
+  "struggling-1": {
+    "start": 250887,
+    "count": 2448
+  },
+  "struggling-2": {
+    "start": 253335,
+    "count": 2448
+  },
+  "struggling-3": {
+    "start": 255783,
+    "count": 2448
+  },
+  "struggling-4": {
+    "start": 258231,
+    "count": 2448
+  },
+  "struggling-5": {
+    "start": 260679,
+    "count": 2448
+  },
+  "struggling-6": {
+    "start": 263127,
+    "count": 2448
+  },
+  "struggling-7": {
+    "start": 265575,
+    "count": 2448
+  },
+  "struggling-8": {
+    "start": 268023,
+    "count": 2448
+  },
+  "struggling-9": {
+    "start": 270471,
+    "count": 2448
+  },
+  "struggling-10": {
+    "start": 272919,
+    "count": 2448
+  },
+  "struggling-11": {
+    "start": 275367,
+    "count": 2448
+  },
+  "struggling-12": {
+    "start": 277815,
+    "count": 2448
+  },
+  "struggling-13": {
+    "start": 280263,
+    "count": 2448
+  },
+  "struggling-14": {
+    "start": 282711,
+    "count": 2448
+  },
+  "struggling-15": {
+    "start": 285159,
+    "count": 2448
+  },
+  "struggling-16": {
+    "start": 287607,
+    "count": 2448
+  },
+  "struggling-17": {
+    "start": 290055,
+    "count": 2448
+  },
+  "struggling-18": {
+    "start": 292503,
+    "count": 2448
+  },
+  "struggling-19": {
+    "start": 294951,
+    "count": 2448
+  },
+  "struggling-20": {
+    "start": 297399,
+    "count": 2448
+  },
+  "struggling-21": {
+    "start": 299847,
+    "count": 2448
+  },
+  "struggling-22": {
+    "start": 302295,
+    "count": 2448
+  },
+  "struggling-23": {
+    "start": 304743,
+    "count": 2448
   }
 }

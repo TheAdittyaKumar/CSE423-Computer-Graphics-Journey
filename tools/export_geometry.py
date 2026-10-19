@@ -147,6 +147,32 @@ for i,color in enumerate(names['StudentColors']):
  group('student-'+str(i),lambda c=color:names['drawStudentAvatar'](0,0,0,c,0.79))
 for i in range(3):
  names['FloatingDebrisList']=[dict(x=0,y=0,phase=0,type=i)];group('debris-'+str(i),names['drawDebrisObjects'])
+# This code is inserted in exporter after static groups, before packing the data.
+# It captures animated poses by running the original source's dynamic renderer.
+for i in range(24):
+    phase=2*math.pi*i/24
+    names['ThirdPersonCamera']=True
+    names['IsBoatRowing']=True
+    names['RowingAnimationTimer']=0.65*i/24
+    names['RowingAnimationAngle']=17*math.sin(phase)+2.5*math.sin(2*phase)
+    group('rowing-'+str(i),names['drawPlayerHandsAndPaddles'])
+    names['ThirdPersonCamera']=False
+    group('first-rowing-'+str(i),names['drawPlayerHandsAndPaddles'])
+names['ThirdPersonCamera']=True
+names['IsBoatRowing']=False
+names['RowingAnimationTimer']=0
+names['RowingAnimationAngle']=0
+names['DockingProgress']=0
+names['DockingTargetId']=-1
+names['BoatPositionX']=0;names['BoatPositionY']=0
+for i in range(24):
+    # One source rescue person, animation via original wave and arm timing.
+    names['GameTimeSeconds']=i*math.pi/24
+    names['WaterAnimationPhase']=names['GameTimeSeconds']*.85
+    names['ActiveRideRequests']=[{'id':1,'x':0,'y':0,'pickup_type':'DROWNING','state':'WAITING','color':(0.32,0.79,0.91)}]
+    group('struggling-'+str(i),names['drawFloodRescuePeople'])
+names['ActiveRideRequests']=[]
+
 # Geometry is packed into a single contiguous Float32 buffer, split using the ranges file.
 index={};blob=[]
 for key,vertices in col.byname.items():

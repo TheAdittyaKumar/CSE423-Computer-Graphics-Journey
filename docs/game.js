@@ -230,7 +230,15 @@
   const signalRed=new Mesh();signalRed.sphere(145,120,-68,9,[1,.15,.1],4,10);signalRed.upload();
   const signalGreen=new Mesh();signalGreen.sphere(145,120,-68,9,[.17,1,.38],4,10);signalGreen.upload();
 
-  const S={mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0};
+
+  // BRAC UNIVERSITY facade lettering (original GLUT stroke text cannot be baked as triangles).
+  // Characters are small actual 3D meshes on the south-facing entrance fascia.
+  const campusLettering=new Mesh();
+  const font5={A:['01110','10001','10001','11111','10001','10001','10001'],B:['11110','10001','10001','11110','10001','10001','11110'],C:['01111','10000','10000','10000','10000','10000','01111'],D:['11110','10001','10001','10001','10001','10001','11110'],E:['11111','10000','10000','11110','10000','10000','11111'],I:['11111','00100','00100','00100','00100','00100','11111'],N:['10001','11001','10101','10101','10011','10001','10001'],R:['11110','10001','10001','11110','10100','10010','10001'],S:['01111','10000','10000','01110','00001','00001','11110'],T:['11111','00100','00100','00100','00100','00100','00100'],U:['10001','10001','10001','10001','10001','10001','01110'],V:['10001','10001','10001','10001','10001','01010','00100'],Y:['10001','10001','01010','00100','00100','00100','00100']};
+  const legend='BRAC UNIVERSITY', unit=1.53, startX=-6-legend.length*6*unit/2;
+  for(let i=0;i<legend.length;i++){const bitmap=font5[legend[i]];if(!bitmap)continue;for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(bitmap[row][col]==='1')campusLettering.quad([startX+(i*6+col)*unit,151-row*unit,1134.0],[startX+(i*6+col+1)*unit,151-row*unit,1134.0],[startX+(i*6+col+1)*unit,152-(row+1)*unit,1134.0],[startX+(i*6+col)*unit,152-(row+1)*unit,1134.0],[.96,.92,.72]);}
+  campusLettering.upload();
+  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0};
   const keys=new Set();
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
@@ -285,8 +293,9 @@
   function step(dt){S.time+=dt;S.bobTime+=dt;S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);S.wiperTime=Math.max(0,S.wiperTime-dt);
     S.boost=clamp(S.boost+(S.boostOn?-30:15)*dt,0,100);if(S.boost<=0)S.boostOn=false;
     const forward=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
-    const turn=(keys.has('a')||keys.has('arrowleft')?1:0)-(keys.has('d')||keys.has('arrowright')?1:0);
+    const turn=(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0); // screen-left / screen-right after Python-to-WebGL axis conversion
     if(turn){S.angle=(S.angle+turn*105*dt+360)%360;S.lastMove=S.time;}
+    S.rowing=!!forward; if(forward) S.strokeTime=(S.strokeTime+dt)%0.65; else S.strokeTime=0;
     if(forward){const speed=(forward>0?270:180)*(S.boostOn?1.65:1);const dx=Math.cos(S.angle*RAD)*speed*dt*forward,dz=Math.sin(S.angle*RAD)*speed*dt*forward;
       // Collision increments avoid tunnelling through narrow buildings.
       const n=Math.ceil(Math.hypot(dx,dz)/8)||1;for(let i=0;i<n;i++){
@@ -310,7 +319,7 @@
     const nearby=S.rides.filter(r=>r.state==='WAITING'&&distance(S.x,S.z,r.x,r.z)<=(r.type==='HOME'?72:56)).sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
     if(!nearby||seated().length>=3||S.time-S.lastMove<.38){S.dock=0;S.dockId=-1;}
     else {if(S.dockId!==nearby.id){S.dock=0;S.dockId=nearby.id;}S.dock+=dt;const required=nearby.type==='HOME'?1.3:.65;
-      if(S.dock>=required){nearby.state='ONBOARD';S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
+      if(S.dock>=required){nearby.state='ONBOARD';nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
     if(S.delivered>=6){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||S.failed>=6){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
@@ -378,11 +387,11 @@
     gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target));gl.uniform1f(uniforms.time,S.bobTime*.85);
     gl.disable(gl.CULL_FACE);
     if(sourceMeshes){
-      for(const group of ['sky','clouds','clear-sky'])render(sourceMeshes[group]);
+      for(const group of ['sky','clouds'])render(sourceMeshes[group]); // do not render the source's opaque rectangular sky wall in front of the browser scene
     }
     render(waterMesh);
     if(sourceMeshes){
-      for(const group of ['streets','buildings','campus','props','landmarks','cars','dock'])render(sourceMeshes[group]);
+      for(const group of ['streets','buildings','campus','props','landmarks','cars','dock'])render(sourceMeshes[group]);render(campusLettering);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
@@ -395,27 +404,29 @@
       const bounce=Math.sin(S.bobTime*4+r.id)*2;
       const home=r.type==='HOME';
       const px=home?r.x:r.x,pz=home?(r.doorZ??r.z):r.z;
-      render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(px,home?19:15+bounce,pz,home?-90:-90,home?.63:.70));
+      if(home){render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(px,19+.6*Math.sin(S.bobTime*3+r.id),pz,-90+Math.sin(S.bobTime*2+r.id)*5,.63));}
+      else {const frame=Math.floor(((S.time*2)%Math.PI)/Math.PI*24)%24;const anim=sourceMeshes?.['struggling-'+frame];if(anim)render(anim,model(px,0,pz,0,1));else render(npcMeshes[r.colorId],model(px,8+bounce,pz,-90,.70));}
       render(markerMesh,model(r.x,3+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
     }
     if(S.request){/* Offered riders appear on the map, not in the city until accepted. */}
     if(!S.photo)render(markerGoal,model(825,1,1080,0,1));
     if(S.powerOff){const p=power[S.powerIndex];render(markerGoal,model(p.x,2,p.z,0,.8));}
+    if(sourceMeshes){render(markerGoal,model(0,10,1100,0,1.85));}
     // Traffic lights: emissive-like saturated color, red/green changes with the actual timer.
     render(S.traffic==='RED'?signalRed:signalGreen);
     if(S.mode!=='MENU'){
       if(S.camera3){
         render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
         if(sourceMeshes?.captain)render(sourceMeshes.captain,model(S.x,boatY-12,S.z,S.angle,1));
-        if(sourceMeshes?.paddles)render(sourceMeshes.paddles,model(S.x,boatY-12,S.z,S.angle,1));
+        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['rowing-'+f]||sourceMeshes.paddles,model(S.x,boatY-12,S.z,S.angle,1));}
       }else{
         // Like the desktop edition, the actual boat is drawn in first person.
         render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
-        if(sourceMeshes?.['firstperson-hands'])render(sourceMeshes['firstperson-hands'],model(S.x,boatY-12,S.z,S.angle,1));
+        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['first-rowing-'+f]||sourceMeshes['firstperson-hands'],model(S.x,boatY-12,S.z,S.angle,1));}
       }
       // Passengers are visible from either camera as smaller seated silhouettes.
       const seats=[[8,-19],[8,19],[67,0]];
-      seated().forEach((r,i)=>{const [bx,bz]=seats[i];const sx=S.x+(bx*c-bz*s)*.62,sz=S.z+(bx*s+bz*c)*.62;render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(sx,boatY+16,sz,S.angle,.62));});
+      seated().forEach((r,i)=>{const [bx,bz]=seats[i];const settle=clamp((S.time-(r.boardedAt??S.time))/1.25,0,1);const eased=settle*settle*(3-2*settle);const localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(sx,boatY+15+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),.62));});
       if(S.camera3&&!sourceMeshes?.paddles){for(const sign of [-1,1]){
         const bx=S.x+(8*c-sign*47*s)*.62,bz=S.z+(8*s+sign*47*c)*.62;
         const rocking=(keys.has('w')||keys.has('arrowup'))?Math.sin(S.bobTime*9)*13:4;
@@ -450,6 +461,6 @@
   });
   document.querySelectorAll('[data-key]').forEach(btn=>btn.addEventListener('click',()=>action(btn.dataset.key)));
   // Read-only diagnostics to make browser smoke tests deterministic.
-  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),renderer:'WebGL1 / Python source geometry',sourceGeometryLoaded:!!sourceMeshes,sourceLoadError}),start:reset};
+  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),rowing:S.rowing,strokeFrame:Math.floor((S.strokeTime/0.65)*24)%24,renderer:'WebGL1 / Python source geometry',sourceGeometryLoaded:!!sourceMeshes,sourceLoadError}),start:reset};
   requestAnimationFrame(loop);
 })();
