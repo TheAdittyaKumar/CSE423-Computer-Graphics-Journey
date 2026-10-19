@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071926">
+  <meta name="description" content="Majhi Jaben?! — a flooded Dhaka 3D rescue game. Play the browser edition of the BRAC University CSE423 project.">
+  <title>Majhi Jaben?! — Play Online</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main id="game-shell">
+    <canvas id="world" aria-label="3D game: guide a rescue boat around a flooded Dhaka"></canvas>
+    <canvas id="weather" aria-hidden="true"></canvas>
+    <div id="vignette" aria-hidden="true"></div>
+
+    <div class="hud hidden" id="hud">
+      <header class="hud-top">
+        <section class="status-panel glass" aria-label="Game status">
+          <div class="brand-tag">MAJHI JABEN?! <span>BROWSER EDITION</span></div>
+          <div class="metric-row">
+            <div><small>SCORE</small><strong id="score">0000</strong></div>
+            <div><small>TIME LEFT</small><strong id="timer">15:00</strong></div>
+            <div><small>DELIVERED</small><strong id="delivered">0 / 6</strong></div>
+            <div><small>MISSED</small><strong id="failed">0 / 6</strong></div>
+          </div>
+        </section>
+        <section class="right-top">
+          <div class="glass request-panel hidden" id="request-panel" aria-live="polite">
+            <div class="request-head"><span class="pulse-dot"></span> INCOMING RESCUE REQUEST <span id="request-remaining">22s</span></div>
+            <strong id="request-name">Adittya</strong>
+            <div class="muted" id="request-location">Home pickup</div>
+            <div class="request-actions"><button id="accept-button" class="btn btn-primary"><kbd>Y</kbd> Accept</button><button id="reject-button" class="btn btn-ghost"><kbd>N</kbd> Reject</button></div>
+          </div>
+          <div class="top-actions"><button class="icon-button glass" id="camera-button" title="Switch camera (C)">📷 <span>CAM</span></button><button class="icon-button glass" id="pause-button" title="Pause / help (Esc)">Ⅱ <span>PAUSE</span></button></div>
+        </section>
+      </header>
+      <div class="center-crosshair" aria-hidden="true">+</div>
+      <div class="hud-bottom">
+        <section class="map-panel glass"><div class="section-heading"><span>FLOOD ROUTE MAP</span><span class="online-dot">● LIVE</span></div><canvas id="minimap" width="240" height="240" aria-label="Map showing boat and objective locations"></canvas><div class="map-legend"><span><i class="legend-dot boat-dot"></i> YOU</span><span><i class="legend-dot student-dot"></i> PICKUP</span><span><i class="legend-dot campus-dot"></i> BRACU</span></div></section>
+        <section class="middle-panel">
+          <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+          <div class="objective glass"><span id="objective-title">ACCEPT A RESCUE REQUEST</span><strong id="objective-detail">Bring students safely to BRAC University</strong><div class="meter"><div id="dock-fill"></div></div></div>
+          <div class="boost-row"><span>⚡ PADDLE BOOST</span><div class="boost-track"><div id="boost-fill"></div></div><span id="boost-number">100%</span></div>
+        </section>
+        <section class="control-panel glass"><div class="section-heading">CONTROLS</div><div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Row & steer</div><div><kbd>SPACE</kbd> Toggle boost</div><div><kbd>C</kbd> Camera <kbd>P</kbd> Photo</div><div><kbd>F</kbd> Repair <kbd>V</kbd> Wiper</div><div><kbd>ESC</kbd> Pause / help</div><div class="passengers" id="passengers">PASSENGERS ONBOARD <b>0 / 3</b></div></section>
+      </div>
+      <div id="touch-controls" aria-label="Touch game controls"><div class="touch-dpad"><button data-hold="w">▲</button><div><button data-hold="a">◀</button><button data-hold="s">▼</button><button data-hold="d">▶</button></div></div><div class="touch-actions"><button data-key=" ">BOOST</button><button data-key="f">REPAIR</button><button data-key="p">PHOTO</button></div></div>
+    </div>
+
+    <section class="overlay" id="menu">
+      <div class="menu-left"><div class="eyebrow">BRAC UNIVERSITY · CSE423 · GROUP 07</div><h1>MAJHI<br><em>JABEN?!</em></h1><p class="menu-subtitle">DHAKA IS UNDERWATER.<br><span>YOUR NEXT CLASS ISN'T.</span></p><p class="menu-description">Row through a rain-soaked city. Rescue stranded students. Dodge the debris. Deliver everyone to BRAC University before time runs out.</p><div class="edition-pill">◈ INDEPENDENT WEBGL BROWSER EDITION</div></div>
+      <div class="menu-right"><div class="menu-card"><p class="overline">THE CITY NEEDS A MAJHI</p><button id="play-button" class="menu-primary">▶ &nbsp; START RESCUE</button><button id="help-button" class="menu-secondary">⌨ &nbsp; HOW TO PLAY</button><a class="menu-secondary link-button" href="https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey" target="_blank" rel="noopener noreferrer">↗ &nbsp; VIEW SOURCE ON GITHUB</a><p class="menu-note">No download. No login. Keyboard or touch.</p></div></div>
+      <footer class="menu-footer">An adaptation of <strong>Majhi Jaben?!</strong> by Adittya Kumar Chowdhury, Nafisa Lubaba & Usaeed Rahman Tibro.</footer>
+    </section>
+
+    <section id="modal" class="overlay modal hidden" role="dialog" aria-modal="true" aria-label="Game menu"><div class="dialog glass"><div class="eyebrow" id="modal-eyebrow">MISSION GUIDE</div><h2 id="modal-title">HOW TO PLAY</h2><div id="modal-content"></div><div class="modal-actions"><button id="modal-main" class="btn btn-primary">CONTINUE</button><button id="modal-secondary" class="btn btn-ghost hidden">RESTART</button></div></div></section>
+    <div id="error" class="fatal hidden" role="alert"><h2>WebGL unavailable</h2><p>This browser cannot render the 3D game. Try an updated version of Chrome, Edge or Firefox with hardware acceleration enabled.</p></div>
+  </main>
+  <script src="./game.js" defer></script>
+</body>
+</html>
