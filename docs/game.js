@@ -33,6 +33,14 @@
   float daylight=clamp((560.-radius)/300.,0.,1.);
   daylight=daylight*daylight*(3.-2.*daylight);
   p.y=8.22+(relative-.22)*(1.-.70*daylight);
+  // Only the four existing current zones get larger, faster wave crests.
+   // Fade in at their boundaries instead of forming sudden water ridges.
+   float west=smoothstep(-1280.,-1210.,p.x)*(1.-smoothstep(-990.,-920.,p.x))*smoothstep(-470.,-405.,p.z)*(1.-smoothstep(155.,220.,p.z));
+   float center=smoothstep(-170.,-105.,p.x)*(1.-smoothstep(105.,170.,p.x))*smoothstep(-970.,-905.,p.z)*(1.-smoothstep(-395.,-330.,p.z));
+   float east=smoothstep(410.,475.,p.x)*(1.-smoothstep(635.,700.,p.x))*smoothstep(130.,195.,p.z)*(1.-smoothstep(805.,870.,p.z));
+   float north=smoothstep(-720.,-655.,p.x)*(1.-smoothstep(-435.,-370.,p.x))*smoothstep(690.,755.,p.z)*(1.-smoothstep(1105.,1170.,p.z));
+   float rough=clamp(west+center+east+north,0.,1.);
+   p.y+=rough*(4.5*sin(.037*p.x+.023*p.z-uTime*3.8)+2.7*sin(.028*p.z-.032*p.x+uTime*4.5));
   }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
   void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
@@ -72,10 +80,24 @@
   function perspective(fovy,aspect,near,far){const f=1/Math.tan(fovy*.5),nf=1/(near-far);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]);}
   function norm(a){const m=Math.hypot(...a)||1;return a.map(x=>x/m);}
   function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
-  function lookAt(eye,target){const z=norm(eye.map((v,i)=>v-target[i])),x=norm(cross([0,1,0],z)),y=cross(z,x);return new Float32Array([
+  function lookAt(eye,target,up=[0,1,0]){const z=norm(eye.map((v,i)=>v-target[i])),x=norm(cross(up,z)),y=cross(z,x);return new Float32Array([
     x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,
     -x.reduce((s,v,i)=>s+v*eye[i],0),-y.reduce((s,v,i)=>s+v*eye[i],0),-z.reduce((s,v,i)=>s+v*eye[i],0),1]);}
   function model(x=0,y=0,z=0,angle=0,scale=1){const c=Math.cos(angle*RAD)*scale,s=Math.sin(angle*RAD)*scale;return new Float32Array([c,0,s,0,0,scale,0,0,-s,0,c,0,x,y,z,1]);}
+  // The original model matrix handles yaw. For the boat only, allow genuine
+  // local pitch/roll so the hull, captain and paddles react together.
+  function rockingBoatModel(x,y,z,angle,scale,pitch=0,roll=0){
+    if(Math.abs(pitch)+Math.abs(roll)<.001)return model(x,y,z,angle,scale);
+    const cy=Math.cos(angle*RAD),sy=Math.sin(angle*RAD);
+    const cp=Math.cos(pitch*RAD),sp=Math.sin(pitch*RAD);
+    const cr=Math.cos(roll*RAD),sr=Math.sin(roll*RAD),k=scale;
+    return new Float32Array([
+      cy*cp*k,sp*k,sy*cp*k,0,
+      (-cy*sp*cr-sy*sr)*k,cp*cr*k,(-sy*sp*cr+cy*sr)*k,0,
+      (cy*sp*sr-sy*cr)*k,-cp*sr*k,(sy*sp*sr+cy*cr)*k,0,
+      x,y,z,1
+    ]);
+  }
   const ID=model();
   // All geometry is built as interleaved position, vertex color, material kind.
   class Mesh {
@@ -130,7 +152,10 @@
       }
       const wasStopped=S.carStopped[i];
       S.carStopped[i]=blocked;
-      if(blocked&&!wasStopped)triggerImpactShake(0.85);
+      if(blocked&&!wasStopped){
+        const carPos=carAtProgress(car,current);
+        triggerBoatImpact(carPos.x-S.x,carPos.z-S.z,.85);
+      }
       if(!blocked)S.carProgress[i]=future;
       return {...carAtProgress(car,S.carProgress[i]),stopped:blocked};
     });
@@ -143,7 +168,12 @@
   const sosStarts=[[0,-1150],[-550,-1150],[550,-1150],[-1100,-600],[1100,-600],[-550,-600],[550,-600],[0,-50],[-1100,-50],[1100,-50],[-550,500],[550,500],[-1100,1050],[1100,1050],[-550,1050],[550,1050]];
   const students=['Adittya','Usaeed','Nafisa','Sujail','Kazmi','Safin','Shammo','Fahim','Rafi','Nabil','Sadia','Tanvir','Mushfiq','Jara','Tahmid','Nusrat','Riad','Faria','Zarin','Adnan'];
   const studentColors=[[.95,.38,.21],[.32,.79,.91],[.91,.68,.21],[.66,.46,.91],[.39,.88,.61],[.92,.44,.68]];
-  const currents=[{name:'WEST CURRENT',a:-1260,b:-940,c:-450,d:200,dx:39,dz:4},{name:'CENTRAL CURRENT',a:-150,b:150,c:-950,d:-350,dx:-38,dz:0},{name:'EAST CURRENT',a:430,b:680,c:150,d:850,dx:0,dz:-43},{name:'NORTH CURRENT',a:-700,b:-390,c:710,d:1150,dx:34,dz:0}];
+  // Stronger, but still paddle-against-able, currents. Original speeds were
+  // ~34-43 units/sec; these now push at ~100-120 units/sec plus wave surges.
+  const currents=[{name:'WEST CURRENT',a:-1260,b:-940,c:-450,d:200,dx:114,dz:12},
+                  {name:'CENTRAL CURRENT',a:-150,b:150,c:-950,d:-350,dx:-120,dz:0},
+                  {name:'EAST CURRENT',a:430,b:680,c:150,d:850,dx:0,dz:-120},
+                  {name:'NORTH CURRENT',a:-700,b:-390,c:710,d:1150,dx:104,dz:0}];
   function valid(x,z,margin=0){if(Math.abs(x)>1615||Math.abs(z)>1615)return false;
     for(const b of buildings)if(Math.abs(x-b.x)<b.hw+25+margin&&Math.abs(z-b.z)<b.hd+25+margin)return false;
     for(const [cx,cz,hw,hd] of campusSolids)if(Math.abs(x-cx)<=hw+25+margin&&Math.abs(z-cz)<=hd+25+margin)return false;
@@ -292,6 +322,18 @@
   currentArrows.upload();
   const markerGoal=new Mesh();markerGoal.ring(0,0,0,52,6,[.97,.81,.31]);markerGoal.upload();
   const waterRipple=new Mesh();waterRipple.ring(0,0,0,18,2.4,[.66,.89,.90]);waterRipple.upload();
+  // Cheap reusable translucent 3D water shards for collisions (one mesh,
+  // transformed at each hit rather than allocating new WebGL buffers).
+  const impactSprayMesh=new Mesh();
+  for(let i=0;i<18;i++){
+    const a=i*TAU/18,spread=10+(i%4)*3,side=a+.15;
+    const x=Math.cos(a),z=Math.sin(a),h=10+(i%5)*3.4;
+    impactSprayMesh.tri([x*spread*.30,0,z*spread*.30],
+      [x*(spread+14),h,z*(spread+14)],
+      [Math.cos(side)*(spread+5),.8,Math.sin(side)*(spread+5)],
+      i%3===0?[.90,.98,.99]:[.66,.89,.95],3);
+  }
+  impactSprayMesh.upload();
   // Procedural transparent BRACU sun aura: the Python version draws pulsing
   // golden rings and a sunshine cone only over its safe campus district.
   const sunshineAura=new Mesh();
@@ -459,10 +501,57 @@
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
   }
   shopSigns.upload();
-  const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
+  const S={waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
   // Collision impact: a strong jolt that quickly settles, in both camera modes.
   const IMPACT_SHAKE_DURATION = 0.58;
-  const impactShake = {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0};
+  const impactShake = {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0};
+  const boatImpact={pitch:0,pitchV:0,roll:0,rollV:0,heave:0,heaveV:0,
+    recoilX:0,recoilZ:0,cooldown:0};
+  const reducedMotion=()=>!!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  function triggerBoatImpact(dirX,dirZ,strength=1){
+    if(boatImpact.cooldown>0)return;
+    const length=Math.hypot(dirX,dirZ)||1;
+    dirX/=length;dirZ/=length;
+    strength=clamp(strength,.45,1.5);
+    triggerImpactShake(strength);
+    boatImpact.cooldown=.30;
+    const a=S.angle*RAD,front=dirX*Math.cos(a)+dirZ*Math.sin(a);
+    const side=dirX*(-Math.sin(a))+dirZ*Math.cos(a);
+    const motion=reducedMotion()?.50:1;
+    boatImpact.pitch=clamp(boatImpact.pitch-4.9*front*strength*motion,-15,15);
+    boatImpact.pitchV-=46*front*strength*motion;
+    boatImpact.roll=clamp(boatImpact.roll+4.3*(side||.25)*strength*motion,-16,16);
+    boatImpact.rollV+=47*(side||.25)*strength*motion;
+    boatImpact.heaveV+=23*strength*motion;
+    // Short backwards shove; normal collision tests still guard every step.
+    boatImpact.recoilX=clamp(boatImpact.recoilX-dirX*150*strength,-235,235);
+    boatImpact.recoilZ=clamp(boatImpact.recoilZ-dirZ*150*strength,-235,235);
+    impactShake.anchorX=S.x;impactShake.anchorZ=S.z;
+    const nearX=S.x+dirX*55,nearZ=S.z+dirZ*55;
+    S.impactSplashes.push({x:nearX,z:nearZ,age:0,power:strength});
+    if(S.impactSplashes.length>12)S.impactSplashes.shift();
+  }
+  function updateBoatImpact(dt){
+    boatImpact.cooldown=Math.max(0,boatImpact.cooldown-dt);
+    // Spring-damper: a fast hit, short oscillation, then a stable hull.
+    for(const [pos,velocity,k,damp] of [['pitch','pitchV',115,17],['roll','rollV',103,16],['heave','heaveV',115,19]]){
+      boatImpact[velocity]+=(-k*boatImpact[pos]-damp*boatImpact[velocity])*dt;
+      boatImpact[pos]+=boatImpact[velocity]*dt;
+    }
+    const nx=S.x+boatImpact.recoilX*dt,nz=S.z+boatImpact.recoilZ*dt;
+    if(moveAllowed(nx,nz)){S.x=nx;S.z=nz;}
+    else{
+      // Use individual axes for sliding beside walls; never tunnel through.
+      if(moveAllowed(nx,S.z))S.x=nx;else boatImpact.recoilX=0;
+      if(moveAllowed(S.x,nz))S.z=nz;else boatImpact.recoilZ=0;
+    }
+    const decay=Math.exp(-12*dt);
+    boatImpact.recoilX*=decay;boatImpact.recoilZ*=decay;
+    for(const p of S.impactSplashes)p.age+=dt;
+    S.impactSplashes=S.impactSplashes.filter(p=>p.age<.78);
+    for(const p of S.waveSplashes)p.age+=dt;
+    S.waveSplashes=S.waveSplashes.filter(p=>p.age<.75);
+  }
   function triggerImpactShake(power = 1) {
     if (impactShake.cooldown > 0) return;
     impactShake.time = 0;
@@ -496,7 +585,9 @@
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
   function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0});
-    Object.assign(impactShake, {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0});
+    Object.assign(impactShake, {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0});
+    Object.assign(boatImpact, {pitch:0,pitchV:0,roll:0,rollV:0,heave:0,heaveV:0,recoilX:0,recoilZ:0,cooldown:0});
+    S.waveStrength=0;S.waveSplashClock=0;S.waveSplashes=[];S.impactSplashes=[];
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
@@ -531,6 +622,7 @@
         <li><b>Stop your boat</b> at a pickup until the ring fills. Hold still about 1.3 seconds for a home pickup or 0.65 seconds for a rescue.</li>
         <li>Carry up to <b>3 passengers</b> to the golden dock just south of BRAC University.</li>
         <li><kbd>Space</kbd> toggles boat boost; <kbd>C</kbd> changes camera; <kbd>P</kbd> photographs Shaheed Minar from its marked spot; <kbd>F</kbd> repairs an outage box; <kbd>V</kbd> wipes rain.</li>
+        <li>Rough-current zones push the boat sideways and rock the hull. Steer or boost against the flow; hard collisions now jolt and splash.</li>
         <li>Watch the red traffic signal and avoid collisions with cars, buildings and debris. <kbd>F3</kbd> adjusts quality; <kbd>F4</kbd> toggles frame statistics; <kbd>Esc</kbd> pauses.</li></ul>`;
       $('modal-main').textContent=type==='PAUSED'?'RESUME GAME':'GOT IT';$('modal-secondary').classList.toggle('hidden',type!=='PAUSED');
     } else {
@@ -672,7 +764,7 @@
         else{
           collidedThisStep = true;
           // Fire only on a NEW impact, not continuously while W/S is held.
-          if(!impactShake.blocked)triggerImpactShake(S.boostOn ? 1.35 : (forward>0 ? 1 : 0.85));
+          if(!impactShake.blocked)triggerBoatImpact(dx,dz,S.boostOn ? 1.35 : (forward>0 ? 1 : 0.85));
           const bad=S.debris.some(d=>distance(x,z,d.x,d.z)<57);
           if(bad&&S.debrisCooldown<=0){S.score=Math.max(0,S.score-25);S.debrisCooldown=1.8;notify('Floating debris! -25 points. Steer around it.',2.7);}
           break;
@@ -680,9 +772,42 @@
       }
       S.lastMove=S.time;
     }
-    impactShake.blocked = collidedThisStep;
+    // Latch a held-against-wall collision until the player backs away or
+    // releases thrust, even after the recoil moves the boat slightly back.
+    if(collidedThisStep)impactShake.blocked=true;
+    else if(!forward||distance(S.x,S.z,impactShake.anchorX,impactShake.anchorZ)>40)impactShake.blocked=false;
+    updateBoatImpact(dt);
     S.debrisCooldown=Math.max(0,S.debrisCooldown-dt);S.pickupEffects=S.pickupEffects.filter(e=>S.time-e.at<1.15);
-    S.current='';for(const zone of currents)if(S.x>=zone.a&&S.x<=zone.b&&S.z>=zone.c&&S.z<=zone.d){S.current=zone.name;const x=S.x+zone.dx*dt,z=S.z+zone.dz*dt;if(moveAllowed(x,z)){S.x=x;S.z=z;}break;}
+    let activeZone=null;
+    for(const zone of currents)if(S.x>=zone.a&&S.x<=zone.b&&S.z>=zone.c&&S.z<=zone.d){activeZone=zone;break;}
+    S.current=activeZone?.name||'';
+    const waveTarget=activeZone?1:0;
+    S.waveStrength+=(waveTarget-S.waveStrength)*(1-Math.exp(-(activeZone?3.4:2.3)*dt));
+    if(activeZone){
+      const surge=1+.18*Math.sin(S.time*2.4+S.x*.007-S.z*.009);
+      const length=Math.hypot(activeZone.dx,activeZone.dz)||1;
+      // Cross-chop changes the trajectory and makes the zone feel turbulent.
+      const sideways=21*Math.sin(S.time*3.2+S.x*.013+S.z*.011);
+      const driftX=(activeZone.dx*surge-activeZone.dz/length*sideways)*dt;
+      const driftZ=(activeZone.dz*surge+activeZone.dx/length*sideways)*dt;
+      const pieces=Math.max(1,Math.ceil(Math.hypot(driftX,driftZ)/6));
+      for(let n=0;n<pieces;n++){
+        const nextX=S.x+driftX/pieces,nextZ=S.z+driftZ/pieces;
+        if(moveAllowed(nextX,nextZ)){S.x=nextX;S.z=nextZ;}
+        else{
+          // Currents are force, not teleportation: slide along solid edges.
+          if(moveAllowed(nextX,S.z))S.x=nextX;
+          if(moveAllowed(S.x,nextZ))S.z=nextZ;
+        }
+      }
+    }
+    S.waveSplashClock+=dt*S.waveStrength;
+    if(S.waveSplashClock>.24&&S.waveStrength>.28){
+      S.waveSplashClock=0;
+      const h=S.angle*RAD,side=Math.sin(S.time*5)>0?1:-1;
+      S.waveSplashes.push({x:S.x-Math.sin(h)*side*39,z:S.z+Math.cos(h)*side*39,age:0});
+      if(S.waveSplashes.length>10)S.waveSplashes.shift();
+    }
     S.debris.forEach(d=>{const ph=d.phase+S.time*.65,x=d.x0+Math.sin(ph)*26,z=d.z0+Math.cos(ph*.7)*18;if(distance(x,z,S.x,S.z)>57){d.x=x;d.z=z;}});
     updateSlowCars(dt);
     S.trafficClock+=dt;if(S.trafficClock>=(S.traffic==='GREEN'?5:4)){S.trafficClock=0;S.traffic=S.traffic==='GREEN'?'RED':'GREEN';}
@@ -827,7 +952,13 @@
     }
     if(S.flash>0){wx.fillStyle=`rgba(255,252,224,${clamp(S.flash*1.6,0,.6)})`;wx.fillRect(0,0,w,h);}
   }
-  function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a),boatY=12+Math.sin(S.bobTime*2.8)*1.3;
+  function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
+    const currentPitch=S.waveStrength*Math.sin(S.bobTime*4.4+S.z*.012)*5.0;
+    const currentRoll=S.waveStrength*Math.sin(S.bobTime*3.7+S.x*.014)*7.2;
+    const boatPitch=clamp(boatImpact.pitch+currentPitch,-17,17);
+    const boatRoll=clamp(boatImpact.roll+currentRoll,-19,19);
+    const boatY=12+Math.sin(S.bobTime*2.8)*1.3+
+      S.waveStrength*Math.sin(S.bobTime*4.1+S.x*.01)*3.1+boatImpact.heave;
     const lerp=((S.angle-S.heading+540)%360)-180;S.heading=(S.heading+lerp*.16+360)%360;
     const ca=S.camera3?S.heading*RAD:a;
     let eye,target,fov;
@@ -852,8 +983,19 @@
       target=[S.x+c*80,36+10*nearWall,S.z+s*80];
       fov=73+12*nearWall;
     }else{eye=[S.x-c*24,boatY+41,S.z-s*24];target=[S.x+c*210,boatY+19,S.z+s*210];fov=78;}
-    if(S.mode==='PLAYING')applyImpactShake(eye,target);
-    gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target));gl.uniform1f(uniforms.time,S.bobTime*.85);
+    let cameraUp=[0,1,0];
+    if(S.mode==='PLAYING'){
+      if(!reducedMotion()){
+        // Small chase-camera sway, stronger viewpoint tilt from inside hull.
+        const pitchFactor=S.camera3?.55:2.2;
+        target[1]-=boatPitch*pitchFactor;
+        eye[1]+=boatImpact.heave*(S.camera3?.3:.7);
+        const cameraRoll=boatRoll*(S.camera3?.12:.55)*RAD;
+        cameraUp=[Math.sin(a)*Math.sin(cameraRoll),Math.cos(cameraRoll),-Math.cos(a)*Math.sin(cameraRoll)];
+      }
+      applyImpactShake(eye,target);
+    }
+    gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target,cameraUp));gl.uniform1f(uniforms.time,S.bobTime*.85);
     gl.disable(gl.CULL_FACE);
     if(sourceMeshes){
       for(const group of ['sky','clouds'])render(sourceMeshes[group]); // do not render the source's opaque rectangular sky wall in front of the browser scene
@@ -891,6 +1033,19 @@
       for(const [splashIndex,splash] of S.rainSplashes.entries()){if(S.quality==='BALANCED'&&splashIndex%2)continue;
         if(distance(S.x,S.z,splash.x,splash.z)>510)continue;
         render(stormSplash,model(splash.x,9.65,splash.z,0,1.8+splash.age*26));
+      }
+      // Large collision sprays and expanding wake rings; bounded for FPS.
+      for(const splash of S.impactSplashes){
+        if(distance(S.x,S.z,splash.x,splash.z)>530)continue;
+        const age=splash.age,life=1-age/.78;
+        const swell=clamp((.54+age*2.2)*splash.power*life,.05,2.4);
+        render(impactSprayMesh,model(splash.x,9.8+Math.sin(Math.PI*age/.78)*5,splash.z,age*70,swell));
+        render(waterRipple,model(splash.x,9.7,splash.z,0,splash.power*(.65+age*3.1)));
+        render(waterRipple,model(splash.x,9.9,splash.z,0,splash.power*(.3+age*2.0)));
+      }
+      for(const splash of S.waveSplashes){
+        if(distance(S.x,S.z,splash.x,splash.z)>490)continue;
+        render(waterRipple,model(splash.x,9.6,splash.z,0,.45+splash.age*1.6));
       }
       gl.depthMask(true);gl.disable(gl.BLEND);
     }
@@ -945,13 +1100,13 @@
     if(!sourceMeshes)render(S.traffic==='RED'?signalRed:signalGreen);
     if(S.mode!=='MENU'){
       if(S.camera3){
-        render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
-        if(sourceMeshes?.captain)render(sourceMeshes.captain,model(S.x,boatY-12,S.z,S.angle,1));
-        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['rowing-'+f]||sourceMeshes.paddles,model(S.x,boatY-12,S.z,S.angle,1));}
+        render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
+        if(sourceMeshes?.captain)render(sourceMeshes.captain,rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));
+        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['rowing-'+f]||sourceMeshes.paddles,rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));}
       }else{
         // Like the desktop edition, the actual boat is drawn in first person.
-        render(sourceMeshes?.boat||boatMesh,model(S.x,boatY,S.z,S.angle,.62));
-        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['first-rowing-'+f]||sourceMeshes['firstperson-hands'],model(S.x,boatY-12,S.z,S.angle,1));}
+        render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
+        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['first-rowing-'+f]||sourceMeshes['firstperson-hands'],rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));}
       }
       if(S.rowing){
         // Paddle-tip splashes and a short wake behind the moving sampan.
@@ -1005,7 +1160,7 @@
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights};}
   window.majhiVersion='fidelity9';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;
