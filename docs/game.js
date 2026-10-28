@@ -398,6 +398,66 @@
     happySparkle.tri([0,-4,0],[x*3,0,z*2],[0,12,0],[.99,.76,.24]);
   }
   happySparkle.upload();
+  // Background population has no mission markers or rescue-state changes.
+  // Animation uses the already GPU-cached student pose meshes.
+  const CITY_PEOPLE=[
+    {x:85,z:-1260,role:'SWIM',colorId:1,phase:.3},
+    {x:-75,z:-1050,role:'SWIM',colorId:3,phase:1.3},
+    {x:-1105,z:-700,role:'SWIM',colorId:2,phase:2.4},
+    {x:-530,z:-1015,role:'SWIM',colorId:4,phase:3.7},
+    {x:555,z:-470,role:'SWIM',colorId:0,phase:1.1},
+    {x:1095,z:170,role:'SWIM',colorId:5,phase:4.2},
+    {x:-1130,z:710,role:'SWIM',colorId:2,phase:5.0},
+    {x:530,z:950,role:'SWIM',colorId:3,phase:3.0},
+    {x:-120,z:-1250,role:'WADE',colorId:5,phase:2.8},
+    {x:110,z:-885,role:'WADE',colorId:0,phase:1.5},
+    {x:-690,z:-580,role:'WADE',colorId:2,phase:4.1},
+    {x:685,z:-45,role:'WADE',colorId:4,phase:2.6},
+    {x:-1060,z:1070,role:'WADE',colorId:1,phase:5.2},
+    {x:-90,z:810,role:'WATCH',colorId:0,phase:.7},
+    {x:1095,z:850,role:'WATCH',colorId:1,phase:3.4},
+    {x:-365,z:-685,role:'WATCH',colorId:3,phase:2.0},
+    {x:695,z:865,role:'WATCH',colorId:5,phase:4.4},
+    ...[3,8,14,21].map((i,k)=>{
+      const b=buildings[i];
+      return {x:b.x+b.hw*.2,z:b.z-b.hd*.20,y:b.h-17,role:'ROOF',colorId:(k+1)%studentColors.length,phase:k*1.7};
+    })
+  ];
+  function ambientCitizenPosition(c,time){
+    if(c.role!=='SWIM')return {x:c.x,z:c.z};
+    // Swimmers stay in their road segment rather than crossing solid walls.
+    const x=c.x+18*Math.sin(time*.36+c.phase);
+    const z=c.z+24*Math.cos(time*.27+c.phase);
+    return valid(x,z)?{x,z}:{x:c.x,z:c.z};
+  }
+  function drawCityPeople(){
+    const clock=S.mode==='MENU'?S.bobTime:S.time;
+    for(let i=0;i<CITY_PEOPLE.length;i++){
+      const person=CITY_PEOPLE[i];
+      if(S.quality==='BALANCED' && i%3===1)continue;
+      const {x,z}=ambientCitizenPosition(person,clock);
+      const dist=distance(S.x,S.z,x,z);
+      if(dist>(S.mode==='MENU'?1400:790))continue;
+      const near=dist<260;
+      const facing=near?Math.atan2(S.z-z,S.x-x)/RAD:-90;
+      const bob=Math.sin(clock*(person.role==='SWIM'?5.1:2.5)+person.phase);
+      if(person.role==='SWIM'){
+        render(citizenFrame('SOS',person.colorId,clock*3.5+person.phase),
+          model(x,9.2+bob*1.5,z,facing,.83));
+        render(waterRipple,model(x,9.7,z,0,.52+.16*Math.sin(clock*5+person.phase)));
+      }else if(person.role==='WADE'){
+        render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.9)+person.phase),
+          model(x,6.8+bob*.5,z,facing,.68));
+        if(near)render(waterRipple,model(x,9.5,z,0,.34+.08*Math.sin(clock*3+person.phase)));
+      }else if(person.role==='ROOF'){
+        render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*1.4+person.phase),
+          model(x,person.y+.5*bob,z,facing,.68));
+      }else{
+        render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.8)+person.phase),
+          model(x,16+bob*.6,z,facing,.66));
+      }
+    }
+  }
   // These two bystanders stand beside, not on top of, the original animated
   // shopkeepers. They respond when the rescue boat passes their storefronts.
   const reactiveBystanders=[{x:-452,z:776,colorId:3},{x:407,z:606,colorId:4}];
@@ -539,6 +599,66 @@
   litHalo.data.forEach((_,i)=>{if(i%7===6)litHalo.data[i]=4;});litHalo.upload();
   const lampReflection=new Mesh();lampReflection.ring(0,0,0,19,7,[.91,.71,.38],24);
   lampReflection.data.forEach((_,i)=>{if(i%7===6)lampReflection.data[i]=4;});lampReflection.upload();
+  // Redesigned roadside lighting: narrow metal poles, curved support arms,
+  // shaded luminaire, bright diffuser and a deliberate light pool (not orbs).
+  // These replace the original baked lamp geometry so models do not overlap.
+  const cityLampPole=new Mesh(),cityLampOn=new Mesh(),cityLampOff=new Mesh();
+  const lampSteel=[.18,.25,.28],lampTrim=[.09,.13,.16];
+  cityLampPole.cylinder(0,60,0,3.1,116,lampSteel,9);
+  cityLampPole.cylinder(0,8,0,6.3,13,[.20,.27,.30],9);
+  cityLampPole.box(0,13,0,15,3,15,[.24,.28,.29]);
+  cityLampPole.cylinder(0,117,0,5.4,5,lampTrim,8);
+  citizenLimb(cityLampPole,[0,114,0],[0,124,-14],3.5,lampSteel);
+  citizenLimb(cityLampPole,[0,124,-14],[0,123,-32],3.2,lampSteel);
+  cityLampPole.box(0,119,-33,39,8,23,lampTrim);
+  cityLampPole.box(0,124,-33,41,2.5,24,[.26,.31,.33]);
+  cityLampPole.box(0,117,-33,37,2,20,[.38,.43,.43]);
+  cityLampPole.box(0,116,-33,41,1.5,22,[.14,.19,.20]);
+  cityLampPole.upload();
+  cityLampOn.box(0,114.7,-33,30,2.8,16,[1.0,.89,.66]);
+  cityLampOn.sphere(0,113.6,-33,4.3,[1,.95,.79],4,7);
+  cityLampOn.upload();
+  cityLampOff.box(0,114.7,-33,30,2.8,16,[.30,.34,.35]);
+  cityLampOff.upload();
+  // A smaller lamp glow looks natural under the actual fixture.
+  const lampGroundGlow=new Mesh();
+  lampGroundGlow.disk(0,0,0,45,[.96,.76,.44],24);
+  lampGroundGlow.data.forEach((_,i)=>{if(i%7===6)lampGroundGlow.data[i]=4;});
+  lampGroundGlow.upload();
+  function drawStreetLamps(viewX,viewZ){
+    for(const [x,z] of streetlights){
+      if(distance(viewX,viewZ,x,z)>1100)continue;
+      render(cityLampPole,model(x,0,z));
+      const on=!lightOffAt(x)&&distance(x,z,0,1378)>=378;
+      render(on?cityLampOn:cityLampOff,model(x,0,z));
+    }
+  }
+
+  // A real traffic-signal housing with three recessed lenses and visors,
+  // instead of the exported oversized glowing red/green sphere.
+  const modernTrafficBody=new Mesh(),modernTrafficRed=new Mesh(),modernTrafficGreen=new Mesh();
+  modernTrafficBody.cylinder(145,66,-55,4.3,132,[.19,.23,.25],10);
+  modernTrafficBody.cylinder(145,9,-55,7.0,16,[.25,.31,.33],10);
+  modernTrafficBody.box(145,132,-55,25,78,23,[.075,.11,.13]);
+  modernTrafficBody.box(145,172,-55,29,4,27,[.24,.29,.30]);
+  for(const y of [156,134,112]){
+    for(const side of [-1,1]){
+      modernTrafficBody.cylinder(145,y,-55+side*12,9,2.5,[.015,.025,.034],16);
+      modernTrafficBody.box(145,y+10,-55+side*12,22,3,10,[.04,.06,.08]);
+    }
+  }
+  for(const side of [-1,1]){
+    modernTrafficBody.sphere(145,156,-55+side*14,6,[.32,.09,.075],5,11);
+    modernTrafficBody.sphere(145,134,-55+side*14,6,[.32,.23,.10],5,11);
+    modernTrafficBody.sphere(145,112,-55+side*14,6,[.08,.29,.14],5,11);
+    modernTrafficRed.sphere(145,156,-55+side*15.3,6.6,[1,.17,.12],6,12);
+    modernTrafficGreen.sphere(145,112,-55+side*15.3,6.6,[.12,.98,.35],6,12);
+  }
+  modernTrafficBody.upload();modernTrafficRed.upload();modernTrafficGreen.upload();
+  function drawModernTrafficSignal(){
+    render(modernTrafficBody);
+    render(S.traffic==='RED'?modernTrafficRed:modernTrafficGreen);
+  }
   function lightOffAt(x){if(!S.powerOff)return false;
     return S.powerIndex===0?Math.abs(x)<=500:S.powerIndex===1?x< -500:x>500;}
 
@@ -1323,13 +1443,16 @@
         const frame=Math.floor((S.bobTime/2.513)*12)%12;
         render(sourceMeshes[`shoppeople-${style}-${frame}`]);
       }
-      render(sourceMeshes['lamps-'+powerState]); // Replace exported primitive powerboxes with detailed live-state models.
+      // Omit baked streetlamps: the modern geometry below replaces them.
       render(sourceMeshes.landmarks);render(sourceMeshes.cars);render(sourceMeshes.dock);
-      render(sourceMeshes['traffic-'+S.traffic.toLowerCase()]);
+      // Omit the old solid-color traffic beacon; draw a realistic signal below.
       render(campusLettering);render(shopSigns);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
+    // Both fixtures use stateful geometry, preserving blackout and signal timing.
+    drawStreetLamps(eye[0],eye[2]);
+    drawModernTrafficSignal();
     // All stations are live 3D cabinets instead of the old baked source blocks.
     drawPowerCabinets();
     // Semi-transparent animated water is drawn AFTER the original flooded
@@ -1364,12 +1487,12 @@
       }
       gl.depthMask(true);gl.disable(gl.BLEND);
     }
-    // Warm light scattering around operational streetlamps, dynamically
-    // omitted in the affected blackout district.
+    // Warm light scattering below real lamp fixtures; skip blackout districts.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
     for(const [x,z] of streetlights){if(lightOffAt(x)||distance(S.x,S.z,x,z)>680||distance(x,z,0,1378)<378)continue;
-      render(litHalo,model(x,107,z-15,0,1));
-      render(lampReflection,model(x,9.25,z-15,0,1));
+      render(litHalo,model(x,113.6,z-33,0,.78));
+      render(lampGroundGlow,model(x,9.45,z-33,0,1.1));
+      render(lampReflection,model(x,9.25,z-33,0,1));
     }
     drawPowerCabinetGlow();
     gl.depthMask(true);gl.disable(gl.BLEND);
@@ -1409,6 +1532,8 @@
       }
       render(markerMesh,model(r.x,3+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
     }
+    // Independent swimmers, waders, neighbors and rooftop residents.
+    drawCityPeople();
     for(const c of reactiveBystanders){
       const d=distance(S.x,S.z,c.x,c.z);
       if(d>850)continue;
@@ -1434,7 +1559,7 @@
       }
     }
     // Traffic lights: emissive-like saturated color, red/green changes with the actual timer.
-    if(!sourceMeshes)render(S.traffic==='RED'?signalRed:signalGreen);
+    // Modern three-lens signal is drawn for both source and fallback geometry.
     if(S.mode!=='MENU'){
       if(S.camera3){
         render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
@@ -1507,14 +1632,51 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights};}
-  window.majhiVersion='fidelity9-reactive-citizens';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
+  window.majhiVersion='fidelity9-city-life-and-lighting';
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:CITY_PEOPLE.length,swimmers:CITY_PEOPLE.filter(p=>p.role==='SWIM').length,updatedStreetLamps:streetlights.length,trafficSignalHousingVertices:modernTrafficBody.length,exitGlareInstalled:!!document.getElementById('majhi-exit-flashlight-glare'),impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else {S.bobTime+=dt*.5;if(S.mode==='WON')S.postWinClock=(S.postWinClock||0)+dt;}
     const frameStart=performance.now();try{draw();renderRain(dt);}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
     S.frameMS=performance.now()-frameStart;S.frameWorst=Math.max(S.frameWorst*.999,S.frameMS);hudClock+=dt;if(hudClock>.11){hudClock=0;if(S.mode!=='MENU')refreshHUD();}
   }
+  // Intensified menu EXIT GAME flashlight gag. Injected here so the existing
+  // GitHub Pages HTML/CSS does not need replacing. A single bright bloom is
+  // used instead of a strobe; reduced-motion users get a short fade.
+  function installExitFlashlightGlare(){
+    const overlay=document.createElement('div');
+    overlay.id='majhi-exit-flashlight-glare';
+    overlay.setAttribute('aria-hidden','true');
+    overlay.style.cssText='position:fixed;inset:0;pointer-events:none;z-index:2147483647;opacity:0;'+
+      'background:radial-gradient(ellipse at var(--glare-x,72%) var(--glare-y,52%),'+
+      'rgba(255,255,255,1) 0%,rgba(255,255,255,.99) 17%,'+
+      'rgba(255,251,226,.97) 38%,rgba(255,245,200,.82) 58%,'+
+      'rgba(255,244,210,.38) 77%,rgba(255,244,218,.10) 100%);'+
+      'backdrop-filter:brightness(2.4) saturate(1.35);'+
+      'transition:opacity .9s ease-out;';
+    document.body.appendChild(overlay);
+    let clearHandle=0,removeHandle=0;
+    document.addEventListener('click',event=>{
+      const el=event.target?.closest?.('button,a,[role="button"]');
+      if(!el || S.mode!=='MENU')return;
+      const label=[el.id,el.textContent,el.getAttribute('aria-label'),el.dataset?.action].filter(Boolean).join(' ');
+      if(!/exit\s*(?:game)?|quit\s*(?:game)?|leave\s*(?:game)?/i.test(label))return;
+      const area=el.getBoundingClientRect();
+      const x=area.left+area.width*.5,y=area.top+area.height*.5;
+      overlay.style.setProperty('--glare-x',(x/window.innerWidth*100).toFixed(1)+'%');
+      overlay.style.setProperty('--glare-y',(y/window.innerHeight*100).toFixed(1)+'%');
+      window.clearTimeout(clearHandle);window.clearTimeout(removeHandle);
+      overlay.style.transition='none';overlay.style.opacity='1';
+      // CSS transition reset prevents a half-visible second activation.
+      void overlay.offsetWidth;
+      const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      clearHandle=window.setTimeout(()=>{
+        overlay.style.transition=reduced?'opacity .25s ease-out':'opacity 1.55s ease-out';
+        overlay.style.opacity='0';
+      },reduced?230:1050);
+    },true);
+  }
+  installExitFlashlightGlare();
   $('play-button').onclick=reset;
   $('help-button').onclick=()=>nextModal('HELP');
   $('camera-button').onclick=()=>action('c');$('pause-button').onclick=togglePause;
