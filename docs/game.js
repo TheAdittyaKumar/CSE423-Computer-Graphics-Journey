@@ -54,6 +54,9 @@
   }else if(vKind>2.5&&vKind<3.5){
     // Real 3D rain streaks retain translucency rather than opaque HUD marks.
     opacity=.64;
+  }else if(vKind>6.5){
+    // Soft additive-looking warning glow, without the campus-ground mask.
+    opacity=.16;c=min(c*1.16,vec3(1.));
   }else if(vKind>5.5){
     // BRACU alone is genuinely dry: a soft, raised grassy courtyard blends
     // into the flood instead of ending at a rectangular map boundary.
@@ -305,7 +308,6 @@
   const npcMeshes=studentColors.map(color=>{const m=new Mesh();m.cylinder(0,14,0,7,24,color,8);m.sphere(0,32,0,9,[.78,.55,.38],4,8);m.cylinder(-9,16,0,3,22,[.77,.55,.40],6);m.cylinder(9,18,0,3,28,[.77,.55,.40],6);m.cylinder(-4,2,0,2.4,10,[.20,.29,.37],6);m.cylinder(4,2,0,2.4,10,[.20,.29,.37],6);return m.upload();});
   const markerMesh=new Mesh();markerMesh.ring(0,0,0,36,6,[.97,.43,.27]);markerMesh.upload();
   const debrisMesh=new Mesh();debrisMesh.box(0,1,0,56,15,33,[.35,.30,.22]);debrisMesh.box(9,8,0,10,8,29,[.48,.34,.23]);debrisMesh.upload();
-  const powerMesh=new Mesh();powerMesh.box(0,27,0,36,48,32,[.29,.32,.32]);powerMesh.box(0,30,-18,23,25,4,[.90,.19,.15]);powerMesh.upload();
   // Python's distinct water-current direction clues: repeated arrows move
   // with each zone's current, but never affect collision geometry.
   const currentArrows=new Mesh();
@@ -501,6 +503,187 @@
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
   }
   shopSigns.upload();
+  // Detailed, source-independent flood-damaged electrical cabinets. The legacy
+  // baked powerboxes mesh is intentionally not drawn, to avoid overlapping models.
+  // Every part is generated once; only light state and tiny spark meshes animate.
+  const POWER_FRONT=-24.25;
+  const powerPalette={steel:[.29,.36,.39],edge:[.12,.17,.20],plate:[.46,.53,.53],
+    wet:[.16,.22,.25],rust:[.48,.27,.18],warning:[1,.78,.24],bolt:[.12,.11,.08],
+    dark:[.065,.12,.16],silver:[.68,.72,.68],screen:[.09,.19,.22]};
+  function powerPipe(mesh,start,end,r,color,segments=7){
+    const dx=end[0]-start[0],dy=end[1]-start[1],dz=end[2]-start[2],length=Math.hypot(dx,dy,dz)||1;
+    const along=[dx/length,dy/length,dz/length];
+    const basis=Math.abs(along[1])<.9?[0,1,0]:[1,0,0];
+    const right=norm(cross(along,basis)),side=cross(along,right);
+    const point=(at,theta)=>{
+      const c=Math.cos(theta)*r,s=Math.sin(theta)*r;
+      return [at[0]+right[0]*c+side[0]*s,at[1]+right[1]*c+side[1]*s,at[2]+right[2]*c+side[2]*s];
+    };
+    for(let j=0;j<segments;j++){
+      const a=j*TAU/segments,b=(j+1)*TAU/segments;
+      mesh.quad(point(start,a),point(start,b),point(end,b),point(end,a),color);
+    }
+  }
+  function powerText(mesh,value,cx,top,z,step,color){
+    const width=value.length*6*step,x0=cx-width*.5;
+    for(let i=0;i<value.length;i++){
+      const glyph=signGlyphs[value[i]];
+      if(!glyph)continue;
+      for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(glyph[row][col]==='1'){
+        const x=x0+(i*6+col)*step,y=top-row*step;
+        mesh.quad([x,y-step*.86,z],[x+step*.86,y-step*.86,z],
+                  [x+step*.86,y,z],[x,y,z],color);
+      }
+    }
+  }
+  function makePowerCabinet(name,number){
+    const m=new Mesh(),P=powerPalette;
+    // Raised concrete footing stays visible above the moving flood surface.
+    m.box(0,11,0,69,11,60,[.40,.44,.42]);
+    m.box(0,16.8,0,63,2,54,[.23,.27,.28]);
+    for(const x of [-26,26])for(const z of [-22,22]){
+      m.box(x,19,z,7,7,7,P.edge);
+      m.cylinder(x,23,z,2.3,2,P.silver,8);
+    }
+    m.box(0,23,0,54,12,44,P.wet);
+    // Panel shell and stepped weather lip. Two separate door leaves feel real.
+    m.box(0,62,0,52,78,43,P.steel);
+    m.box(0,103,0,58,5,49,P.edge);
+    m.box(0,106,0,62,3,53,P.plate);
+    m.box(0,68,21.8,46,62,2,P.edge);
+    m.box(0,62,-22.15,47,75,2,P.edge);
+    m.box(-11.5,59,-23.35,22,58,1.7,[.33,.40,.43]);
+    m.box(11.5,59,-23.35,22,58,1.7,[.31,.38,.40]);
+    m.box(0,59,-24.55,1.6,57,1.2,P.dark);
+    // Shoulder / headline label, district-specific identification and station id.
+    m.box(0,94,-23.35,46,14,2,P.dark);
+    powerText(m,name+' GRID',0,98.4,-24.62,name==='CENTRAL'?1.00:1.20,[.90,.95,.90]);
+    m.box(-18,30,-24.9,7,4,2,P.warning);
+    powerText(m,''+(number+1),-18,31.2,-26.02,.43,P.bolt);
+    // Two warning-banded metal edges: bright even in the flooded night.
+    for(let i=0;i<5;i++){
+      const y=37+i*9;
+      m.box(-25,y,-24.6,3.4,4.2,1.2,i%2?P.warning:P.edge);
+      m.box(25,y,-24.6,3.4,4.2,1.2,i%2?P.warning:P.edge);
+    }
+    // Hazard symbol: yellow plate, dark lightning bolt and readable danger tag.
+    m.tri([-13,73,-25.0],[13,73,-25.0],[0,91,-25.0],P.warning);
+    m.tri([-8,74.2,-25.08],[8,74.2,-25.08],[0,87,-25.08],P.bolt);
+    m.tri([-1,85.7,-25.17],[4,85.7,-25.17],[-3,78,-25.17],P.warning);
+    m.tri([-3,78,-25.18],[2.3,79.4,-25.18],[-2,75,-25.18],P.warning);
+    m.box(0,66,-25.15,22,8,1.2,[.76,.36,.22]);
+    powerText(m,'DANGER',0,68.5,-25.87,.52,[1,.92,.70]);
+    // Mechanical door furniture, hinges, latch and rust streaks.
+    m.box(17.8,51,-25.0,3.6,14,3.6,P.edge);
+    m.box(17.8,51,-27.1,2.2,11,1.2,P.silver);
+    m.box(17.8,50.7,-27.9,5.5,2,1.3,P.silver);
+    for(const y of [40,77])for(const x of [-22,22]){
+      m.box(x,y,-24.4,3,5,2,P.edge);
+      m.cylinder(x,y,-25.6,1.2,1,P.silver,6);
+    }
+    for(let i=0;i<8;i++)m.box(12,35+i*1.85,-24.45,12,.7,.8,P.dark);
+    for(let i=0;i<4;i++)m.box(-15+i*9,31,-24.3,4,1,1,P.rust);
+    m.box(-16,57,-24.42,6,17,.85,[.35,.28,.22]);
+    m.box(20,66,-24.45,3,23,.85,[.33,.24,.19]);
+    // Instrument bank: a recessed diagnostic screen + indicator aperture.
+    m.box(-12.5,47,-25.0,14,12,1.6,P.dark);
+    m.box(-12.5,47,-25.85,11,8,.6,P.screen);
+    for(let i=0;i<3;i++)m.box(-16.5+i*3.6,44.4+i*.55,-26.25,2.4,1.05,.35,[.36,.67,.59]);
+    m.cylinder(15.0,85.4,-25.2,3.8,1.0,P.edge,12);
+    m.cylinder(15.0,85.4,-26.0,2.6,1.0,P.silver,12);
+    // Weathered conduits follow an elbow from roof to protected side wall.
+    for(const [i,z] of [[0,7],[1,17]]){
+      const color=i?[.12,.18,.19]:[.38,.42,.40];
+      const segments=[[20-i*3,108,z],[20-i*3,118,z],[31-i*3,118,z],
+        [34-i*2,113,z],[34-i*2,71,z]];
+      for(let k=0;k<segments.length-1;k++)powerPipe(m,segments[k],segments[k+1],2.0-i*.35,color);
+      m.box(34-i*2,68,z,8,6,6,P.edge);
+    }
+    // Cable harness at the near side, strapped down rather than floating.
+    for(const y of [39,53,67])m.box(27.0,y,7,4,3,17,P.edge);
+    powerPipe(m,[28,95,-4],[32,69,-8],1.25,[.15,.19,.18]);
+    powerPipe(m,[32,69,-8],[31,41,-9],1.25,[.15,.19,.18]);
+    // Back vents and rain protection ribs.
+    for(let i=0;i<10;i++)m.box(-10+i*2.2,57,23.1,1.0,18,1.0,P.dark);
+    for(const x of [-16,16])m.box(x,98,0,3,4,46,[.18,.25,.28]);
+    return m.upload();
+  }
+  const powerCabinets=power.map((p,i)=>makePowerCabinet(p.name,i));
+  // Fixed shared meshes; the active district determines which color is drawn.
+  function makePowerIndicator(color){
+    const m=new Mesh();m.sphere(15.0,85.4,-27.3,2.6,color,6,12);
+    m.box(-12.5,47,-26.24,9,5,.5,color.map(c=>c*.32));
+    return m.upload();
+  }
+  const powerLedRed=makePowerIndicator([1,.20,.13]);
+  const powerLedGreen=makePowerIndicator([.12,1,.43]);
+  const powerStateRed=new Mesh(),powerStateGreen=new Mesh();
+  powerText(powerStateRed,'OFFLINE',0,41,-25.0,.56,[1,.39,.25]);
+  powerText(powerStateGreen,'ONLINE',0,41,-25.0,.56,[.45,1,.59]);
+  powerStateRed.upload();powerStateGreen.upload();
+  // Roof beacon, floodlight halo and brief electrical crackles at broken wiring.
+  const powerBeaconRed=new Mesh(),powerBeaconGreen=new Mesh(),powerBeaconBase=new Mesh();
+  powerBeaconBase.cylinder(0,109,0,7,5,[.11,.17,.20],12);
+  powerBeaconBase.cylinder(0,112.5,0,5,2,[.67,.71,.64],12);
+  powerBeaconBase.upload();
+  powerBeaconRed.sphere(0,117,0,6.7,[1,.17,.12],6,12);powerBeaconRed.upload();
+  powerBeaconGreen.sphere(0,117,0,6.7,[.16,1,.42],6,12);powerBeaconGreen.upload();
+  function makePowerGlow(color){
+    const m=new Mesh();m.sphere(0,117,0,15,color,6,12);
+    m.sphere(15,85,-28,8,color,5,10);
+    m.data.forEach((_,i)=>{if(i%7===6)m.data[i]=7;});
+    return m.upload();
+  }
+  const powerGlowRed=makePowerGlow([1,.23,.16]);
+  const powerGlowGreen=makePowerGlow([.21,1,.43]);
+  const powerSparks=new Mesh();
+  for(const [i,j] of [[0,0],[1,1],[2,2],[3,3],[4,4],[5,5]]){
+    const x=29+(i%3)*2.1,y=84+(i%2)*3;
+    const tone=i%2?[.70,.95,1]:[.34,.81,1];
+    powerSparks.tri([x,y,-26],[x-5+j*.6,y+9+i,-27],
+      [x+2,y+2,-27.2],tone);
+  }
+  powerSparks.upload();
+  const powerRepairPulse=new Mesh();
+  powerRepairPulse.ring(0,0,0,29,4,[.32,1,.57],32);powerRepairPulse.upload();
+  const powerVisual={repairedIndex:-1,repairedAt:-999};
+  function drawPowerCabinets(){
+    for(let i=0;i<power.length;i++){
+      const p=power[i],mat=model(p.x,0,p.z),d=distance(S.x,S.z,p.x,p.z);
+      if(S.mode!=='MENU'&&d>1250)continue;
+      const offline=S.powerOff&&S.powerIndex===i;
+      const justRepaired=powerVisual.repairedIndex===i&&S.time-powerVisual.repairedAt<2.5;
+      const blink=Math.sin(S.bobTime*7.1+i*1.7)>.05;
+      render(powerCabinets[i],mat);
+      render(powerBeaconBase,mat);
+      render(offline?powerStateRed:powerStateGreen,mat);
+      if(offline){
+        if(blink){render(powerLedRed,mat);render(powerBeaconRed,mat);}
+      }else{
+        render(powerLedGreen,mat); // Steady green means the station is energized.
+        if(justRepaired)render(powerBeaconGreen,mat);
+      }
+      // Tiny, intermittent flashes from the active fault (no permanent sparks).
+      const sparkPhase=(S.bobTime+i*.7)%4.7;
+      if(S.mode==='PLAYING'&&offline&&sparkPhase<.17&&d<720)render(powerSparks,mat);
+    }
+  }
+  function drawPowerCabinetGlow(){
+    for(let i=0;i<power.length;i++){
+      const p=power[i],d=distance(S.x,S.z,p.x,p.z);
+      if(d>750)continue;
+      const offline=S.powerOff&&S.powerIndex===i;
+      const age=S.time-powerVisual.repairedAt;
+      const justRepaired=powerVisual.repairedIndex===i&&age>=0&&age<2.5;
+      const flashing=offline&&Math.sin(S.bobTime*7.1+i*1.7)>.05;
+      if(flashing)render(powerGlowRed,model(p.x,0,p.z));
+      if(justRepaired){
+        render(powerGlowGreen,model(p.x,0,p.z));
+        const scale=.8+age*.8;
+        render(powerRepairPulse,model(p.x,10,p.z,0,scale));
+      }
+    }
+  }
   const S={waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
   // Collision impact: a strong jolt that quickly settles, in both camera modes.
   const IMPACT_SHAKE_DURATION = 0.58;
@@ -585,6 +768,7 @@
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
   function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0});
+    powerVisual.repairedIndex=-1;powerVisual.repairedAt=-999;
     Object.assign(impactShake, {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0});
     Object.assign(boatImpact, {pitch:0,pitchV:0,roll:0,rollV:0,heave:0,heaveV:0,recoilX:0,recoilZ:0,cooldown:0});
     S.waveStrength=0;S.waveSplashClock=0;S.waveSplashes=[];S.impactSplashes=[];
@@ -611,7 +795,9 @@
     S.photo=true;S.flash=.25;S.score+=70;S.photoTime=8;notify('Shaheed Minar photographed! +70 points',4);const info=$('photo-info');if(info){info.classList.remove('hidden');}}
   function repair(){if(S.mode!=='PLAYING')return;if(!S.powerOff){notify('No power outage currently.');return;}
     const p=power[S.powerIndex];if(distance(S.x,S.z,p.x,p.z)>130){notify(`Move closer to the ${p.name} power repair box.`);return;}
-    S.score+=100;S.powerOff=false;S.powerClock=0;S.powerIndex=(S.powerIndex+1)%power.length;notify(`${p.name} power restored! +100 points`,3);}
+    S.score+=100;S.powerOff=false;S.powerClock=0;
+    powerVisual.repairedIndex=S.powerIndex;powerVisual.repairedAt=S.time;
+    S.powerIndex=(S.powerIndex+1)%power.length;notify(`${p.name} power restored! +100 points`,3);}
   function nextModal(type){S.mode=type==='HELP'&&S.mode==='MENU'?'MENU':S.mode;
     $('modal').classList.remove('hidden');$('modal-secondary').classList.add('hidden');
     if(type==='HELP'||type==='PAUSED'){
@@ -690,7 +876,7 @@
       if(orientedObjectOverlap(x,z,cx,cz,0,64,63))return true;
     }
     if(circlePostOverlap(x,z,145,-55,8))return true;
-    for(const p of power)if(orientedObjectOverlap(x,z,p.x,p.z,0,19,18))return true;
+    for(const p of power)if(orientedObjectOverlap(x,z,p.x,p.z,0,30,29))return true;
     return false;
   }
   function moveAllowed(x,z){if(!valid(x,z)||overlapStaticProp(x,z))return false;
@@ -951,6 +1137,24 @@
       wx.fillStyle='#252e32';wx.beginPath();wx.arc(blade.x,blade.y,5.2*pixel,0,TAU);wx.fill();
     }
     if(S.flash>0){wx.fillStyle=`rgba(255,252,224,${clamp(S.flash*1.6,0,.6)})`;wx.fillRect(0,0,w,h);}
+    // Accessible interaction prompt drawn into the existing overlay, no HTML edits.
+    if(S.mode==='PLAYING'&&S.powerOff){
+      const p=power[S.powerIndex],dist=distance(S.x,S.z,p.x,p.z);
+      if(dist<190){
+        const ready=dist<=130,unit=Math.max(.72,Math.min(w/1150,h/725));
+        const boxW=Math.min(w-18*unit,ready?340*unit:380*unit),boxH=54*unit;
+        const x=w*.5-boxW*.5,y=h*.71-boxH*.5;
+        wx.fillStyle='rgba(6,21,28,.86)';wx.fillRect(x,y,boxW,boxH);
+        wx.strokeStyle=ready?'rgba(100,241,163,.9)':'rgba(241,184,92,.78)';
+        wx.lineWidth=2*unit;wx.strokeRect(x,y,boxW,boxH);
+        wx.font=`bold ${16*unit}px system-ui, sans-serif`;wx.textAlign='center';
+        wx.textBaseline='middle';wx.fillStyle='#f3faf1';
+        wx.fillText(ready?`[ F ]  RESTORE ${p.name} GRID`:`${p.name} GRID · APPROACH TO REPAIR`,w*.5,y+boxH*.37);
+        wx.font=`${11*unit}px system-ui, sans-serif`;
+        wx.fillStyle=ready?'#a4efbe':'#ffd29b';
+        wx.fillText(ready?'ELECTRICAL CONTROL · +100 POINTS':`${Math.ceil(dist-130)} UNITS TO REPAIR RANGE`,w*.5,y+boxH*.74);
+      }
+    }
   }
   function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
     const currentPitch=S.waveStrength*Math.sin(S.bobTime*4.4+S.z*.012)*5.0;
@@ -1010,13 +1214,15 @@
         const frame=Math.floor((S.bobTime/2.513)*12)%12;
         render(sourceMeshes[`shoppeople-${style}-${frame}`]);
       }
-      render(sourceMeshes['lamps-'+powerState]);render(sourceMeshes['powerboxes-'+powerState]);
+      render(sourceMeshes['lamps-'+powerState]); // Replace exported primitive powerboxes with detailed live-state models.
       render(sourceMeshes.landmarks);render(sourceMeshes.cars);render(sourceMeshes.dock);
       render(sourceMeshes['traffic-'+S.traffic.toLowerCase()]);
       render(campusLettering);render(shopSigns);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
+    // All stations are live 3D cabinets instead of the old baked source blocks.
+    drawPowerCabinets();
     // Semi-transparent animated water is drawn AFTER the original flooded
     // road textures, so lane markings remain visible underneath the surface.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
@@ -1056,6 +1262,7 @@
       render(litHalo,model(x,107,z-15,0,1));
       render(lampReflection,model(x,9.25,z-15,0,1));
     }
+    drawPowerCabinetGlow();
     gl.depthMask(true);gl.disable(gl.BLEND);
     // Keep culling disabled for original double-sided OpenGL line/quad geometry.
     // Foreground boat, dynamic light state and localized mission markers.
@@ -1072,7 +1279,6 @@
       render(driverFrames[(f+24)%24],model(dx,9,dz,car.angle,1));
     }
     S.debris.forEach((d,i)=>render(sourceMeshes?.['debris-'+(i%3)]||debrisMesh,model(d.x,0,d.z,(i*57)%360,1)));
-    if(!sourceMeshes)for(let i=0;i<power.length;i++){const p=power[i];render(powerMesh,model(p.x,0,p.z,0,1));}
     for(const r of S.rides)if(r.state==='WAITING'){
       const bounce=Math.sin(S.bobTime*4+r.id)*2;
       const home=r.type==='HOME';
@@ -1160,7 +1366,7 @@
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights};}
   window.majhiVersion='fidelity9';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),powerRepairFX:powerVisual.repairedIndex,impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;
