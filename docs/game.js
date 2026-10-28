@@ -128,7 +128,9 @@
         if(orientedObjectOverlap(S.x,S.z,point.x,point.z,point.angle,
                                  point.style%3===1?45:40,20,12)){blocked=true;break;}
       }
+      const wasStopped=S.carStopped[i];
       S.carStopped[i]=blocked;
+      if(blocked&&!wasStopped)triggerImpactShake(0.85);
       if(!blocked)S.carProgress[i]=future;
       return {...carAtProgress(car,S.carProgress[i]),stopped:blocked};
     });
@@ -458,11 +460,43 @@
   }
   shopSigns.upload();
   const S={strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
+  // Collision impact: a strong jolt that quickly settles, in both camera modes.
+  const IMPACT_SHAKE_DURATION = 0.58;
+  const impactShake = {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0};
+  function triggerImpactShake(power = 1) {
+    if (impactShake.cooldown > 0) return;
+    impactShake.time = 0;
+    impactShake.power = power;
+    impactShake.cooldown = 0.18;
+  }
+  function updateImpactShake(dt) {
+    impactShake.time = Math.min(IMPACT_SHAKE_DURATION, impactShake.time + dt);
+    impactShake.cooldown = Math.max(0, impactShake.cooldown - dt);
+  }
+  function applyImpactShake(eye, target) {
+    if (impactShake.time >= IMPACT_SHAKE_DURATION) return;
+    // Don't force camera motion on players who requested reduced motion.
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const t = impactShake.time;
+    const fade = Math.pow(1 - t / IMPACT_SHAKE_DURATION, 1.6) * impactShake.power;
+    const lateral = (Math.sin(t * 104 + 1.1) + 0.34 * Math.sin(t * 187 + 0.2)) * 21 * fade;
+    const vertical = (Math.sin(t * 136 + 0.8) + 0.27 * Math.sin(t * 211)) * 12 * fade;
+    const dx = target[0] - eye[0], dz = target[2] - eye[2];
+    const length = Math.hypot(dx, dz) || 1;
+    const rightX = -dz / length, rightZ = dx / length;
+    eye[0] += rightX * lateral;
+    eye[1] += vertical;
+    eye[2] += rightZ * lateral;
+    target[0] += rightX * lateral * 1.30;
+    target[1] += vertical * 1.12;
+    target[2] += rightZ * lateral * 1.30;
+  }
   const keys=new Set();
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
   function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0});
+    Object.assign(impactShake, {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0});
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
@@ -623,16 +657,30 @@
   }
   function step(dt){S.time+=dt;S.bobTime+=dt;updateWorldRain(dt);S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
     S.boost=clamp(S.boost+(S.boostOn?-30:15)*dt,0,100);if(S.boost<=0)S.boostOn=false;
+    updateImpactShake(dt);
     const forward=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
     const turn=(keys.has('a')||keys.has('arrowleft')?1:0)-(keys.has('d')||keys.has('arrowright')?1:0); // left is counterclockwise in the original, projection mirrored to correct handedness
     if(turn){S.angle=(S.angle+turn*105*dt+360)%360;S.lastMove=S.time;}
     S.rowing=!!forward; if(forward) S.strokeTime=(S.strokeTime+dt)%0.65; else S.strokeTime=0;
+    let collidedThisStep = false;
     if(forward){const speed=(forward>0?270:180)*(S.boostOn?1.65:1);const dx=Math.cos(S.angle*RAD)*speed*dt*forward,dz=Math.sin(S.angle*RAD)*speed*dt*forward;
       // Collision increments avoid tunnelling through narrow buildings.
-      const n=Math.ceil(Math.hypot(dx,dz)/8)||1;for(let i=0;i<n;i++){
-        const x=S.x+dx/n,z=S.z+dz/n;if(moveAllowed(x,z)){S.x=x;S.z=z;}else{const bad=S.debris.some(d=>distance(x,z,d.x,d.z)<57);if(bad&&S.debrisCooldown<=0){S.score=Math.max(0,S.score-25);S.debrisCooldown=1.8;notify('Floating debris! -25 points. Steer around it.',2.7);}break;}}
+      const n=Math.ceil(Math.hypot(dx,dz)/8)||1;
+      for(let i=0;i<n;i++){
+        const x=S.x+dx/n,z=S.z+dz/n;
+        if(moveAllowed(x,z)){S.x=x;S.z=z;}
+        else{
+          collidedThisStep = true;
+          // Fire only on a NEW impact, not continuously while W/S is held.
+          if(!impactShake.blocked)triggerImpactShake(S.boostOn ? 1.35 : (forward>0 ? 1 : 0.85));
+          const bad=S.debris.some(d=>distance(x,z,d.x,d.z)<57);
+          if(bad&&S.debrisCooldown<=0){S.score=Math.max(0,S.score-25);S.debrisCooldown=1.8;notify('Floating debris! -25 points. Steer around it.',2.7);}
+          break;
+        }
+      }
       S.lastMove=S.time;
     }
+    impactShake.blocked = collidedThisStep;
     S.debrisCooldown=Math.max(0,S.debrisCooldown-dt);S.pickupEffects=S.pickupEffects.filter(e=>S.time-e.at<1.15);
     S.current='';for(const zone of currents)if(S.x>=zone.a&&S.x<=zone.b&&S.z>=zone.c&&S.z<=zone.d){S.current=zone.name;const x=S.x+zone.dx*dt,z=S.z+zone.dz*dt;if(moveAllowed(x,z)){S.x=x;S.z=z;}break;}
     S.debris.forEach(d=>{const ph=d.phase+S.time*.65,x=d.x0+Math.sin(ph)*26,z=d.z0+Math.cos(ph*.7)*18;if(distance(x,z,S.x,S.z)>57){d.x=x;d.z=z;}});
@@ -804,6 +852,7 @@
       target=[S.x+c*80,36+10*nearWall,S.z+s*80];
       fov=73+12*nearWall;
     }else{eye=[S.x-c*24,boatY+41,S.z-s*24];target=[S.x+c*210,boatY+19,S.z+s*210];fov=78;}
+    if(S.mode==='PLAYING')applyImpactShake(eye,target);
     gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target));gl.uniform1f(uniforms.time,S.bobTime*.85);
     gl.disable(gl.CULL_FACE);
     if(sourceMeshes){
