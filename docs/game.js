@@ -424,6 +424,44 @@
     })
   ];
 
+
+  // A few unique background characters (not extra missions) enrich the city
+  // without crowding the player start. They respond to neighborhood electricity.
+  const dhakaExtraCitizens=[
+    {role:'BALCONY',building:7,colorId:4,phase:.8,personality:'STUDENT'},
+    {role:'BALCONY',building:16,colorId:1,phase:2.7,personality:'UNCLE'},
+    {role:'BALCONY',building:22,colorId:3,phase:4.2,personality:'PARENT'},
+    {role:'SHOP',x:-350,z:822,colorId:0,phase:.5,personality:'SHOPKEEPER'},
+    {role:'SHOP',x:319,z:650,colorId:5,phase:1.8,personality:'SHOPKEEPER'},
+    {role:'ROPE',building:10,colorId:2,phase:2.1,personality:'HELPER'},
+  ].map(p=>{
+    if(p.building===undefined)return p;
+    const b=buildings[p.building];
+    return {...p,x:b.x+15,z:b.z-b.hd-10,y:p.role==='ROPE'?b.h-4:Math.min(b.h-48,110)};
+  });
+  const PERSONALITY_NAMES=['STUDENT','WORRIER','JOKER','NEIGHBOR','HELPER','UNCLE'];
+  function dhakaPerson(p){return p.personality||PERSONALITY_NAMES[(p.uid*5+p.colorId)%PERSONALITY_NAMES.length];}
+  CITY_PEOPLE.push(...dhakaExtraCitizens);
+  // Reusable balconies, supply boxes, and rope: all static lightweight mesh.
+  const balconyTrim=new Mesh(),marketSupplies=new Mesh(),rescueRope=new Mesh();
+  balconyTrim.box(0,-11,0,39,3,22,[.54,.58,.56]);
+  balconyTrim.box(0,-1,-11,40,2.3,2.1,[.33,.39,.39]);
+  balconyTrim.box(0,-1,11,40,2.3,2.1,[.33,.39,.39]);
+  for(let k=-1;k<=1;k++)balconyTrim.box(k*16,-5,-11,2.3,14,2.1,[.36,.42,.42]);
+  balconyTrim.upload();
+  marketSupplies.box(0,0,0,22,15,16,[.62,.39,.19]);
+  marketSupplies.box(0,8.5,0,23,3,17,[.77,.56,.29]);
+  marketSupplies.box(-5,9.7,-3,5,1,4,[.83,.19,.15]);
+  marketSupplies.box(5,9.7,3,6,1,4,[.24,.69,.36]);
+  marketSupplies.upload();
+  citizenLimb(rescueRope,[0,0,0],[-7,-70,-14],.87,[.82,.69,.43]);
+  rescueRope.upload();
+  function residentCelebrating(p){
+    const age=S.time-powerVisual.repairedAt;
+    return age>=0&&age<5&&powerVisual.repairedIndex>=0&&
+      districtForX(p.x)===powerVisual.repairedIndex;
+  }
+
   // SECONDARY RESCUE FLEET — these majhis collect background bystanders, NOT
   // player-assigned ride requests. New citizens spawn in other safe road areas.
   const FLEET_ROADS_X=[-1100,-550,0,550,1100];
@@ -476,7 +514,8 @@
     // Deterministic distribution across neighborhoods, not a spawn pile-up.
     const index=(S.aiRescueCount*7+Math.floor(S.time/19))%pool.length;
     const [x,z]=pool[index],id=S.cityPersonId++;
-    S.cityPeople.push({uid:id,x,z,role:id%4===0?'WADE':'SWIM',colorId:id%studentColors.length,phase:id*.83});
+    S.cityPeople.push({uid:id,x,z,role:id%4===0?'WADE':'SWIM',colorId:id%studentColors.length,
+      personality:PERSONALITY_NAMES[(id*3)%PERSONALITY_NAMES.length],phase:id*.83});
     return true;
   }
   function updateRescueFleet(dt){
@@ -569,10 +608,27 @@
       }else if(person.role==='WADE'){
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.9)+person.phase),
           model(x,6.8+bob*.5,z,facing,.68));
+        // A student shields their laptop above floodwater rather than leaving it underwater.
+        if(dhakaPerson(person)==='STUDENT')render(dhakaLaptop,model(x,57+1.7*bob,z,facing,.72));
         if(near)render(waterRipple,model(x,9.5,z,0,.34+.08*Math.sin(clock*3+person.phase)));
       }else if(person.role==='ROOF'){
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*1.4+person.phase),
           model(x,person.y+.5*bob,z,facing,.68));
+      }else if(person.role==='BALCONY'||person.role==='ROPE'){
+        const cheer=residentCelebrating(person);
+        render(balconyTrim,model(x,person.y-6,z+6,0,1));
+        render(citizenFrame(cheer?'CELEBRATE':'HOME_URGENT',person.colorId,
+          clock*(cheer?3.4:1.5)+person.phase),model(x,person.y,z-1,-90,.62));
+        if(person.role==='ROPE'){
+          render(rescueRope,model(x+6,person.y-2,z-18,0,.87));
+          if(S.quality==='HIGH')render(waterRipple,model(x,9.7,z-30,0,.42));
+        }
+      }else if(person.role==='SHOP'){
+        const cheer=residentCelebrating(person),lift=(1+Math.sin(clock*1.4+person.phase))*.5;
+        render(marketSupplies,model(x+16,17+lift*15,z+12));
+        render(marketSupplies,model(x-14,21+lift*6,z+12,0,.65));
+        render(citizenFrame(cheer?'CELEBRATE':'HOME',person.colorId,
+          clock*(cheer?3.2:1.2)+person.phase),model(x,18,z,-90,.67));
       }else{
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.8)+person.phase),
           model(x,16+bob*.6,z,facing,.66));
@@ -596,6 +652,147 @@
     const facing=Math.atan2(S.z-pz,S.x-px)/RAD;
     return {px,pz,d,urgent,responding,energetic,speed,facing};
   }
+
+  // Dhaka's characteristic vehicles, modeled as light WebGL meshes: two
+  // three-wheeled CNG auto-rickshaws and one decorated pedal rickshaw.
+  // The original 'cars' baked mesh is not drawn, because it contains all the
+  // parked vehicles together. We reconstruct its remaining cars individually.
+  function dhakaWheel(m,x,y,z,r=11){
+    const tire=[.055,.075,.085],rim=[.74,.76,.67],hub=[.25,.31,.32],spokes=12;
+    // A true vertical wheel (the regular Mesh.cylinder has a vertical axle).
+    for(let side of [-1,1]){
+      const zz=z+side*2.5;
+      for(let k=0;k<spokes;k++){
+        const a=TAU*k/spokes,b=TAU*(k+1)/spokes;
+        const pt=(rad,t)=>[x+Math.cos(t)*rad,y+Math.sin(t)*rad,zz];
+        m.quad(pt(r-2.3,a),pt(r-2.3,b),pt(r,b),pt(r,a),tire);
+        m.tri([x,y,zz],pt(r-3,a),pt(r-3,b),rim);
+        if(k%2===0)citizenLimb(m,[x,y,zz+side*.45],pt(r-2.6,a),.45,hub);
+      }
+      m.sphere(x,y,zz+side*.85,2.8,hub,3,7);
+    }
+    for(let k=0;k<spokes;k++){
+      const a=TAU*k/spokes,b=TAU*(k+1)/spokes;
+      m.quad([x+r*Math.cos(a),y+r*Math.sin(a),z-2.5],
+             [x+r*Math.cos(b),y+r*Math.sin(b),z-2.5],
+             [x+r*Math.cos(b),y+r*Math.sin(b),z+2.5],
+             [x+r*Math.cos(a),y+r*Math.sin(a),z+2.5],tire);
+    }
+  }
+  function makeDhakaCNG(){
+    const m=new Mesh(),green=[.06,.43,.24],greenShade=[.05,.30,.19],gold=[.95,.74,.31],black=[.045,.08,.095];
+    // Bonnet, passenger cabin, characteristic three-wheel silhouette.
+    m.box(0,12,0,72,21,39,green);
+    m.box(22,19,0,25,22,35,[.10,.50,.29]);
+    m.box(-17,31,0,44,35,35,greenShade);
+    m.box(-14,51,0,55,5,41,black);
+    m.box(23,40,0,23,5,37,black);
+    m.box(-18,30,0,39,20,31,[.13,.18,.19]); // open passenger compartment
+    m.box(-24,23,0,19,8,27,[.24,.27,.24]); // passenger bench
+    m.box(11,23,0,13,15,24,[.18,.23,.22]); // driver's seat
+    // Open side door aperture, painted cage uprights and lattice bars.
+    for(const side of [-1,1]){
+      const z=side*20.0;
+      citizenLimb(m,[-35,18,z],[-35,51,z],1.9,green);
+      citizenLimb(m,[-6,18,z],[-6,51,z],1.9,green);
+      citizenLimb(m,[-35,49,z],[-6,49,z],1.7,gold);
+      citizenLimb(m,[-6,18,z],[-35,49,z],.72,[.59,.66,.58]);
+      citizenLimb(m,[-35,18,z],[-6,49,z],.72,[.59,.66,.58]);
+      m.box(-18,11,z,35,4,2,gold);
+      m.box(-11,41,z,8,3,2,[.62,.75,.64]);
+      m.box(-31,27,z,6,3,3,[.88,.90,.84]);
+    }
+    m.box(35,27,0,3,15,29,[.14,.22,.25]); // windshield
+    m.box(37,18,0,4,7,33,black); // grille
+    m.box(38,19,-13,4,5,7,[1,.92,.63]);
+    m.box(38,19,13,4,5,7,[1,.92,.63]);
+    m.box(-37,19,0,4,4,32,[.82,.22,.17]);
+    m.box(0,16,0,62,3,44,gold); // gold Dhaka trim
+    dhakaWheel(m,27,10.4,0,10.1);
+    dhakaWheel(m,-24,10.4,-19,10.1);
+    dhakaWheel(m,-24,10.4,19,10.1);
+    return m.upload();
+  }
+  function makeDhakaRickshaw(){
+    const m=new Mesh(),frame=[.12,.31,.28],gold=[1,.75,.20],red=[.82,.17,.31],blue=[.20,.61,.80],black=[.08,.12,.15];
+    // Long bicycle frame and single front wheel, plus two rear wheels.
+    dhakaWheel(m,39,14,0,13);
+    dhakaWheel(m,-29,14,-21,13);
+    dhakaWheel(m,-29,14,21,13);
+    citizenLimb(m,[39,14,0],[21,36,0],1.5,frame);
+    citizenLimb(m,[21,36,0],[4,13,0],1.6,frame);
+    citizenLimb(m,[4,13,0],[39,14,0],1.5,frame);
+    citizenLimb(m,[4,13,0],[-19,23,0],2.3,frame);
+    citizenLimb(m,[21,36,0],[26,40,0],1.6,frame);
+    citizenLimb(m,[24,40,-9],[24,40,9],1.3,black);
+    m.box(-26,23,0,43,7,44,[.73,.46,.17]);
+    m.box(-32,33,0,22,12,38,red); // passenger bench
+    m.box(-46,37,0,6,24,37,[.13,.44,.36]);
+    m.box(-48,39,0,2.5,23,32,blue);
+    for(const side of [-1,1]){
+      const z=side*23;
+      citizenLimb(m,[-48,30,z],[-47,65,z],1.5,gold);
+      citizenLimb(m,[-4,24,z],[-6,65,z],1.5,gold);
+      // Flared hand-painted rear side panels.
+      m.box(-30,27,side*22,35,16,2,side>0?red:blue);
+      for(let k=0;k<4;k++)m.box(-42+k*9,27,side*23.3,3.4,9,1.2,k%2?gold:[.30,.91,.57]);
+    }
+    // The distinctive covered, arching passenger canopy with bright trim.
+    m.box(-28,68,0,51,5,52,[.11,.30,.28]);
+    m.box(-28,72,0,53,3,55,red);
+    m.box(-28,73.6,0,49,1.8,47,[.95,.61,.17]);
+    for(let k=0;k<6;k++)m.box(-49+k*8.4,75,0,3,1.2,49,k%2?gold:blue);
+    for(const side of [-1,1]){
+      m.box(-28,66,side*26,50,8,2,red);
+      for(let k=0;k<5;k++)m.box(-47+k*9.5,67,side*27.3,3,5,1.1,k%2?gold:[.19,.78,.58]);
+    }
+    // Painted rear folk-art-inspired rosettes, visible above floodwater.
+    for(let k=0;k<5;k++)m.sphere(-50,34+(k%2)*7,-16+k*8,3.2,k%2?gold:blue,3,5);
+    // Tiny pedaling puller remains visible even when the water covers the wheels.
+    m.box(10,42,0,13,20,13,[.48,.71,.69]);
+    m.sphere(14,57,0,7,[.70,.50,.34],4,8);
+    m.sphere(12,62,0,6,[.13,.16,.19],4,7);
+    citizenLimb(m,[16,48,-6],[23,42,-9],2.3,[.69,.50,.35]);
+    citizenLimb(m,[16,48,6],[23,42,9],2.3,[.69,.50,.35]);
+    return m.upload();
+  }
+  function makeParkedCar(style){
+    const m=new Mesh(),body=[[.36,.43,.47],[.47,.30,.31],[.26,.44,.54],[.40,.44,.32]][style%4];
+    m.box(0,14,0,86,20,43,body);
+    m.box(-3,29,0,45,20,36,[.17,.24,.28]);
+    m.box(-4,39.5,0,49,3,38,body);
+    for(const side of [-1,1]){
+      m.box(-2,28,side*18.5,43,11,1.5,[.20,.30,.33]);
+      m.box(18,15,side*23,20,2,2,[.79,.79,.75]);
+      m.box(0,20,side*22,4,2,2,[.78,.83,.77]);
+      dhakaWheel(m,-27,10.5,side*20,10);
+      dhakaWheel(m,27,10.5,side*20,10);
+    }
+    m.box(43,16,0,3,7,35,[.17,.20,.22]);
+    m.box(44,21,-13,2,6,9,[.93,.85,.63]);m.box(44,21,13,2,6,9,[.93,.85,.63]);
+    m.box(-44,20,-13,2,6,9,[.80,.17,.16]);m.box(-44,20,13,2,6,9,[.80,.17,.16]);
+    return m.upload();
+  }
+  const parkedDhakaModels={
+    car:[0,1,2,3].map(makeParkedCar),cng:makeDhakaCNG(),rickshaw:makeDhakaRickshaw()
+  };
+  // Two small visual storytelling props: a cat awaiting rescue above a flooded
+  // tea stall, and a student holding a laptop above the water.
+  const dhakaCat=new Mesh(),dhakaLaptop=new Mesh();
+  dhakaCat.box(-5,9,0,15,12,9,[.71,.48,.26]);
+  dhakaCat.sphere(6,13,0,6.7,[.78,.54,.29],4,9);
+  dhakaCat.tri([4,20,-4],[7,26,-3],[10,20,-3],[.68,.43,.26]);
+  dhakaCat.tri([4,20,4],[7,26,3],[10,20,3],[.68,.43,.26]);
+  dhakaCat.sphere(12,15,-2,1.0,[.11,.17,.14],3,5);
+  dhakaCat.sphere(12,15,2,1.0,[.11,.17,.14],3,5);
+  citizenLimb(dhakaCat,[-13,13,1],[-20,24,2],2.0,[.70,.47,.27]);
+  dhakaCat.upload();
+  dhakaLaptop.box(0,0,0,20,2,15,[.13,.19,.22]);
+  dhakaLaptop.box(0,9,7,20,17,2,[.19,.27,.33]);
+  dhakaLaptop.box(0,10,8.4,16,12,.7,[.31,.58,.67]);
+  dhakaLaptop.upload();
+  const dhakaVehicleType=index=>index===2||index===5?'cng':index===6?'rickshaw':'car';
+
   const markerMesh=new Mesh();markerMesh.ring(0,0,0,36,6,[.97,.43,.27]);markerMesh.upload();
   const debrisMesh=new Mesh();debrisMesh.box(0,1,0,56,15,33,[.35,.30,.22]);debrisMesh.box(9,8,0,10,8,29,[.48,.34,.23]);debrisMesh.upload();
   // Python's distinct water-current direction clues: repeated arrows move
@@ -750,7 +947,7 @@
     for(const [x,z] of streetlights){
       if(distance(viewX,viewZ,x,z)>1100)continue;
       render(cityLampPole,model(x,0,z));
-      const on=!lightOffAt(x)&&distance(x,z,0,1378)>=378;
+      const on=!lightOffAt(x,z)&&distance(x,z,0,1378)>=378;
       render(on?cityLampOn:cityLampOff,model(x,0,z));
     }
   }
@@ -780,8 +977,20 @@
     render(modernTrafficBody);
     render(S.traffic==='RED'?modernTrafficRed:modernTrafficGreen);
   }
-  function lightOffAt(x){if(!S.powerOff)return false;
-    return S.powerIndex===0?Math.abs(x)<=500:S.powerIndex===1?x< -500:x>500;}
+  function districtForX(x){return Math.abs(x)<=500?0:x< -500?1:2;}
+  function lightOffAt(x,z=0){
+    const district=districtForX(x);
+    if(S.powerOff&&S.powerIndex===district)return true;
+    // Every repaired district comes back online in a visible street-by-street
+    // cascade, rather than switching every streetlamp on in the same frame.
+    const age=S.time-powerVisual.repairedAt;
+    if(powerVisual.repairedIndex===district&&age>=0&&age<3.6){
+      const p=power[district];
+      const delay=Math.min(2.9,distance(x,z,p.x,p.z)/530);
+      return age<delay;
+    }
+    return false;
+  }
 
   // The desktop edition only gives frustrated motorists to two broken cars.
   // Capture its waving arm shape in 24 time-varying frames.
@@ -997,6 +1206,45 @@
   const powerRepairPulse=new Mesh();
   powerRepairPulse.ring(0,0,0,29,4,[.32,1,.57],32);powerRepairPulse.upload();
   const powerVisual={repairedIndex:-1,repairedAt:-999};
+
+  // Warm windows/stalls that visibly respond to neighborhood power. Their
+  // light-up order follows the same cascading district-power calculation.
+  const dhakaShopFronts=[[-367,885],[178,885],[320,715]];
+  const dhakaStoreLight=new Mesh(),dhakaShutter=new Mesh();
+  dhakaStoreLight.box(0,25,0,78,29,1,[.93,.66,.31]);
+  dhakaStoreLight.box(-21,28,-1,6,16,2,[.95,.86,.56]);
+  dhakaStoreLight.box(20,28,-1,6,16,2,[.95,.86,.56]);
+  dhakaStoreLight.upload();
+  for(let k=0;k<7;k++)dhakaShutter.box(0,16+k*3.25,-2,83,2.6,2,[.42-k*.01,.46-k*.01,.47-k*.01]);
+  dhakaShutter.box(0,39.5,-2,89,4,4,[.15,.20,.23]);
+  dhakaShutter.upload();
+  const powerWindowPairs=buildings.map(b=>{
+    const m=new Mesh();
+    for(let k=0;k<3;k++){
+      const x=b.x+(k-1)*b.hw*.52;
+      // Sits just proud of source building face, not inside the geometry.
+      m.box(x,34+k%2*32,b.z-b.hd-6,20,15,1,[.88,.70,.40]);
+    }
+    return {x:b.x,z:b.z,mesh:m.upload()};
+  });
+  function drawDhakaPowerNeighborhood(){
+    for(const w of powerWindowPairs){
+      if(distance(S.x,S.z,w.x,w.z)>980||lightOffAt(w.x,w.z))continue;
+      render(w.mesh);
+    }
+    for(const [x,z] of dhakaShopFronts){
+      if(distance(S.x,S.z,x,z)>800)continue;
+      const lit=!lightOffAt(x,z);
+      if(lit)render(dhakaStoreLight,model(x,0,z-55));
+      // A rising metal shutter reveals warm interiors after electricity returns.
+      const age=S.time-powerVisual.repairedAt;
+      const justRepaired=powerVisual.repairedIndex===districtForX(x)&&age>=0&&age<3.6;
+      const open=lit?justRepaired?clamp((age-distance(x,z,power[powerVisual.repairedIndex].x,
+        power[powerVisual.repairedIndex].z)/530)*.85,0,1):1:0;
+      render(dhakaShutter,model(x,27*open,z-53));
+    }
+  }
+
   function drawPowerCabinets(){
     for(let i=0;i<power.length;i++){
       const p=power[i],mat=model(p.x,0,p.z),d=distance(S.x,S.z,p.x,p.z);
@@ -1149,7 +1397,7 @@
     const p=power[S.powerIndex];if(distance(S.x,S.z,p.x,p.z)>130){notify(`Move closer to the ${p.name} power repair box.`);return;}
     S.score+=100;S.powerOff=false;S.powerClock=0;
     powerVisual.repairedIndex=S.powerIndex;powerVisual.repairedAt=S.time;
-    S.powerIndex=(S.powerIndex+1)%power.length;notify(`${p.name} power restored! +100 points`,3);}
+    S.powerIndex=(S.powerIndex+1)%power.length;notify(`${p.name} power restored! Lights coming back street by street! +100`,4);}
   function nextModal(type){S.mode=type==='HELP'&&S.mode==='MENU'?'MENU':S.mode;
     $('modal').classList.remove('hidden');$('modal-secondary').classList.add('hidden');
     if(type==='HELP'||type==='PAUSED'){
@@ -1501,7 +1749,7 @@
   function comicDraw(text,x,y,style='normal'){
     const scale=clamp(weather.width/1400,.76,1.35);
     const fontSize=12.5*scale;
-    wx.save();wx.font=`900 ${fontSize}px system-ui, sans-serif`;
+    wx.save();wx.font=`900 ${fontSize}px 'Noto Sans Bengali', 'Hind Siliguri', 'SolaimanLipi', 'Nirmala UI', 'Vrinda', system-ui, sans-serif`;
     const width=Math.min(weather.width*.34,wx.measureText(text).width+24*scale);
     const height=31*scale,px=clamp(x,10+width/2,weather.width-10-width/2),py=y-11*scale;
     wx.globalAlpha=.93;
@@ -1523,24 +1771,64 @@
       const urgent=r.timeLeft<25;
       const phrases=urgent?['HURRY, PLEASE!','TIME IS RUNNING OUT!','HELP ME!']:
         r.type==='DROWNING'?['HELP! OVER HERE!','I CAN SWIM!','THIS WAY, MAJHI!']:
-        ['MAJHI, HERE!','CLASS STARTS SOON!','PLEASE STOP!'];
+        ['MAJHI, HERE!','ভাই, BRACU যাবেন?','LAPTOP TA BACHAN!','CLASS STARTS SOON!'];
       candidates.push({priority:urgent?0:1,x,y:r.type==='HOME'?87:57,z,
         message:phrases[Math.floor((S.time/5+r.id)%phrases.length)],style:urgent?'urgent':'normal',id:r.id});
+    }
+    // Rescued passengers thank the player; near deadlines they instead warn
+    // about the clock. Render in world space only in the chase view.
+    if(S.camera3){
+      for(const r of seated()){
+        if(S.time-(r.boardedAt??0)>13)continue;
+        const urgent=r.timeLeft<22;
+        const lines=urgent?['MAJHI, TARATARI!','TIME IS RUNNING OUT!']:
+          ['ভাই, পাঁচ তারা রেটিং দিলাম!','LAPTOP TA SAFE TO?','THANK YOU, MAJHI!'];
+        candidates.push({priority:urgent?0:2,x:S.x,y:90,z:S.z,
+          message:lines[Math.floor(S.time/4.5+r.id)%lines.length],
+          style:urgent?'urgent':'hero',id:900+r.id});
+      }
+    }
+    for(const e of S.deliveryEffects){
+      const age=S.time-e.at;
+      if(age<1.7||age>4.1)continue;
+      candidates.push({priority:0,x:e.x1,y:88,z:e.z1,
+        message:e.colorId%2?'BRACU REACHED!':'THANK YOU, MAJHI!',style:'hero',id:800+e.colorId});
     }
     for(const b of S.aiBoats){
       if(distance(S.x,S.z,b.x,b.z)>390)continue;
       if(S.time-b.rescuedAt<2.2)candidates.push({priority:0,x:b.x,y:83,z:b.z,message:'SAFE NOW!',style:'hero',id:300+b.id});
       else if(b.targetId!==null)candidates.push({priority:4,x:b.x,y:83,z:b.z,
-        message:['HOLD ON!','COMING THROUGH!'][b.id],style:'hero',id:300+b.id});
+        message:['মাঝি আসছে!','ওই দিকে স্রোত বেশি!'][b.id],style:'hero',id:300+b.id});
     }
     for(const p of S.cityPeople){
       const dist=distance(S.x,S.z,p.x,p.z);if(dist>320)continue;
       const pos=ambientCitizenPosition(p,S.time);
-      const lines=p.role==='SWIM'?['THE CURRENT IS STRONG!','KEEP ROWING!','SOMEONE HELP!']:
-        p.role==='WADE'?['WATER EVERYWHERE!','WATCH OUT, MAJHI!','STAY SAFE!']:
-        p.role==='ROOF'?['UP HERE!','STAY SAFE!']:['ANY NEWS?','THE ROADS ARE GONE!'];
-      candidates.push({priority:3,x:pos.x,z:pos.z,y:p.role==='ROOF'?p.y+56:65,
-        message:lines[Math.floor(S.time/6+p.uid)%lines.length],style:'normal',id:100+p.uid});
+      const who=dhakaPerson(p),cheer=residentCelebrating(p);
+      const library={
+        STUDENT:['ভাই, BRACU যাবেন?','CLASS MISS HOYE JABE!','ASSIGNMENT TA BACHAN!'],
+        WORRIER:['এই পানি আর কত!','রাস্তা তো নদী!', 'BASA JABO KEMON KORE?'],
+        JOKER:['MAMA, NAUKA BHARA KOTO?','5 STAR RATING DIBO!','EXAM TA CANCEL HOBE?'],
+        NEIGHBOR:['সবাই সাবধানে!','ওই দিকে স্রোত বেশি!','DRY SIDE DIYE JAN!'],
+        HELPER:['HOLD THIS ROPE!','AMRA ACHI, BHOY NAI!','HELP IS COMING!'],
+        UNCLE:['চা দোকান খোলা আছে?','এ কী অবস্থা বাবা!','রিকশা যাবে না নৌকা?'],
+        SHOPKEEPER:['MAL UPORE TULUN!','বৃষ্টি আর থামে না!','LIGHT ASHBE KOBE?']
+      };
+      const defaultLines=p.role==='SWIM'?['HELP! OVER HERE!','THE WATER IS FAST!']:
+        p.role==='ROPE'?['HOLD THE ROPE!']:
+        p.role==='SHOP'?library.SHOPKEEPER:
+        library[who]||library.NEIGHBOR;
+      const lines=cheer?['আলো এসেছে!','CURRENT ASHCHE!','LIGHTS ARE BACK!']:
+        (p.role==='SWIM'&&S.current?['THE CURRENT IS STRONG!','MAJHI, THIS WAY!']:defaultLines);
+      candidates.push({priority:cheer?1:p.role==='ROPE'?2:3,x:pos.x,z:pos.z,
+        y:['ROOF','BALCONY','ROPE'].includes(p.role)?p.y+50:p.role==='SHOP'?85:65,
+        message:lines[Math.floor(S.time/5.5+p.uid)%lines.length],style:cheer?'hero':'normal',id:100+p.uid});
+    }
+    for(let i=0;i<parkedCars.length;i++){
+      const car=parkedCars[i],type=dhakaVehicleType(i);
+      if(distance(S.x,S.z,car.x,car.z)>250||type==='car')continue;
+      candidates.push({priority:4,x:car.x,z:car.z,y:type==='rickshaw'?114:91,
+        message:type==='rickshaw'?'মামা, রাস্তা তো নদী!':'CNG JABE NA, BHAI!',
+        style:'normal',id:600+i});
     }
     // Alternating speaking windows and a nearest-speaker preference prevent
     // overlap and avoid drowning out the player's actual rescue mission.
@@ -1670,7 +1958,9 @@
         render(sourceMeshes[`shoppeople-${style}-${frame}`]);
       }
       // Omit baked streetlamps: the modern geometry below replaces them.
-      render(sourceMeshes.landmarks);render(sourceMeshes.cars);render(sourceMeshes.dock);
+      render(sourceMeshes.landmarks);render(sourceMeshes.dock);
+      // Rebuilt parked vehicles are drawn separately below, allowing CNGs and
+      // the colorful rickshaw to REPLACE, not overlap, the baked source cars.
       // Omit the old solid-color traffic beacon; draw a realistic signal below.
       render(campusLettering);render(shopSigns);
     } else if(!sourceLoadError){
@@ -1678,6 +1968,7 @@
     }
     // Both fixtures use stateful geometry, preserving blackout and signal timing.
     drawStreetLamps(eye[0],eye[2]);
+    drawDhakaPowerNeighborhood();
     drawModernTrafficSignal();
     // All stations are live 3D cabinets instead of the old baked source blocks.
     drawPowerCabinets();
@@ -1715,7 +2006,7 @@
     }
     // Warm light scattering below real lamp fixtures; skip blackout districts.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
-    for(const [x,z] of streetlights){if(lightOffAt(x)||distance(S.x,S.z,x,z)>680||distance(x,z,0,1378)<378)continue;
+    for(const [x,z] of streetlights){if(lightOffAt(x,z)||distance(S.x,S.z,x,z)>680||distance(x,z,0,1378)<378)continue;
       render(litHalo,model(x,113.6,z-33,0,.78));
       render(lampGroundGlow,model(x,9.45,z-33,0,1.1));
       render(lampReflection,model(x,9.25,z-33,0,1));
@@ -1724,6 +2015,15 @@
     gl.depthMask(true);gl.disable(gl.BLEND);
     // Keep culling disabled for original double-sided OpenGL line/quad geometry.
     // Foreground boat, dynamic light state and localized mission markers.
+    // Keep original parked-car collision boxes while changing their visual type.
+    for(let i=0;i<parkedCars.length;i++){
+      const car=parkedCars[i];
+      if(distance(S.x,S.z,car.x,car.z)>1200&&S.mode!=='MENU')continue;
+      const type=dhakaVehicleType(i);
+      const mesh=type==='cng'?parkedDhakaModels.cng:
+        type==='rickshaw'?parkedDhakaModels.rickshaw:parkedDhakaModels.car[i%4];
+      render(mesh,model(car.x,0,car.z,car.angle,.97));
+    }
     for(const car of S.movingCars){const mesh=sourceMeshes?.['moving-car-'+(car.style%5)]||carMesh;
       render(mesh,model(car.x,0,car.z,car.angle,.98));
       if(!car.stopped){
@@ -1762,6 +2062,9 @@
     drawRescueFleet();
     // Independent swimmers, waders, neighbors and rooftop residents.
     drawCityPeople();
+    // A stranded tea-stall cat is a small environmental story, not a mission target.
+    if(distance(S.x,S.z,-327,832)<760)
+      render(dhakaCat,model(-327,49+Math.sin(S.bobTime*1.4)*.3,832,180,.70));
     for(const c of reactiveBystanders){
       const d=distance(S.x,S.z,c.x,c.z);
       if(d>850)continue;
@@ -1859,9 +2162,14 @@
       }}
     }
   }
-  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,respawnFleetCitizen,comicProject,renderComicBubbles};}
-  window.majhiVersion='fidelity9-living-city-rescue-fleet';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,swimmers:S.cityPeople.filter(p=>p.role==='SWIM').length,aiRescueBoats:S.aiBoats.map(b=>({name:b.name,x:b.x,z:b.z,targetId:b.targetId,deliveries:b.deliveries})),aiRescued:S.aiRescueCount,respawnPending:S.aiRespawnQueue.length,updatedStreetLamps:streetlights.length,trafficSignalHousingVertices:modernTrafficBody.length,exitGlareInstalled:!!document.getElementById('majhi-exit-flashlight-glare'),impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
+  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
+  window.majhiVersion='fidelity10-dhaka-personalities-power-cng-rickshaw';
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
+    dhakaCatVertices:dhakaCat.length,dhakaLaptopVertices:dhakaLaptop.length,dhakaRickshawVertices:parkedDhakaModels.rickshaw.length,dhakaCNGVertices:parkedDhakaModels.cng.length,
+    balconyCitizens:S.cityPeople.filter(p=>p.role==='BALCONY').length,
+    shopCitizens:S.cityPeople.filter(p=>p.role==='SHOP').length,
+    ropeCitizens:S.cityPeople.filter(p=>p.role==='ROPE').length,
+    poweredWindowGroups:powerWindowPairs.length,swimmers:S.cityPeople.filter(p=>p.role==='SWIM').length,aiRescueBoats:S.aiBoats.map(b=>({name:b.name,x:b.x,z:b.z,targetId:b.targetId,deliveries:b.deliveries})),aiRescued:S.aiRescueCount,respawnPending:S.aiRespawnQueue.length,updatedStreetLamps:streetlights.length,trafficSignalHousingVertices:modernTrafficBody.length,exitGlareInstalled:!!document.getElementById('majhi-exit-flashlight-glare'),impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else {S.bobTime+=dt*.5;if(S.mode==='WON')S.postWinClock=(S.postWinClock||0)+dt;}
