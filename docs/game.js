@@ -72,7 +72,15 @@
     opacity=(.13+.085*(.5+.5*sin(uTime*1.9+vWorld.x*.008)))*radialFade*(.62+.38*heightFade);
     c=mix(c,vec3(1.,.96,.78),.19);
   }
-  float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,opacity);}`;
+  float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);
+  // In-universe joke: BRACU gets a ridiculous, localized pocket of perfect sunshine.
+  // Lighting affects architecture and scenery, not translucent rain/water overlays.
+  if(vKind<.5){
+    float holyRadius=length(vec2(vWorld.x,vWorld.z-1378.));
+    float blessing=1.-smoothstep(245.,575.,holyRadius);
+    c=mix(c,min(vec3(1.),c*1.40+vec3(.18,.145,.075)),.82*blessing);
+  }
+  gl_FragColor=vec4(c,opacity);}`;
   function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
   const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
   if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){throw Error(gl.getProgramInfoLog(prog));}
@@ -388,6 +396,19 @@
     citizenFrames[kind]=studentColors.map(color=>
       Array.from({length:REACTION_FRAMES},(_,frame)=>makeCitizenPose(color,kind,frame)));
   }
+  const campusSecurity=new Mesh();
+  campusSecurity.box(0,23,0,17,27,15,[.13,.21,.34]);
+  campusSecurity.box(0,38,0,19,4,17,[.87,.75,.38]);
+  campusSecurity.box(1,48,0,13,7,13,[.11,.15,.23]);
+  campusSecurity.box(0,44,0,12,12,11,[.63,.45,.32]);
+  campusSecurity.box(9.6,27,5,2,7,5,[.98,.82,.31]);
+  for(const z of [-6,6]){
+    citizenLimb(campusSecurity,[0,34,z],[12,24,z],3,[.12,.22,.32]);
+    citizenLimb(campusSecurity,[0,12,z],[2,0,z],4,[.15,.20,.28]);
+  }
+  campusSecurity.upload();
+  const campusAngryFrames=Array.from({length:REACTION_FRAMES},(_,i)=>
+    makeCitizenPose([.96,.13,.16],'HOME_URGENT',i));
   const urgencyMarker=new Mesh();
   urgencyMarker.box(0,6,0,3.4,13,3.4,[1,.31,.22]);
   urgencyMarker.box(0,-5,0,4.3,4.5,4.3,[1,.67,.34]);
@@ -652,6 +673,8 @@
       const fleetNear=S.aiRickshaws.some(other=>other!==r&&distance(nx,nz,other.x,other.z)<66);
       if(!playerNear&&!fleetNear&&valid(nx,nz,16)){
         r.x=nx;r.z=nz;
+        // Real rolling distance rather than elapsed time: standing rickshaws stop spinning.
+        r.wheelSpin=(r.wheelSpin||0)+stride/(13*.82);
       }else if(r.incidentCar!==null&&dist<125&&!playerNear){
         // Small bump with a car at the road edge, not a game-ending accident.
         beginRickshawQuarrel(r);
@@ -665,8 +688,10 @@
       const stopped=r.quarrelUntil>S.time;
       const bumpAge=stopped?r.quarrelUntil-S.time:0;
       const bob=.5*Math.sin(S.time*4+r.id*2)+(stopped&&bumpAge>5.5?2.1*Math.sin(S.time*22):0);
-      render(parkedDhakaModels.rescueRickshaws[r.id],
-        model(r.x,1.1+bob,r.z,r.angle,.82));
+      const rickshawMatrix=model(r.x,1.1+bob,r.z,r.angle,.82);
+      render(parkedDhakaModels.rescueRickshaws[r.id],rickshawMatrix);
+      const frame=((Math.floor(((r.wheelSpin||0)%TAU+TAU)%TAU/TAU*RICKSHAW_WHEEL_FRAMES))%RICKSHAW_WHEEL_FRAMES);
+      render(rickshawRollingWheels[frame],rickshawMatrix);
       const a=r.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),sx=-fz,sz=fx;
       // Small back-seat figure makes a recently completed rescue visible.
       if(S.time-r.rescuedAt<7&&!stopped){
@@ -787,13 +812,13 @@
   // three-wheeled CNG auto-rickshaws and one decorated pedal rickshaw.
   // The original 'cars' baked mesh is not drawn, because it contains all the
   // parked vehicles together. We reconstruct its remaining cars individually.
-  function dhakaWheel(m,x,y,z,r=11){
+  function dhakaWheel(m,x,y,z,r=11,phase=0){
     const tire=[.055,.075,.085],rim=[.74,.76,.67],hub=[.25,.31,.32],spokes=12;
     // A true vertical wheel (the regular Mesh.cylinder has a vertical axle).
     for(let side of [-1,1]){
       const zz=z+side*2.5;
       for(let k=0;k<spokes;k++){
-        const a=TAU*k/spokes,b=TAU*(k+1)/spokes;
+        const a=TAU*k/spokes+phase,b=TAU*(k+1)/spokes+phase;
         const pt=(rad,t)=>[x+Math.cos(t)*rad,y+Math.sin(t)*rad,zz];
         m.quad(pt(r-2.3,a),pt(r-2.3,b),pt(r,b),pt(r,a),tire);
         m.tri([x,y,zz],pt(r-3,a),pt(r-3,b),rim);
@@ -802,7 +827,7 @@
       m.sphere(x,y,zz+side*.85,2.8,hub,3,7);
     }
     for(let k=0;k<spokes;k++){
-      const a=TAU*k/spokes,b=TAU*(k+1)/spokes;
+      const a=TAU*k/spokes+phase,b=TAU*(k+1)/spokes+phase;
       m.quad([x+r*Math.cos(a),y+r*Math.sin(a),z-2.5],
              [x+r*Math.cos(b),y+r*Math.sin(b),z-2.5],
              [x+r*Math.cos(b),y+r*Math.sin(b),z+2.5],
@@ -938,13 +963,15 @@
     }
     return m.upload();
   }
-  function makeDhakaRickshaw(style=0){
+  function makeDhakaRickshaw(style=0,moving=false){
     const accents=[[[.82,.17,.31],[.20,.61,.80]],[[.19,.48,.82],[.95,.39,.25]],[[.21,.68,.44],[.83,.32,.62]]];
     const m=new Mesh(),frame=[.12,.31,.28],gold=[1,.75,.20],red=accents[style%3][0],blue=accents[style%3][1],black=[.08,.12,.15];
     // Long bicycle frame and single front wheel, plus two rear wheels.
-    dhakaWheel(m,39,14,0,13);
-    dhakaWheel(m,-29,14,-21,13);
-    dhakaWheel(m,-29,14,21,13);
+    if(!moving){
+      dhakaWheel(m,39,14,0,13);
+      dhakaWheel(m,-29,14,-21,13);
+      dhakaWheel(m,-29,14,21,13);
+    }
     citizenLimb(m,[39,14,0],[21,36,0],1.5,frame);
     citizenLimb(m,[21,36,0],[4,13,0],1.6,frame);
     citizenLimb(m,[4,13,0],[39,14,0],1.5,frame);
@@ -1003,8 +1030,18 @@
     car:[0,1,2,3].map(makeParkedCar),
     cng:makeDhakaCNG(),cngAlt:makeDhakaCNG(1),
     rickshaw:makeDhakaRickshaw(),
-    rescueRickshaws:[0,1,2].map(makeDhakaRickshaw)
+    rescueRickshaws:[0,1,2].map(i=>makeDhakaRickshaw(i,true))
   };
+  // Cached wheel geometry: spin only when the rickshaw actually travels.
+  // The frame is in local X/Y; all three axles rotate under the same vehicle transform.
+  const RICKSHAW_WHEEL_FRAMES=24;
+  const rickshawRollingWheels=Array.from({length:RICKSHAW_WHEEL_FRAMES},(_,i)=>{
+    const wheel=new Mesh(),phase=TAU*i/RICKSHAW_WHEEL_FRAMES;
+    dhakaWheel(wheel,39,14,0,13,phase);
+    dhakaWheel(wheel,-29,14,-21,13,phase);
+    dhakaWheel(wheel,-29,14,21,13,phase);
+    return wheel.upload();
+  });
   // Two small visual storytelling props: a cat awaiting rescue above a flooded
   // tea stall, and a student holding a laptop above the water.
   const dhakaCat=new Mesh(),dhakaLaptop=new Mesh();
@@ -1078,7 +1115,37 @@
   const campusGround=new Mesh();campusGround.disk(0,17.1,1378,365,[.31,.40,.30],112);
   campusGround.data.forEach((_,i)=>{if(i%7===6)campusGround.data[i]=6;});
   campusGround.upload();
-  const sunshineSun=new Mesh();sunshineSun.sphere(290,700,1525,33,[.98,.91,.65],8,13);sunshineSun.upload();
+  // Put the meme sun DIRECTLY OVER the university, not off to one side.
+  const sunshineSun=new Mesh();sunshineSun.sphere(0,1450,1378,72,[1,.99,.78],10,20);sunshineSun.upload();
+  const heavenlyBeams=new Mesh(),heavenSpark=new Mesh();
+  // Soft layered spotlight, narrowing to the campus courtyard, not the whole city.
+  const beamRings=[{top:1130,bottom:400,topR:100,bottomR:290},
+                   {top:1250,bottom:90,topR:35,bottomR:260},
+                   {top:1130,bottom:70,topR:175,bottomR:375}];
+  for(let layer=0;layer<beamRings.length;layer++){
+    const q=beamRings[layer];
+    for(let i=0;i<80;i++){
+      const a=TAU*i/80,b=TAU*(i+1)/80,pt=(r,y,t)=>[r*Math.cos(t),y,1378+r*Math.sin(t)];
+      heavenlyBeams.quad(pt(q.topR,q.top,a),pt(q.topR,q.top,b),
+        pt(q.bottomR,q.bottom,b),pt(q.bottomR,q.bottom,a),
+        layer===0?[1,.99,.79]:layer===1?[1,.95,.64]:[.92,.88,.55],2);
+    }
+  }
+  // Individual narrow rays circle the center like a theatrical cartoon halo.
+  for(let i=0;i<18;i++){
+    const a=TAU*i/18;
+    heavenlyBeams.tri([38*Math.cos(a),1150,1378+38*Math.sin(a)],
+      [320*Math.cos(a-.045),27,1378+320*Math.sin(a-.045)],
+      [320*Math.cos(a+.045),27,1378+320*Math.sin(a+.045)],[1,.94,.62],2);
+  }
+  heavenlyBeams.upload();
+  // Small animated bright starbursts, drawn only inside the campus spotlight.
+  {
+    const c=[1,.92,.52];
+    heavenSpark.tri([0,9,0],[3,0,0],[0,-9,0],c,7);
+    heavenSpark.tri([0,9,0],[-3,0,0],[0,-9,0],c,7);
+  }
+  heavenSpark.upload();
   const signalRed=new Mesh();signalRed.sphere(145,120,-68,9,[1,.15,.1],4,10);signalRed.upload();
   const signalGreen=new Mesh();signalGreen.sphere(145,120,-68,9,[.17,1,.38],4,10);signalGreen.upload();
 
@@ -1511,7 +1578,7 @@
       }
     }
   }
-  const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
+  const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusChecks:0,campusLastGateTime:-8,campusGateMessage:'',campusGateMessageAt:-99};
   // Collision impact: a strong jolt that quickly settles, in both camera modes.
   const IMPACT_SHAKE_DURATION = 0.58;
   const impactShake = {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0};
@@ -1594,7 +1661,7 @@
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusChecks:0,campusLastGateTime:-8,campusGateMessage:'',campusGateMessageAt:-99});
     S.cityPeople=CITY_PEOPLE.map((p,i)=>({...p,uid:i}));S.cityPersonId=CITY_PEOPLE.length;
     S.aiRickshaws=createRickshawFleet();S.rickshawRescueCount=0;S.rickshawCrashCount=0;S.rickshawQuarrels=[];
     S.aiBoats=createRescueFleet();S.aiRespawnQueue=[];S.aiRescueCount=0;
@@ -1837,11 +1904,18 @@
     else {S.spawnClock+=dt;if(S.spawnClock>=9.5){S.spawnClock=0;offerRide();}}
     for(const r of S.rides){r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);const wasOnboard=r.state==='ONBOARD';r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(wasOnboard?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
     S.rides=S.rides.filter(r=>r.state!=='FAILED');S.missedEffects=S.missedEffects.filter(e=>S.time-e.at<4.35);
-    S.deliveryEffects=S.deliveryEffects.filter(e=>S.time-e.at<4.35);
+    S.deliveryEffects=S.deliveryEffects.filter(e=>S.time<e.gateAt+3.3);
     if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;for(const [i,r] of arrived.entries()){
       const seats=[[8,-19],[8,19],[67,0]], [bx,bz]=seats[Math.min(i,2)],h=S.angle*RAD;
       const startX=S.x+(bx*Math.cos(h)-bz*Math.sin(h))*.62,startZ=S.z+(bx*Math.sin(h)+bz*Math.cos(h))*.62;
-      S.deliveryEffects.push({at:S.time,x0:startX,z0:startZ,y0:35,x1:clamp(startX*.25+(i-1)*24,-78,78),z1:1164+(i-1)*9,colorId:r.colorId});
+      S.campusChecks++;
+      const forgotID=S.campusChecks%3===0;
+      const gateAt=Math.max(S.time+2.7,S.campusLastGateTime+3.35);
+      S.campusLastGateTime=gateAt;
+      S.deliveryEffects.push({at:S.time,x0:startX,z0:startZ,y0:35,
+        x1:clamp(startX*.20-38+(i*17),-83,42),z1:1113-i*19,colorId:r.colorId,
+        name:r.name,gateAt,forgotID,gameId:`GAME-${String(S.campusChecks).padStart(3,'0')}`,
+        admitted:!forgotID});
       r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;
     }S.rides=S.rides.filter(r=>r.state!=='DELIVERED');S.deliveryBanner={at:S.time,count:arrived.length,points:gained};notify(`Delivered ${arrived.length} student(s) to BRACU! +${gained} points`,4);}}
     // Parked/moving cars occasionally block the only approach to a pickup
@@ -1863,7 +1937,12 @@
         nearby.timeLeft=Math.min(nearby.timeLeft,Math.round(clamp(28+returnDistance/105,34,62)));
         nearby.warning=false;
         S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
-    if(S.delivered>=6){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
+    // Don't cover the final student-ID joke with the victory modal prematurely.
+    if(S.delivered>=6 && S.time>S.campusLastGateTime+3.1){
+      S.mode='WON';keys.clear();nextModal('WON');
+    }else if(S.delivered<6&&(S.time>=900||(S.failed>=6&&S.missedEffects.length===0))){
+      S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');
+    }
   }
   const map=$('minimap'),ctx=map.getContext('2d');
   function refreshMap(){
@@ -2020,10 +2099,14 @@
       }
     }
     for(const e of S.deliveryEffects){
-      const age=S.time-e.at;
-      if(age<1.7||age>4.1)continue;
-      candidates.push({priority:0,x:e.x1,y:88,z:e.z1,
-        message:e.colorId%2?'BRACU REACHED!':'THANK YOU, MAJHI!',style:'hero',id:800+e.colorId});
+      const gateAge=S.time-e.gateAt;
+      if(gateAge<-.8||gateAge>2.45)continue;
+      candidates.push({priority:-3,x:95,y:94,z:1118,
+        message:e.forgotID?'বন্যা হোক, নিয়ম কিন্তু নিয়ম!':'ID ACHE? JAAN, CLASS CHOLCHE!',
+        style:e.forgotID?'urgent':'hero',id:800+e.colorId,force:true});
+      candidates.push({priority:-2,x:e.x1,y:88,z:e.z1,
+        message:e.forgotID?'ভাই, ID TA BASAY!':'BANNA TE-O CLASS?!',
+        style:e.forgotID?'urgent':'normal',id:850+e.colorId});
     }
     for(const b of S.aiBoats){
       if(distance(S.x,S.z,b.x,b.z)>390)continue;
@@ -2095,6 +2178,77 @@
     }
   }
 
+  // Fake/game-only BRAC-inspired student card. No real portrait, ID number or personal information.
+  function drawCampusIDCheck(){
+    const e=S.deliveryEffects.find(p=>S.time>=p.gateAt&&S.time<p.gateAt+2.65);
+    if(!e||S.mode!=='PLAYING')return;
+    const w=weather.width,h=weather.height,scale=clamp(Math.min(w/1400,h/850),.62,1.12);
+    const cardW=305*scale,cardH=185*scale;
+    const left=w*.5-cardW*.5,top=Math.max(h*.12,52*scale);
+    const elapsed=S.time-e.gateAt,alpha=clamp(elapsed/.20,0,1)*clamp((2.65-elapsed)/.35,0,1);
+    wx.save();wx.globalAlpha=alpha;
+    wx.shadowColor='rgba(0,0,0,.65)';wx.shadowBlur=22*scale;
+    wx.fillStyle='#f5f9fa';wx.strokeStyle=e.forgotID?'#e56b64':'#d4dbec';wx.lineWidth=3*scale;
+    wx.beginPath();wx.roundRect(left,top,cardW,cardH,12*scale);wx.fill();wx.stroke();
+    wx.shadowBlur=0;
+    wx.fillStyle='#1d386b';wx.beginPath();wx.moveTo(left,top+cardH*.78);
+    wx.bezierCurveTo(left+cardW*.4,top+cardH*.43,left+cardW*.76,top+cardH*.91,left+cardW,top+cardH*.64);
+    wx.lineTo(left+cardW,top+cardH);wx.lineTo(left,top+cardH);wx.fill();
+    wx.strokeStyle='#244c73';wx.lineWidth=2*scale;wx.beginPath();
+    wx.arc(left+51*scale,top+52*scale,27*scale,-Math.PI*.9,Math.PI*.9);wx.stroke();
+    for(let i=0;i<3;i++){wx.beginPath();wx.moveTo(left+(36+i*4)*scale,top+(56+i*6)*scale);
+      wx.lineTo(left+52*scale,top+(65+i*5)*scale);wx.lineTo(left+(68-i*4)*scale,top+(56+i*6)*scale);wx.stroke();}
+    wx.fillStyle='#213952';wx.font=`900 ${12*scale}px system-ui,sans-serif`;wx.textAlign='center';
+    wx.fillText('BRAC',left+51*scale,top+21*scale);
+    wx.font=`700 ${8.8*scale}px system-ui,sans-serif`;
+    wx.fillText('UNIVERSITY',left+51*scale,top+32*scale);
+    wx.font=`${7*scale}px system-ui,sans-serif`;
+    wx.fillText('Inspiring Excellence',left+51*scale,top+95*scale);
+    // Simple fictional portrait silhouette—not the player's real ID-card photograph.
+    wx.fillStyle='#deebf2';wx.fillRect(left+174*scale,top+15*scale,117*scale,91*scale);
+    wx.fillStyle='#294c5f';wx.beginPath();wx.arc(left+232*scale,top+48*scale,20*scale,0,TAU);wx.fill();
+    wx.beginPath();wx.ellipse(left+232*scale,top+105*scale,39*scale,35*scale,0,Math.PI,TAU);wx.fill();
+    wx.textAlign='left';wx.font=`800 ${13*scale}px system-ui,sans-serif`;
+    wx.fillStyle='#203b5a';wx.fillText(String(e.name).toUpperCase().slice(0,18),left+17*scale,top+126*scale,cardW-28*scale);
+    wx.font=`700 ${9.5*scale}px system-ui,sans-serif`;
+    wx.fillText('STUDENT  ·  CS',left+17*scale,top+141*scale);
+    wx.fillStyle='#f5f7fc';wx.font=`700 ${8*scale}px system-ui,sans-serif`;
+    wx.fillText(e.gameId+'  ·  CAMPUS ENTRY',left+17*scale,top+cardH-12*scale);
+    if(e.forgotID){
+      wx.fillStyle='rgba(127,9,17,.87)';wx.fillRect(left+95*scale,top+45*scale,175*scale,49*scale);
+      wx.fillStyle='#fff';wx.font=`900 ${20*scale}px system-ui,sans-serif`;
+      wx.textAlign='center';wx.fillText('ID MISSING!',left+182*scale,top+75*scale);
+    }
+    wx.restore();
+    wx.save();wx.globalAlpha=alpha;wx.textAlign='center';
+    wx.font=`900 ${14*scale}px 'Noto Sans Bengali','Nirmala UI',system-ui,sans-serif`;
+    wx.shadowColor='#06121a';wx.shadowBlur=9*scale;
+    wx.fillStyle=e.forgotID?'#ffc4bc':'#f7e2a5';
+    wx.fillText(e.forgotID?'GUARD: আইডি ছাড়া ঢোকা যাবে না!':'GUARD: ID CHECK PASSED! CLASS IS ON!',w*.5,top-12*scale,w*.8);
+    wx.restore();
+  }
+  function drawHeavenlyCameraBloom(){
+    if(S.mode!=='PLAYING'||!comicView)return;
+    const at=comicProject(0,900,1378);if(!at)return;
+    const d=distance(S.x,S.z,0,1378),nearness=clamp((1300-d)/850,0,1);
+    if(nearness<.02)return;
+    const w=weather.width,h=weather.height;
+    const cx=clamp(at.x,0,w),cy=clamp(at.y,0,h);
+    const radius=Math.max(w,h)*.64;
+    const grad=wx.createRadialGradient(cx,cy,4,cx,cy,radius);
+    grad.addColorStop(0,`rgba(255,250,199,${.24*nearness})`);
+    grad.addColorStop(.20,`rgba(255,237,167,${.13*nearness})`);
+    grad.addColorStop(1,'rgba(255,230,140,0)');
+    wx.save();wx.fillStyle=grad;wx.fillRect(0,0,w,h);wx.restore();
+    if(d<640&&!S.deliveryEffects.some(e=>S.time>=e.gateAt&&S.time<e.gateAt+2.9)){
+      wx.save();wx.globalAlpha=.77*clamp((640-d)/200,0,1);
+      wx.font=`900 ${clamp(w/70,13,22)}px system-ui,sans-serif`;
+      wx.textAlign='center';wx.shadowColor='#b38323';wx.shadowBlur=10;
+      wx.fillStyle='#fff7ce';
+      wx.fillText('☀  ONLY BRACU HAS SUNSHINE · CLASS IS STILL ON!  ☀',w*.5,h*.16,w*.70);
+      wx.restore();
+    }
+  }
   function renderRain(dt){const w=weather.width,h=weather.height;wx.clearRect(0,0,w,h);if(S.mode==='PAUSED'||S.mode==='WON'||S.mode==='LOST')return;
     const campusDistance=distance(S.x,S.z,0,1378);
     const rainFraction=clamp((campusDistance-365)/230,0,1);
@@ -2145,7 +2299,9 @@
         wx.fillText(ready?'ELECTRICAL CONTROL · +100 POINTS':`${Math.ceil(dist-130)} UNITS TO REPAIR RANGE`,w*.5,y+boxH*.74);
       }
     }
+    drawHeavenlyCameraBloom();
     renderComicBubbles();
+    drawCampusIDCheck();
   }
   let comicView=null,comicProj=null,comicEye=null;
   function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
@@ -2230,7 +2386,15 @@
     render(waterMesh);
     render(currentArrows);
     render(campusGround);
-    render(sunshineAura);render(sunshineSun);
+    render(sunshineAura);
+    render(heavenlyBeams);
+    for(let i=0;i<17;i++){
+      const a=i*2.39996+S.bobTime*.12,r=60+(i*37)%255;
+      const x=r*Math.cos(a),z=1378+r*Math.sin(a);
+      const y=55+(i*61)%430+13*Math.sin(S.bobTime*2+i);
+      render(heavenSpark,model(x,y,z,S.bobTime*18+i*29,.38+.20*Math.sin(S.bobTime+i)));
+    }
+    render(sunshineSun);
     gl.depthMask(true);gl.disable(gl.BLEND);
     // World-space rain is composited over city and water. Small ripples spawn
     // only when a descending world droplet strikes water outside BRACU.
@@ -2315,6 +2479,25 @@
     drawRickshawFleet();
     // Independent swimmers, waders, neighbors and rooftop residents.
     drawCityPeople();
+    // The dry campus is so absurdly important that swimmers are still arriving for class.
+    if(S.mode!=='MENU'){
+      for(let i=0;i<2;i++){
+        const period=21+i*4,phase=((S.time/period)+(i*.43))%1;
+        const sx=i===0?-230:225,sz=997+i*14;
+        const endX=i===0?-78:83,endZ=1100;
+        const progress=clamp(phase/.82,0,1);
+        const cx=sx+(endX-sx)*progress,cz=sz+(endZ-sz)*progress;
+        if(phase<.82){
+          render(citizenFrame('SOS',i+2,S.time*3.8+i),model(cx,10+Math.sin(S.time*4+i),cz,46,.72));
+          render(waterRipple,model(cx,10,cz,0,.38+.12*Math.sin(S.time*5+i)));
+        }else if(phase<.96){
+          render(citizenFrame('CELEBRATE',i+2,S.time*2.5),model(cx,24,cz,-90,.56));
+        }
+      }
+      // Guard waits beside the campus gate, facing the arrivals.
+      render(campusSecurity,model(95,18,1118,-90,.78));
+      if(S.quality==='HIGH')render(waterRipple,model(95,9.5,1118,0,.40));
+    }
     // A stranded tea-stall cat is a small environmental story, not a mission target.
     if(distance(S.x,S.z,-327,832)<760)
       render(dhakaCat,model(-327,49+Math.sin(S.bobTime*1.4)*.3,832,180,.70));
@@ -2374,22 +2557,36 @@
         render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],
           model(sx,seatY+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),scale));
       });
-      // Original BRACU drop-off: students leave their seats and walk to the dock.
+      // BRACU meme: students line up for security, show their game-only ID
+      // one by one, and every third student forgets the card despite the flood.
       for(const e of S.deliveryEffects){
-        const age=S.time+(S.mode==='WON'?S.postWinClock:0)-e.at;
-        if(age>4.35)continue;
-        const progress=clamp(age/1.65,0,1),walk=progress*progress*(3-2*progress);
-        const x=e.x0+(e.x1-e.x0)*walk,z=e.z0+(e.z1-e.z0)*walk;
-        const celebrating=age>=1.65;
-        const jump=celebrating?Math.abs(Math.sin((age-1.65)*6.2))*5:8*Math.sin(Math.PI*progress);
-        const y=e.y0+(30-e.y0)*walk+jump;
-        if(celebrating){
-          render(citizenFrame('CELEBRATE',e.colorId,age*3.6+e.colorId),model(x,y,z,-90,.62));
-          for(let k=0;k<3;k++){
-            const angle=S.time*2.1+k*TAU/3+e.colorId;
-            render(happySparkle,model(x+22*Math.cos(angle),y+26+5*Math.sin(S.time*4+k),z+22*Math.sin(angle),angle/RAD,.45));
+        const age=S.time-e.at,gateAge=S.time-e.gateAt;
+        if(gateAge>3.3)continue;
+        const progress=clamp(age/2.1,0,1),walk=progress*progress*(3-2*progress);
+        let x=e.x0+(e.x1-e.x0)*walk,z=e.z0+(e.z1-e.z0)*walk;
+        let y=e.y0+(29-e.y0)*walk+5*Math.sin(Math.PI*progress);
+        if(gateAge>=0){
+          if(e.forgotID){
+            // Dramatic red-shirt anger and a little frustrated hopping.
+            y+=Math.abs(Math.sin(gateAge*11))*6;
+            if(gateAge>2.2)y-=12*clamp((gateAge-2.2)/1.0,0,1);
+          }else if(gateAge>1.2){
+            const entry=clamp((gateAge-1.2)/1.45,0,1);
+            x+=(35-x)*entry;z+=(1147-z)*entry;
+            y+=Math.abs(Math.sin(gateAge*7))*4;
           }
-        }else render(sourceMeshes?.['student-'+e.colorId]||npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
+        }
+        const show=gateAge>=0&&e.forgotID;
+        const mesh=show?campusAngryFrames[((Math.floor(gateAge*22)%REACTION_FRAMES)+REACTION_FRAMES)%REACTION_FRAMES]:
+          citizenFrame(gateAge>=0?'CELEBRATE':'HOME',e.colorId,S.time*2.2+e.colorId);
+        render(mesh,model(x,y,z,gateAge>=0?90:-90,.61));
+        if(gateAge>=0&&gateAge<2.15){
+          if(e.forgotID){
+            render(urgencyMarker,model(x,y+51+4*Math.sin(gateAge*7),z,0,.72));
+          }else if(S.quality==='HIGH'){
+            render(happySparkle,model(x,y+50,z,S.time*60,.52));
+          }
+        }
       }
       for(const effect of S.missedEffects){
         const age=S.time-effect.at;
@@ -2416,10 +2613,11 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity11-authentic-cng-rickshaw-rescue-quarrels';
+  window.majhiVersion='fidelity12-bracu-heaven-campus-id-rolling-rickshaws';
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
+    wheelSpin:S.aiRickshaws.map(r=>r.wheelSpin||0),campusChecks:S.campusChecks,gateQueue:S.deliveryEffects.map(e=>({name:e.name,forgotID:e.forgotID,gateAt:e.gateAt})),
     rickshawQuarrels:(S.rickshawQuarrels||[]).length,
     dhakaCatVertices:dhakaCat.length,dhakaLaptopVertices:dhakaLaptop.length,dhakaRickshawVertices:parkedDhakaModels.rickshaw.length,dhakaCNGVertices:parkedDhakaModels.cng.length,
     balconyCitizens:S.cityPeople.filter(p=>p.role==='BALCONY').length,
