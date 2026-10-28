@@ -495,7 +495,10 @@
     return path.filter((p,i)=>i===0||distance(p.x,p.z,path[i-1].x,path[i-1].z)>2);
   }
   function chooseFleetTarget(boat){
-    const alreadyAssigned=new Set(S.aiBoats.filter(b=>b!==boat).map(b=>b.targetId));
+    const alreadyAssigned=new Set([
+      ...S.aiBoats.filter(b=>b!==boat).map(b=>b.targetId),
+      ...S.aiRickshaws.map(r=>r.targetId)
+    ]);
     const pool=S.cityPeople.filter(p=>(p.role==='SWIM'||p.role==='WADE')&&!alreadyAssigned.has(p.uid));
     if(!pool.length)return;
     // A small route variation avoids always choosing the nearest person.
@@ -508,7 +511,8 @@
       &&distance(S.x,S.z,x,z)>450
       &&S.cityPeople.every(p=>distance(p.x,p.z,x,z)>140)
       &&(!previous||distance(previous.x,previous.z,x,z)>390)
-      &&S.aiBoats.every(b=>distance(b.x,b.z,x,z)>170));
+      &&S.aiBoats.every(b=>distance(b.x,b.z,x,z)>170)
+      &&S.aiRickshaws.every(r=>distance(r.x,r.z,x,z)>135));
     const pool=choices.length?choices:FLEET_SPAWNS.filter(([x,z])=>valid(x,z,28));
     if(!pool.length)return false;
     // Deterministic distribution across neighborhoods, not a spawn pile-up.
@@ -560,6 +564,132 @@
       }
     }
   }
+  // FLOODED-RICKSHAW RESCUE FLEET. Three visibly different traditional
+  // Dhaka rickshaws collect only background civilians, as the boat fleet does.
+  // Occasional low-speed encounters with parked cars create short, harmless
+  // driver quarrels; the vehicles never steal the player's rescue missions.
+  function createRickshawFleet(){return [
+    {id:0,name:'Rickshaw Salam',x:-1100,z:500,angle:0,speed:81,colorId:1,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0,incidentCar:null,quarrelUntil:0,nextCrashAt:31},
+    {id:1,name:'Rickshaw Babul',x:1100,z:-50,angle:180,speed:90,colorId:4,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0,incidentCar:null,quarrelUntil:0,nextCrashAt:56},
+    {id:2,name:'Rickshaw Liton',x:550,z:1050,angle:270,speed:85,colorId:2,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0,incidentCar:null,quarrelUntil:0,nextCrashAt:79}
+  ];}
+  function chooseRickshawTarget(r){
+    const reserved=new Set([
+      ...S.aiBoats.map(b=>b.targetId),
+      ...S.aiRickshaws.filter(b=>b!==r).map(b=>b.targetId)
+    ]);
+    const people=S.cityPeople.filter(p=>(p.role==='SWIM'||p.role==='WADE')&&!reserved.has(p.uid));
+    if(!people.length)return;
+    people.sort((a,b)=>distance(r.x,r.z,a.x,a.z)-distance(r.x,r.z,b.x,b.z));
+    const selected=people[Math.min(people.length-1,(r.deliveries+r.id)%3)];
+    r.targetId=selected.uid;r.waypoints=fleetPath(r,selected);
+  }
+  function startRickshawIncident(r){
+    const ordered=parkedCars.map((car,i)=>({car,i,d:distance(r.x,r.z,car.x,car.z)}))
+      .filter(t=>t.d<1080&&dhakaVehicleType(t.i)!=='rickshaw'&&
+        !S.aiRickshaws.some(other=>other!==r&&other.incidentCar===t.i))
+      .sort((a,b)=>a.d-b.d);
+    if(!ordered.length){r.nextCrashAt=S.time+18;return false;}
+    // Approach near the parked vehicle, not through it; the map's existing
+    // road waypoints prevent steering directly across building footprints.
+    const {car,i}=ordered[0];
+    r.incidentCar=i;r.targetId=null;r.waypoints=fleetPath(r,car);
+    return true;
+  }
+  function beginRickshawQuarrel(r){
+    const car=parkedCars[r.incidentCar];
+    if(!car)return;
+    r.quarrelUntil=S.time+6.2;r.pause=0;r.waypoints=[];
+    S.rickshawQuarrels.push({id:r.id,carIndex:r.incidentCar,at:S.time,until:r.quarrelUntil});
+    S.rickshawCrashCount++;
+    S.pickupEffects.push({x:(car.x+r.x)*.5,z:(car.z+r.z)*.5,at:S.time,type:'RICKSHAW_BUMP'});
+  }
+  function updateRickshawFleet(dt){
+    S.rickshawQuarrels=S.rickshawQuarrels.filter(e=>S.time<e.until);
+    for(const r of S.aiRickshaws){
+      if(r.quarrelUntil>S.time)continue;
+      if(r.incidentCar!==null&&r.quarrelUntil>0){
+        // Depart only after the full quarrel, not while approaching a car.
+        r.incidentCar=null;r.quarrelUntil=0;r.waypoints=[];r.targetId=null;
+        r.nextCrashAt=S.time+56+r.id*11;
+      }
+      if(r.pause>0){r.pause=Math.max(0,r.pause-dt);continue;}
+      if(r.incidentCar===null&&S.time>=r.nextCrashAt){startRickshawIncident(r);}
+      let target=null;
+      if(r.incidentCar!==null)target=parkedCars[r.incidentCar];
+      else{
+        target=S.cityPeople.find(p=>p.uid===r.targetId);
+        if(!target){r.targetId=null;r.waypoints=[];chooseRickshawTarget(r);
+          target=S.cityPeople.find(p=>p.uid===r.targetId);}
+      }
+      if(!target)continue;
+      const dist=distance(r.x,r.z,target.x,target.z);
+      if(r.incidentCar!==null&&dist<90){beginRickshawQuarrel(r);continue;}
+      if(r.incidentCar===null&&dist<70){
+        S.cityPeople=S.cityPeople.filter(p=>p.uid!==target.uid);
+        S.aiRespawnQueue.push({at:S.time+3.0,x:target.x,z:target.z});
+        S.aiRescueCount++;S.rickshawRescueCount++;
+        r.rescuedAt=S.time;r.rescuedColor=target.colorId;
+        r.deliveries++;r.pause=2.2;r.targetId=null;r.waypoints=[];
+        S.pickupEffects.push({x:target.x,z:target.z,at:S.time,type:'RICKSHAW_PICKUP'});
+        continue;
+      }
+      if(!r.waypoints.length)r.waypoints=fleetPath(r,target);
+      while(r.waypoints.length&&distance(r.x,r.z,r.waypoints[0].x,r.waypoints[0].z)<11)r.waypoints.shift();
+      if(!r.waypoints.length){
+        if(r.incidentCar!==null&&dist<110){beginRickshawQuarrel(r);continue;}
+        if(r.incidentCar===null&&dist<105){r.waypoints=[{x:target.x,z:target.z}];}
+        else r.waypoints=fleetPath(r,target);
+      }
+      const p=r.waypoints[0];if(!p)continue;
+      const dx=p.x-r.x,dz=p.z-r.z,len=Math.hypot(dx,dz)||1;
+      const wanted=Math.atan2(dz,dx)/RAD;
+      r.angle=(r.angle+clamp(((wanted-r.angle+540)%360)-180,-180*dt,180*dt)+360)%360;
+      const stride=Math.min(len,r.speed*dt),nx=r.x+dx/len*stride,nz=r.z+dz/len*stride;
+      // Rickshaws yield to the player and other rickshaws. A small obstacle
+      // margin keeps the vehicles out of buildings and campus walls.
+      const playerNear=distance(nx,nz,S.x,S.z)<96;
+      const fleetNear=S.aiRickshaws.some(other=>other!==r&&distance(nx,nz,other.x,other.z)<66);
+      if(!playerNear&&!fleetNear&&valid(nx,nz,16)){
+        r.x=nx;r.z=nz;
+      }else if(r.incidentCar!==null&&dist<125&&!playerNear){
+        // Small bump with a car at the road edge, not a game-ending accident.
+        beginRickshawQuarrel(r);
+      }
+    }
+  }
+  function drawRickshawFleet(){
+    if(S.mode==='MENU')return;
+    for(const r of S.aiRickshaws){
+      if(distance(S.x,S.z,r.x,r.z)>1050)continue;
+      const stopped=r.quarrelUntil>S.time;
+      const bumpAge=stopped?r.quarrelUntil-S.time:0;
+      const bob=.5*Math.sin(S.time*4+r.id*2)+(stopped&&bumpAge>5.5?2.1*Math.sin(S.time*22):0);
+      render(parkedDhakaModels.rescueRickshaws[r.id],
+        model(r.x,1.1+bob,r.z,r.angle,.82));
+      const a=r.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),sx=-fz,sz=fx;
+      // Small back-seat figure makes a recently completed rescue visible.
+      if(S.time-r.rescuedAt<7&&!stopped){
+        render(citizenFrame('HOME',r.rescuedColor,S.time*1.2),
+          model(r.x-fx*30,35+bob,r.z-fz*30,r.angle,.34));
+      }
+      if(stopped){
+        const car=parkedCars[r.incidentCar];
+        if(car){
+          // Car owner gestures from the safe roadside while the driver argues.
+          const ox=car.x+Math.sin(car.angle*RAD)*48;
+          const oz=car.z-Math.cos(car.angle*RAD)*48;
+          render(citizenFrame('HOME_URGENT',r.colorId,S.time*3.9+r.id),
+            model(ox,23,oz,Math.atan2(r.z-oz,r.x-ox)/RAD,.59));
+        }
+        render(waterRipple,model(r.x,9.6,r.z,0,.62+.10*Math.sin(S.time*5)));
+      }else if(S.quality==='HIGH'){
+        render(waterRipple,model(r.x-fx*44,9.6,r.z-fz*44,0,.34));
+        render(waterRipple,model(r.x-fx*62+sx*12,9.6,r.z-fz*62+sz*12,0,.23));
+      }
+    }
+  }
+
   function drawRescueFleet(){
     if(S.mode==='MENU')return;
     for(const boat of S.aiBoats){
@@ -679,42 +809,138 @@
              [x+r*Math.cos(a),y+r*Math.sin(a),z+2.5],tire);
     }
   }
-  function makeDhakaCNG(){
-    const m=new Mesh(),green=[.06,.43,.24],greenShade=[.05,.30,.19],gold=[.95,.74,.31],black=[.045,.08,.095];
-    // Bonnet, passenger cabin, characteristic three-wheel silhouette.
-    m.box(0,12,0,72,21,39,green);
-    m.box(22,19,0,25,22,35,[.10,.50,.29]);
-    m.box(-17,31,0,44,35,35,greenShade);
-    m.box(-14,51,0,55,5,41,black);
-    m.box(23,40,0,23,5,37,black);
-    m.box(-18,30,0,39,20,31,[.13,.18,.19]); // open passenger compartment
-    m.box(-24,23,0,19,8,27,[.24,.27,.24]); // passenger bench
-    m.box(11,23,0,13,15,24,[.18,.23,.22]); // driver's seat
-    // Open side door aperture, painted cage uprights and lattice bars.
+  // Bangladesh CNG: slender three-wheeler with a softly curved nose, single
+  // steering wheel, black canvas canopy, narrow lattice passenger windows and
+  // accessible side doorway. All details are baked into one draw-call mesh.
+  function makeDhakaCNG(style=0){
+    const m=new Mesh(),green=style?[.055,.42,.26]:[.035,.48,.255],
+      darkGreen=style?[.035,.29,.18]:[.025,.32,.18],
+      paleGreen=[.21,.58,.35],shade=[.035,.085,.096],
+      roof=[.058,.072,.080],tire=[.07,.083,.087],
+      metal=[.57,.65,.62],glass=[.095,.235,.255],
+      orange=[.95,.48,.13],cream=[.84,.84,.71];
+    // Rear passenger tub: low rounded-looking side steps, NOT a solid tall cube.
+    m.box(-25,23,0,55,20,39,darkGreen);
+    m.box(-25,13,0,62,9,41,green);
     for(const side of [-1,1]){
-      const z=side*20.0;
-      citizenLimb(m,[-35,18,z],[-35,51,z],1.9,green);
-      citizenLimb(m,[-6,18,z],[-6,51,z],1.9,green);
-      citizenLimb(m,[-35,49,z],[-6,49,z],1.7,gold);
-      citizenLimb(m,[-6,18,z],[-35,49,z],.72,[.59,.66,.58]);
-      citizenLimb(m,[-35,18,z],[-6,49,z],.72,[.59,.66,.58]);
-      m.box(-18,11,z,35,4,2,gold);
-      m.box(-11,41,z,8,3,2,[.62,.75,.64]);
-      m.box(-31,27,z,6,3,3,[.88,.90,.84]);
+      const z=side*20.8;
+      m.box(-31,30,z,40,7,2,paleGreen);
+      m.box(-24,12,z+side*2.6,56,3.5,4,[.26,.30,.24]);
+      m.box(-30,18,z+side*1.6,34,2,2,[.68,.74,.62]);
     }
-    m.box(35,27,0,3,15,29,[.14,.22,.25]); // windshield
-    m.box(37,18,0,4,7,33,black); // grille
-    m.box(38,19,-13,4,5,7,[1,.92,.63]);
-    m.box(38,19,13,4,5,7,[1,.92,.63]);
-    m.box(-37,19,0,4,4,32,[.82,.22,.17]);
-    m.box(0,16,0,62,3,44,gold); // gold Dhaka trim
-    dhakaWheel(m,27,10.4,0,10.1);
-    dhakaWheel(m,-24,10.4,-19,10.1);
-    dhakaWheel(m,-24,10.4,19,10.1);
+    // Raised rear bench and central floor so the sides read as a cabin.
+    m.box(-35,24,0,19,6,30,[.31,.25,.19]);
+    m.box(-44,36,0,7,22,34,[.15,.19,.18]);
+    m.box(-7,16,0,42,4,31,[.15,.22,.20]);
+    m.box(8,29,0,13,9,26,[.19,.24,.22]);
+    // A curved green front apron narrows toward a blunt rounded three-wheeler
+    // nose, rather than resembling a boxy jeep or a four-wheel car.
+    const profiles=[
+      {x:9,cy:28,ry:21,rz:22},
+      {x:27,cy:29,ry:22,rz:21},
+      {x:41,cy:28,ry:19,rz:18.7},
+      {x:50,cy:27,ry:15,rz:15},
+      {x:54,cy:27,ry:12,rz:11}
+    ];
+    const nosePoint=(q,t)=>[q.x,q.cy+q.ry*Math.sin(t),q.rz*Math.cos(t)];
+    for(let i=0;i<profiles.length-1;i++)for(let j=0;j<16;j++){
+      const a=j*TAU/16,b=(j+1)*TAU/16;
+      const p=profiles[i],q=profiles[i+1];
+      m.quad(nosePoint(p,a),nosePoint(q,a),nosePoint(q,b),nosePoint(p,b),
+        j<5?green:j<11?darkGreen:green);
+    }
+    // Windscreen slopes BACK into the canopy, with black rubber borders.
+    // It faces +X, the same direction as the original parking coordinates.
+    m.quad([38,43,-18.3],[38,43,18.3],[24.2,65,20],[24.2,65,-20],roof);
+    m.quad([38.8,45,-15.9],[38.8,45,15.9],[26,62.8,17.2],[26,62.8,-17.2],glass);
+    citizenLimb(m,[40,43.5,-18.4],[26,65,-20],1.45,roof);
+    citizenLimb(m,[40,43.5,18.4],[26,65,20],1.45,roof);
+    citizenLimb(m,[39,44,-18],[39,44,18],1.3,roof);
+    // One diagonal windscreen wiper with a tiny pivot.
+    citizenLimb(m,[40,45,-12],[29,58,9],.83,[.08,.10,.11]);
+    m.sphere(40,45,-12,1.6,[.13,.16,.16],3,6);
+    // Short driver's side glass, then the iconic REAR mesh passenger windows.
+    for(const side of [-1,1]){
+      const z=side*22.1;
+      m.quad([9,42,z],[24,43,z],[22,61,z],[8,61,z],glass);
+      citizenLimb(m,[8,38,z],[8,65,z],1.6,green);
+      citizenLimb(m,[23,40,z],[23,65,z],1.65,darkGreen);
+      // Passenger upper cabin: dark window apertures enclosed in green steel.
+      m.quad([-49,35,z],[-12,35,z],[-12,61,z],[-49,61,z],shade);
+      for(let j=0;j<=7;j++){
+        const x=-47+j*4.8;
+        citizenLimb(m,[x,35,z+side*.28],[x,61,z+side*.28],.44,metal);
+      }
+      for(let j=0;j<=5;j++){
+        const y=36+j*4.8;
+        citizenLimb(m,[-49,y,z+side*.27],[-12,y,z+side*.27],.44,metal);
+      }
+      // A proper passenger entrance exists BETWEEN mesh and driver, with an
+      // open window and only a low hinged painted door.
+      m.box(-2,21,z,18,17,2.8,green);
+      m.box(-2,14,z+side*.9,18,3,3.2,darkGreen);
+      citizenLimb(m,[-11,27,z],[-11,63,z],1.9,green);
+      citizenLimb(m,[7,28,z],[7,63,z],1.8,green);
+      m.box(2,27,z+side*2.4,2.5,7,2,metal); // door handle
+      m.box(-29,64,z,42,4,2,green);
+      // Narrow canvas side skirt, not yellow horizontal arcade-game stripes.
+      m.box(-34,60,z+side*.6,22,6,1.8,roof);
+      // Rear-wheel splash guards wrap the two rear wheels.
+      for(let j=0;j<7;j++){
+        const a=j*Math.PI/7,b=(j+1)*Math.PI/7;
+        const curve=t=>[-35+15*Math.cos(t),12.5+15*Math.sin(t),side*20];
+        citizenLimb(m,curve(a),curve(b),1.75,darkGreen);
+      }
+    }
+    // Fabric roof: convex, long and black, with edge piping and a rounded lip.
+    const roofY=(x,z)=>66.8+3.5*(1-(z/24.5)**2)+1.6*(1-(x/56)**2);
+    for(let i=0;i<13;i++)for(let j=0;j<9;j++){
+      const x0=-53+i*6.3,x1=x0+6.3,z0=-24.5+j*5.45,z1=z0+5.45;
+      m.quad([x0,roofY(x0,z0),z0],[x1,roofY(x1,z0),z0],
+        [x1,roofY(x1,z1),z1],[x0,roofY(x0,z1),z1],roof);
+    }
+    for(const side of [-1,1]){
+      const z=side*24;
+      citizenLimb(m,[-54,65,z],[27,65,z],1.7,[.24,.26,.24]);
+      m.box(-53,54,side*21.2,3.2,18,3,roof);
+    }
+    // Canvas rear windscreen and a modest rear luggage rack.
+    m.box(-53,52,0,3.2,23,39,roof);
+    m.box(-55,49,0,1.7,15,25,[.13,.19,.18]);
+    m.box(-56,20,0,2,12,31,green);
+    for(const side of [-1,1]){
+      m.box(-55,22,side*15,2,7,6,[.79,.18,.13]);
+      citizenLimb(m,[-57,13,side*18],[-57,13,side*8],1.7,metal);
+    }
+    citizenLimb(m,[-58,12,-20],[-58,12,20],2.0,metal);
+    citizenLimb(m,[-59,20,-18],[-59,20,18],1.2,metal);
+    m.box(-57,22,0,2,6,13,cream);
+    // Narrow front mudguard and the single steerable-looking front wheel.
+    dhakaWheel(m,40,11.6,0,11.2);
+    for(let j=0;j<9;j++){
+      const a=.12+j*(Math.PI-.24)/9,b=.12+(j+1)*(Math.PI-.24)/9;
+      citizenLimb(m,[40+14.3*Math.cos(a),11.6+14.3*Math.sin(a),0],
+        [40+14.3*Math.cos(b),11.6+14.3*Math.sin(b),0],3,green);
+    }
+    dhakaWheel(m,-35,11.6,-20.5,11.1);
+    dhakaWheel(m,-35,11.6,20.5,11.1);
+    // Classic black nose mask, horizontal grille, lamps and indicators.
+    m.box(53.5,30,0,2.1,13,24,[.055,.087,.087]);
+    for(const y of [25,29,33])m.box(55, y, 0,1.5,1.2,21,metal);
+    for(const z of [-14.8,14.8]){
+      m.sphere(50,30,z,6.3,[.080,.10,.10],5,9);
+      m.sphere(53,30,z,4.8,[.91,.90,.73],5,9);
+      m.sphere(49,39,z,2.7,orange,4,8);
+    }
+    citizenLimb(m,[56,19,-18],[56,19,18],1.4,metal);
+    for(const z of [-16,16]){
+      citizenLimb(m,[55,13,z],[58,19,z],1.3,metal);
+    }
     return m.upload();
   }
-  function makeDhakaRickshaw(){
-    const m=new Mesh(),frame=[.12,.31,.28],gold=[1,.75,.20],red=[.82,.17,.31],blue=[.20,.61,.80],black=[.08,.12,.15];
+  function makeDhakaRickshaw(style=0){
+    const accents=[[[.82,.17,.31],[.20,.61,.80]],[[.19,.48,.82],[.95,.39,.25]],[[.21,.68,.44],[.83,.32,.62]]];
+    const m=new Mesh(),frame=[.12,.31,.28],gold=[1,.75,.20],red=accents[style%3][0],blue=accents[style%3][1],black=[.08,.12,.15];
     // Long bicycle frame and single front wheel, plus two rear wheels.
     dhakaWheel(m,39,14,0,13);
     dhakaWheel(m,-29,14,-21,13);
@@ -774,7 +1000,10 @@
     return m.upload();
   }
   const parkedDhakaModels={
-    car:[0,1,2,3].map(makeParkedCar),cng:makeDhakaCNG(),rickshaw:makeDhakaRickshaw()
+    car:[0,1,2,3].map(makeParkedCar),
+    cng:makeDhakaCNG(),cngAlt:makeDhakaCNG(1),
+    rickshaw:makeDhakaRickshaw(),
+    rescueRickshaws:[0,1,2].map(makeDhakaRickshaw)
   };
   // Two small visual storytelling props: a cat awaiting rescue above a flooded
   // tea stall, and a student holding a laptop above the water.
@@ -1367,6 +1596,7 @@
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
   function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0});
     S.cityPeople=CITY_PEOPLE.map((p,i)=>({...p,uid:i}));S.cityPersonId=CITY_PEOPLE.length;
+    S.aiRickshaws=createRickshawFleet();S.rickshawRescueCount=0;S.rickshawCrashCount=0;S.rickshawQuarrels=[];
     S.aiBoats=createRescueFleet();S.aiRespawnQueue=[];S.aiRescueCount=0;
     powerVisual.repairedIndex=-1;powerVisual.repairedAt=-999;
     Object.assign(impactShake, {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0});
@@ -1597,6 +1827,7 @@
     S.debris.forEach(d=>{const ph=d.phase+S.time*.65,x=d.x0+Math.sin(ph)*26,z=d.z0+Math.cos(ph*.7)*18;if(distance(x,z,S.x,S.z)>57){d.x=x;d.z=z;}});
     updateSlowCars(dt);
     updateRescueFleet(dt);
+    updateRickshawFleet(dt);
     S.trafficClock+=dt;if(S.trafficClock>=(S.traffic==='GREEN'?5:4)){S.trafficClock=0;S.traffic=S.traffic==='GREEN'?'RED':'GREEN';}
     const inTraffic=S.x>=-115&&S.x<=115&&S.z>=-165&&S.z<=70;
     if(!inTraffic)S.trafficSafe=[S.x,S.z];
@@ -1800,6 +2031,27 @@
       else if(b.targetId!==null)candidates.push({priority:4,x:b.x,y:83,z:b.z,
         message:['মাঝি আসছে!','ওই দিকে স্রোত বেশি!'][b.id],style:'hero',id:300+b.id});
     }
+    // The arguing drivers take precedence briefly, but only when close enough
+    // to be heard. Humor stays harmless: a short spat, then they carry on.
+    for(const incident of S.rickshawQuarrels){
+      const r=S.aiRickshaws.find(v=>v.id===incident.id);
+      const car=parkedCars[incident.carIndex];
+      if(!r||!car||distance(S.x,S.z,r.x,r.z)>440)continue;
+      const turn=Math.floor((S.time-incident.at)/1.25)%4;
+      const lines=['মামা, সামনে দেখেন না?', 'আপনিও তো রাস্তার মাঝে!',
+        'গাড়িটা দেখেন কী অবস্থা!', 'রাস্তা তো নদী, ভাই!'];
+      const driverTurn=turn%2===0;
+      candidates.push({priority:-2,x:driverTurn?r.x:car.x,
+        y:driverTurn?102:90,z:driverTurn?r.z:car.z,
+        message:lines[turn],style:'urgent',id:1500+incident.id,force:true});
+    }
+    for(const r of S.aiRickshaws){
+      if(distance(S.x,S.z,r.x,r.z)>350||r.incidentCar!==null)continue;
+      if(S.time-r.rescuedAt<2.8)candidates.push({priority:1,x:r.x,y:100,z:r.z,
+        message:'উঠেন, নিরাপদে পৌঁছে দিই!',style:'hero',id:1200+r.id});
+      else if(r.targetId!==null)candidates.push({priority:5,x:r.x,y:100,z:r.z,
+        message:['রিকশা যাবে, মামা!','আসতেছি ভাই!','সাবধানে উঠেন!'][r.id],style:'normal',id:1200+r.id});
+    }
     for(const p of S.cityPeople){
       const dist=distance(S.x,S.z,p.x,p.z);if(dist>320)continue;
       const pos=ambientCitizenPosition(p,S.time);
@@ -1835,7 +2087,7 @@
     candidates.sort((a,b)=>a.priority-b.priority||distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z));
     let displayed=0;const spots=[];
     for(const c of candidates){
-      if(((S.time+c.id*1.71)%8.5)>3.1)continue;
+      if(!c.force&&((S.time+c.id*1.71)%8.5)>3.1)continue;
       const at=comicProject(c.x,c.y,c.z);if(!at)continue;
       if(spots.some(p=>Math.abs(p.x-at.x)<190&&Math.abs(p.y-at.y)<75))continue;
       comicDraw(c.message,at.x,at.y,c.style);spots.push(at);
@@ -2020,7 +2272,7 @@
       const car=parkedCars[i];
       if(distance(S.x,S.z,car.x,car.z)>1200&&S.mode!=='MENU')continue;
       const type=dhakaVehicleType(i);
-      const mesh=type==='cng'?parkedDhakaModels.cng:
+      const mesh=type==='cng'?(i===5?parkedDhakaModels.cngAlt:parkedDhakaModels.cng):
         type==='rickshaw'?parkedDhakaModels.rickshaw:parkedDhakaModels.car[i%4];
       render(mesh,model(car.x,0,car.z,car.angle,.97));
     }
@@ -2060,6 +2312,7 @@
     }
     // Two independent AI majhis rescue background citizens and leave wakes.
     drawRescueFleet();
+    drawRickshawFleet();
     // Independent swimmers, waders, neighbors and rooftop residents.
     drawCityPeople();
     // A stranded tea-stall cat is a small environmental story, not a mission target.
@@ -2162,9 +2415,12 @@
       }}
     }
   }
-  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity10-dhaka-personalities-power-cng-rickshaw';
+  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
+  window.majhiVersion='fidelity11-authentic-cng-rickshaw-rescue-quarrels';
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
+    movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
+    rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
+    rickshawQuarrels:(S.rickshawQuarrels||[]).length,
     dhakaCatVertices:dhakaCat.length,dhakaLaptopVertices:dhakaLaptop.length,dhakaRickshawVertices:parkedDhakaModels.rickshaw.length,dhakaCNGVertices:parkedDhakaModels.cng.length,
     balconyCitizens:S.cityPeople.filter(p=>p.role==='BALCONY').length,
     shopCitizens:S.cityPeople.filter(p=>p.role==='SHOP').length,
