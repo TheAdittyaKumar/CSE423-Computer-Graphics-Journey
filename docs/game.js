@@ -401,7 +401,7 @@
   // Background population has no mission markers or rescue-state changes.
   // Animation uses the already GPU-cached student pose meshes.
   const CITY_PEOPLE=[
-    {x:85,z:-1260,role:'SWIM',colorId:1,phase:.3},
+    {x:-1090,z:235,role:'SWIM',colorId:1,phase:.3},
     {x:-75,z:-1050,role:'SWIM',colorId:3,phase:1.3},
     {x:-1105,z:-700,role:'SWIM',colorId:2,phase:2.4},
     {x:-530,z:-1015,role:'SWIM',colorId:4,phase:3.7},
@@ -409,7 +409,7 @@
     {x:1095,z:170,role:'SWIM',colorId:5,phase:4.2},
     {x:-1130,z:710,role:'SWIM',colorId:2,phase:5.0},
     {x:530,z:950,role:'SWIM',colorId:3,phase:3.0},
-    {x:-120,z:-1250,role:'WADE',colorId:5,phase:2.8},
+    {x:1100,z:-600,role:'WADE',colorId:5,phase:2.8},
     {x:110,z:-885,role:'WADE',colorId:0,phase:1.5},
     {x:-690,z:-580,role:'WADE',colorId:2,phase:4.1},
     {x:685,z:-45,role:'WADE',colorId:4,phase:2.6},
@@ -423,6 +423,127 @@
       return {x:b.x+b.hw*.2,z:b.z-b.hd*.20,y:b.h-17,role:'ROOF',colorId:(k+1)%studentColors.length,phase:k*1.7};
     })
   ];
+
+  // SECONDARY RESCUE FLEET — these majhis collect background bystanders, NOT
+  // player-assigned ride requests. New citizens spawn in other safe road areas.
+  const FLEET_ROADS_X=[-1100,-550,0,550,1100];
+  const FLEET_ROADS_Z=[-1150,-600,-50,500,1050];
+  const FLEET_SPAWNS=[
+    [-1100,-1150],[-550,-1150],[550,-1150],[1100,-1150],
+    [-1100,-600],[-550,-600],[550,-600],[1100,-600],
+    [-1100,-50],[-550,-50],[550,-50],[1100,-50],
+    [-1100,500],[-550,500],[550,500],[1100,500],
+    [-1100,1050],[-550,1050],[550,1050],[1100,1050],
+    [0,-1150],[0,-600],[0,-50],[0,500],[0,1050]
+  ];
+  function createRescueFleet(){return [
+    {id:0,name:'Majhi Rafiq',x:-550,z:-600,angle:90,colorId:2,speed:158,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0},
+    {id:1,name:'Majhi Karim',x:550,z:500,angle:270,colorId:4,speed:148,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0}
+  ];}
+  const nearestLane=(v,lanes)=>lanes.reduce((best,a)=>Math.abs(a-v)<Math.abs(best-v)?a:best,lanes[0]);
+  function fleetPath(boat,person){
+    const sx=nearestLane(boat.x,FLEET_ROADS_X),sz=nearestLane(boat.z,FLEET_ROADS_Z);
+    const tx=nearestLane(person.x,FLEET_ROADS_X),tz=nearestLane(person.z,FLEET_ROADS_Z);
+    const path=[{x:sx,z:sz},{x:tx,z:sz},{x:tx,z:tz}];
+    // Finish along an EXISTING road; never drive diagonally through buildings.
+    if(Math.abs(person.x-tx)<=Math.abs(person.z-tz)){
+      path.push({x:tx,z:person.z});
+      // A brief turn within the road width reaches people near its edge.
+      if(Math.abs(person.x-tx)>75)path.push({x:tx+clamp(person.x-tx,-70,70),z:person.z});
+    }else{
+      path.push({x:person.x,z:tz});
+      if(Math.abs(person.z-tz)>75)path.push({x:person.x,z:tz+clamp(person.z-tz,-70,70)});
+    }
+    return path.filter((p,i)=>i===0||distance(p.x,p.z,path[i-1].x,path[i-1].z)>2);
+  }
+  function chooseFleetTarget(boat){
+    const alreadyAssigned=new Set(S.aiBoats.filter(b=>b!==boat).map(b=>b.targetId));
+    const pool=S.cityPeople.filter(p=>(p.role==='SWIM'||p.role==='WADE')&&!alreadyAssigned.has(p.uid));
+    if(!pool.length)return;
+    // A small route variation avoids always choosing the nearest person.
+    pool.sort((a,b)=>distance(boat.x,boat.z,a.x,a.z)-distance(boat.x,boat.z,b.x,b.z));
+    const candidate=pool[Math.min(pool.length-1,boat.deliveries%3)];
+    boat.targetId=candidate.uid;boat.waypoints=fleetPath(boat,candidate);
+  }
+  function respawnFleetCitizen(previous){
+    const choices=FLEET_SPAWNS.filter(([x,z])=>valid(x,z,42)
+      &&distance(S.x,S.z,x,z)>450
+      &&S.cityPeople.every(p=>distance(p.x,p.z,x,z)>140)
+      &&(!previous||distance(previous.x,previous.z,x,z)>390)
+      &&S.aiBoats.every(b=>distance(b.x,b.z,x,z)>170));
+    const pool=choices.length?choices:FLEET_SPAWNS.filter(([x,z])=>valid(x,z,28));
+    if(!pool.length)return false;
+    // Deterministic distribution across neighborhoods, not a spawn pile-up.
+    const index=(S.aiRescueCount*7+Math.floor(S.time/19))%pool.length;
+    const [x,z]=pool[index],id=S.cityPersonId++;
+    S.cityPeople.push({uid:id,x,z,role:id%4===0?'WADE':'SWIM',colorId:id%studentColors.length,phase:id*.83});
+    return true;
+  }
+  function updateRescueFleet(dt){
+    for(let i=S.aiRespawnQueue.length-1;i>=0;i--){
+      if(S.time>=S.aiRespawnQueue[i].at){if(respawnFleetCitizen(S.aiRespawnQueue[i]))S.aiRespawnQueue.splice(i,1);}
+    }
+    for(const boat of S.aiBoats){
+      if(boat.pause>0){boat.pause=Math.max(0,boat.pause-dt);continue;}
+      let target=S.cityPeople.find(p=>p.uid===boat.targetId);
+      if(!target){boat.targetId=null;boat.waypoints=[];chooseFleetTarget(boat);target=S.cityPeople.find(p=>p.uid===boat.targetId);}
+      if(!target)continue;
+      const d=distance(boat.x,boat.z,target.x,target.z);
+      if(d<88){
+        S.cityPeople=S.cityPeople.filter(p=>p.uid!==target.uid);
+        S.aiRespawnQueue.push({at:S.time+2.2,x:target.x,z:target.z});
+        S.aiRescueCount++;
+        boat.rescuedAt=S.time;boat.rescuedColor=target.colorId;
+        boat.deliveries++;boat.pause=2.1;boat.targetId=null;boat.waypoints=[];
+        S.pickupEffects.push({x:target.x,z:target.z,at:S.time,type:'AI_RESCUE'});
+        continue;
+      }
+      if(!boat.waypoints.length)boat.waypoints=fleetPath(boat,target);
+      while(boat.waypoints.length&&distance(boat.x,boat.z,boat.waypoints[0].x,boat.waypoints[0].z)<9)boat.waypoints.shift();
+      if(!boat.waypoints.length){
+        // All road waypoints reached: the civilian is at most one short swim away.
+        // This picks up a person standing beside the lane without clipping walls.
+        if(d<=100){boat.waypoints=[{x:boat.x,z:boat.z}];continue;}
+        boat.waypoints=fleetPath(boat,target);
+      }
+      const next=boat.waypoints[0],dx=next.x-boat.x,dz=next.z-boat.z;
+      const wanted=Math.atan2(dz,dx)/RAD;
+      const delta=((wanted-boat.angle+540)%360)-180;
+      boat.angle=(boat.angle+clamp(delta,-220*dt,220*dt)+360)%360;
+      // Give the PLAYER priority if they approach the fleet. The NPC boats
+      // have independent movement and never block the player's controls.
+      const ahead=Math.min(Math.hypot(dx,dz),boat.speed*dt);
+      const nx=boat.x+dx/(Math.hypot(dx,dz)||1)*ahead;
+      const nz=boat.z+dz/(Math.hypot(dx,dz)||1)*ahead;
+      const blocked=distance(nx,nz,S.x,S.z)<92;
+      if(!blocked&&valid(nx,nz,18)){
+        boat.x=nx;boat.z=nz;
+      }
+    }
+  }
+  function drawRescueFleet(){
+    if(S.mode==='MENU')return;
+    for(const boat of S.aiBoats){
+      if(distance(S.x,S.z,boat.x,boat.z)>1050)continue;
+      const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
+      const bob=.9*Math.sin(S.time*4+boat.id);
+      // Small distinct sampans carrying a visible majhi, with paddles and wakes.
+      render(sourceMeshes?.boat||boatMesh,model(boat.x,11.5+bob,boat.z,boat.angle,.47));
+      render(citizenFrame('HOME',boat.colorId,S.time*2.7+boat.id),
+        model(boat.x-fx*12,27+bob,boat.z-fz*12,boat.angle,.42));
+      const stroke=Math.sin(S.time*10+boat.id*2);
+      render(paddleMesh,model(boat.x+fx*9+lx*34,22+bob,boat.z+fz*9+lz*34,boat.angle+22+stroke*17,.30));
+      render(paddleMesh,model(boat.x+fx*9-lx*34,22+bob,boat.z+fz*9-lz*34,boat.angle-22-stroke*17,.30));
+      // The rescued citizen is briefly visible aboard, rather than vanishing
+      // immediately after the pickup animation.
+      if(S.time-boat.rescuedAt<7.2)
+        render(citizenFrame('CELEBRATE',boat.rescuedColor,S.time*1.9),
+          model(boat.x+fx*33,25+bob,boat.z+fz*33,boat.angle,.34));
+      for(let k=0;k<2;k++)render(waterRipple,
+        model(boat.x-fx*(44+k*26),9.55,boat.z-fz*(44+k*26),0,.36+k*.13));
+    }
+  }
+
   function ambientCitizenPosition(c,time){
     if(c.role!=='SWIM')return {x:c.x,z:c.z};
     // Swimmers stay in their road segment rather than crossing solid walls.
@@ -432,9 +553,9 @@
   }
   function drawCityPeople(){
     const clock=S.mode==='MENU'?S.bobTime:S.time;
-    for(let i=0;i<CITY_PEOPLE.length;i++){
-      const person=CITY_PEOPLE[i];
-      if(S.quality==='BALANCED' && i%3===1)continue;
+    for(let i=0;i<S.cityPeople.length;i++){
+      const person=S.cityPeople[i];
+      if(S.quality==='BALANCED' && person.uid%3===1)continue;
       const {x,z}=ambientCitizenPosition(person,clock);
       const dist=distance(S.x,S.z,x,z);
       if(dist>(S.mode==='MENU'?1400:790))continue;
@@ -913,7 +1034,7 @@
       }
     }
   }
-  const S={waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
+  const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0};
   // Collision impact: a strong jolt that quickly settles, in both camera modes.
   const IMPACT_SHAKE_DURATION = 0.58;
   const impactShake = {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0};
@@ -997,6 +1118,8 @@
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
   function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0});
+    S.cityPeople=CITY_PEOPLE.map((p,i)=>({...p,uid:i}));S.cityPersonId=CITY_PEOPLE.length;
+    S.aiBoats=createRescueFleet();S.aiRespawnQueue=[];S.aiRescueCount=0;
     powerVisual.repairedIndex=-1;powerVisual.repairedAt=-999;
     Object.assign(impactShake, {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0});
     Object.assign(boatImpact, {pitch:0,pitchV:0,roll:0,rollV:0,heave:0,heaveV:0,recoilX:0,recoilZ:0,cooldown:0});
@@ -1035,7 +1158,7 @@
         <li><kbd>W</kbd>/<kbd>↑</kbd> forward, <kbd>S</kbd>/<kbd>↓</kbd> reverse, <kbd>A</kbd>/<kbd>←</kbd> & <kbd>D</kbd>/<kbd>→</kbd> steer the boat.</li>
         <li>Press <kbd>Y</kbd> to accept an incoming ride or <kbd>N</kbd> to reject it. Follow the orange minimap markers to the pickup.</li>
         <li><b>Stop your boat</b> at a pickup until the ring fills. Hold still about 1.3 seconds for a home pickup or 0.65 seconds for a rescue.</li>
-        <li>Carry up to <b>3 passengers</b> to the golden dock just south of BRAC University.</li>
+        <li>Carry up to <b>3 passengers</b> to BRAC University. <b>After boarding, a shorter delivery countdown begins</b> (about 34–62 seconds depending on distance).</li>
         <li><kbd>Space</kbd> toggles boat boost; <kbd>C</kbd> changes camera; <kbd>P</kbd> photographs Shaheed Minar from its marked spot; <kbd>F</kbd> repairs an outage box; <kbd>V</kbd> wipes rain.</li>
         <li>Rough-current zones push the boat sideways and rock the hull. Steer or boost against the flow; hard collisions now jolt and splash.</li>
         <li>Watch the red traffic signal and avoid collisions with cars, buildings and debris. <kbd>F3</kbd> adjusts quality; <kbd>F4</kbd> toggles frame statistics; <kbd>Esc</kbd> pauses.</li></ul>`;
@@ -1225,6 +1348,7 @@
     }
     S.debris.forEach(d=>{const ph=d.phase+S.time*.65,x=d.x0+Math.sin(ph)*26,z=d.z0+Math.cos(ph*.7)*18;if(distance(x,z,S.x,S.z)>57){d.x=x;d.z=z;}});
     updateSlowCars(dt);
+    updateRescueFleet(dt);
     S.trafficClock+=dt;if(S.trafficClock>=(S.traffic==='GREEN'?5:4)){S.trafficClock=0;S.traffic=S.traffic==='GREEN'?'RED':'GREEN';}
     const inTraffic=S.x>=-115&&S.x<=115&&S.z>=-165&&S.z<=70;
     if(!inTraffic)S.trafficSafe=[S.x,S.z];
@@ -1254,7 +1378,12 @@
     const nearby=S.rides.filter(r=>r.state==='WAITING'&&distance(S.x,S.z,r.x,r.z)<=boardingRadius(r)).sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
     if(!nearby||seated().length>=3||S.time-S.lastMove<.38){S.dock=0;S.dockId=-1;}
     else {if(S.dockId!==nearby.id){S.dock=0;S.dockId=nearby.id;}S.dock+=dt;const required=nearby.type==='HOME'?1.3:.65;
-      if(S.dock>=required){nearby.state='ONBOARD';S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
+      if(S.dock>=required){nearby.state='ONBOARD';
+        // Tighter delivery challenge after pickup. Far docks get a fairer window.
+        const returnDistance=distance(S.x,S.z,0,1080);
+        nearby.timeLeft=Math.min(nearby.timeLeft,Math.round(clamp(28+returnDistance/105,34,62)));
+        nearby.warning=false;
+        S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
     if(S.delivered>=6){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
@@ -1334,6 +1463,98 @@
   function skyColor(){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);}
   function resize(){const ratio=Math.min(devicePixelRatio||1,1.8),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);weather.width=canvas.width;weather.height=canvas.height;}gl.viewport(0,0,canvas.width,canvas.height);}
   const rain=[];for(let i=0;i<100;i++)rain.push({x:Math.random(),y:Math.random(),speed:rnd(.2,.7),len:rnd(.008,.023)});
+
+  // Small camera-projected comic bubbles. Only 1–3 show at a time, for a
+  // couple of seconds each, so dialogue does not overwhelm the HUD.
+  function comicProject(x,y,z){
+    if(!comicView||!comicProj)return null;
+    const m=comicView,p=comicProj;
+    const vx=m[0]*x+m[4]*y+m[8]*z+m[12];
+    const vy=m[1]*x+m[5]*y+m[9]*z+m[13];
+    const vz=m[2]*x+m[6]*y+m[10]*z+m[14];
+    const ww=-vz;
+    if(ww<1)return null;
+    const cx=-(p[0]*vx+p[4]*vy+p[8]*vz+p[12]);
+    const cy=p[1]*vx+p[5]*vy+p[9]*vz+p[13];
+    const sx=(.5+.5*cx/ww)*weather.width,sy=(.5-.5*cy/ww)*weather.height;
+    if(sx<48||sx>weather.width-48||sy<weather.height*.20||sy>weather.height*.90)return null;
+    // Keep comics away from the score, minimap and mission request HUD.
+    if(sx<weather.width*.30 && (sy<weather.height*.19||sy>weather.height*.48))return null;
+    if(sx>weather.width*.80 && sy<weather.height*.20)return null;
+    // Simple building-line occlusion: speech should not show THROUGH walls.
+    if(comicEye){
+      const dx=x-comicEye[0],dz=z-comicEye[2];
+      for(const b of buildings){
+        if(y>b.h+25)continue;
+        // A rooftop person may be standing on top of their own building.
+        if(y>b.h-18&&Math.abs(x-b.x)<b.hw+5&&Math.abs(z-b.z)<b.hd+5)continue;
+        let lo=0,hi=1,ok=true;
+        for(const [pos,delta,min,max] of [[comicEye[0],dx,b.x-b.hw,b.x+b.hw],[comicEye[2],dz,b.z-b.hd,b.z+b.hd]]){
+          if(Math.abs(delta)<1e-6){if(pos<min||pos>max){ok=false;break;}}
+          else{let a=(min-pos)/delta,c=(max-pos)/delta;if(a>c)[a,c]=[c,a];lo=Math.max(lo,a);hi=Math.min(hi,c);}
+        }
+        if(ok&&lo<=hi&&lo>.002&&lo<.88 && comicEye[1]+(y-comicEye[1])*lo<b.h+10)return null;
+      }
+    }
+    return {x:sx,y:sy};
+  }
+  function comicDraw(text,x,y,style='normal'){
+    const scale=clamp(weather.width/1400,.76,1.35);
+    const fontSize=12.5*scale;
+    wx.save();wx.font=`900 ${fontSize}px system-ui, sans-serif`;
+    const width=Math.min(weather.width*.34,wx.measureText(text).width+24*scale);
+    const height=31*scale,px=clamp(x,10+width/2,weather.width-10-width/2),py=y-11*scale;
+    wx.globalAlpha=.93;
+    wx.shadowColor='rgba(0,0,0,.48)';wx.shadowBlur=9*scale;wx.shadowOffsetY=3*scale;
+    wx.fillStyle=style==='urgent'?'#ffe1b2':style==='hero'?'#c2f6db':'#fff8e5';
+    wx.strokeStyle='#253b46';wx.lineWidth=2.6*scale;
+    wx.beginPath();wx.roundRect(px-width/2,py-height,width,height,10*scale);wx.fill();wx.stroke();
+    wx.shadowColor='transparent';
+    wx.beginPath();wx.moveTo(px-6*scale,py);wx.lineTo(px+2*scale,py+10*scale);wx.lineTo(px+10*scale,py);wx.closePath();wx.fill();wx.stroke();
+    wx.textAlign='center';wx.textBaseline='middle';wx.fillStyle='#19333d';
+    wx.fillText(text,px,py-height/2,width-16*scale);wx.restore();
+  }
+  function renderComicBubbles(){
+    if(S.mode!=='PLAYING')return;
+    const candidates=[];
+    for(const r of S.rides){if(r.state!=='WAITING')continue;
+      const x=r.personX??r.x,z=r.personZ??r.z,d=distance(S.x,S.z,x,z);
+      if(d>430)continue;
+      const urgent=r.timeLeft<25;
+      const phrases=urgent?['HURRY, PLEASE!','TIME IS RUNNING OUT!','HELP ME!']:
+        r.type==='DROWNING'?['HELP! OVER HERE!','I CAN SWIM!','THIS WAY, MAJHI!']:
+        ['MAJHI, HERE!','CLASS STARTS SOON!','PLEASE STOP!'];
+      candidates.push({priority:urgent?0:1,x,y:r.type==='HOME'?87:57,z,
+        message:phrases[Math.floor((S.time/5+r.id)%phrases.length)],style:urgent?'urgent':'normal',id:r.id});
+    }
+    for(const b of S.aiBoats){
+      if(distance(S.x,S.z,b.x,b.z)>390)continue;
+      if(S.time-b.rescuedAt<2.2)candidates.push({priority:0,x:b.x,y:83,z:b.z,message:'SAFE NOW!',style:'hero',id:300+b.id});
+      else if(b.targetId!==null)candidates.push({priority:4,x:b.x,y:83,z:b.z,
+        message:['HOLD ON!','COMING THROUGH!'][b.id],style:'hero',id:300+b.id});
+    }
+    for(const p of S.cityPeople){
+      const dist=distance(S.x,S.z,p.x,p.z);if(dist>320)continue;
+      const pos=ambientCitizenPosition(p,S.time);
+      const lines=p.role==='SWIM'?['THE CURRENT IS STRONG!','KEEP ROWING!','SOMEONE HELP!']:
+        p.role==='WADE'?['WATER EVERYWHERE!','WATCH OUT, MAJHI!','STAY SAFE!']:
+        p.role==='ROOF'?['UP HERE!','STAY SAFE!']:['ANY NEWS?','THE ROADS ARE GONE!'];
+      candidates.push({priority:3,x:pos.x,z:pos.z,y:p.role==='ROOF'?p.y+56:65,
+        message:lines[Math.floor(S.time/6+p.uid)%lines.length],style:'normal',id:100+p.uid});
+    }
+    // Alternating speaking windows and a nearest-speaker preference prevent
+    // overlap and avoid drowning out the player's actual rescue mission.
+    candidates.sort((a,b)=>a.priority-b.priority||distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z));
+    let displayed=0;const spots=[];
+    for(const c of candidates){
+      if(((S.time+c.id*1.71)%8.5)>3.1)continue;
+      const at=comicProject(c.x,c.y,c.z);if(!at)continue;
+      if(spots.some(p=>Math.abs(p.x-at.x)<190&&Math.abs(p.y-at.y)<75))continue;
+      comicDraw(c.message,at.x,at.y,c.style);spots.push(at);
+      if(++displayed>=3)break;
+    }
+  }
+
   function renderRain(dt){const w=weather.width,h=weather.height;wx.clearRect(0,0,w,h);if(S.mode==='PAUSED'||S.mode==='WON'||S.mode==='LOST')return;
     const campusDistance=distance(S.x,S.z,0,1378);
     const rainFraction=clamp((campusDistance-365)/230,0,1);
@@ -1384,7 +1605,9 @@
         wx.fillText(ready?'ELECTRICAL CONTROL · +100 POINTS':`${Math.ceil(dist-130)} UNITS TO REPAIR RANGE`,w*.5,y+boxH*.74);
       }
     }
+    renderComicBubbles();
   }
+  let comicView=null,comicProj=null,comicEye=null;
   function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
     const currentPitch=S.waveStrength*Math.sin(S.bobTime*4.4+S.z*.012)*5.0;
     const currentRoll=S.waveStrength*Math.sin(S.bobTime*3.7+S.x*.014)*7.2;
@@ -1428,7 +1651,10 @@
       }
       applyImpactShake(eye,target);
     }
-    gl.uniformMatrix4fv(uniforms.proj,false,perspective(fov*RAD,canvas.width/canvas.height,1.2,5100));gl.uniformMatrix4fv(uniforms.view,false,lookAt(eye,target,cameraUp));gl.uniform1f(uniforms.time,S.bobTime*.85);
+    comicEye=eye.slice();
+    comicProj=perspective(fov*RAD,canvas.width/canvas.height,1.2,5100);
+    comicView=lookAt(eye,target,cameraUp);
+    gl.uniformMatrix4fv(uniforms.proj,false,comicProj);gl.uniformMatrix4fv(uniforms.view,false,comicView);gl.uniform1f(uniforms.time,S.bobTime*.85);
     gl.disable(gl.CULL_FACE);
     if(sourceMeshes){
       for(const group of ['sky','clouds'])render(sourceMeshes[group]); // do not render the source's opaque rectangular sky wall in front of the browser scene
@@ -1532,6 +1758,8 @@
       }
       render(markerMesh,model(r.x,3+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
     }
+    // Two independent AI majhis rescue background citizens and leave wakes.
+    drawRescueFleet();
     // Independent swimmers, waders, neighbors and rooftop residents.
     drawCityPeople();
     for(const c of reactiveBystanders){
@@ -1631,9 +1859,9 @@
       }}
     }
   }
-  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights};}
-  window.majhiVersion='fidelity9-city-life-and-lighting';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:CITY_PEOPLE.length,swimmers:CITY_PEOPLE.filter(p=>p.role==='SWIM').length,updatedStreetLamps:streetlights.length,trafficSignalHousingVertices:modernTrafficBody.length,exitGlareInstalled:!!document.getElementById('majhi-exit-flashlight-glare'),impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
+  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,respawnFleetCitizen,comicProject,renderComicBubbles};}
+  window.majhiVersion='fidelity9-living-city-rescue-fleet';
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,swimmers:S.cityPeople.filter(p=>p.role==='SWIM').length,aiRescueBoats:S.aiBoats.map(b=>({name:b.name,x:b.x,z:b.z,targetId:b.targetId,deliveries:b.deliveries})),aiRescued:S.aiRescueCount,respawnPending:S.aiRespawnQueue.length,updatedStreetLamps:streetlights.length,trafficSignalHousingVertices:modernTrafficBody.length,exitGlareInstalled:!!document.getElementById('majhi-exit-flashlight-glare'),impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else {S.bobTime+=dt*.5;if(S.mode==='WON')S.postWinClock=(S.postWinClock||0)+dt;}
