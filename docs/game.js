@@ -306,6 +306,115 @@
   const paddleMesh=new Mesh();paddleMesh.cylinder(0,0,0,2.8,95,[.55,.38,.24],8);paddleMesh.box(0,-43,0,15,22,6,[.73,.49,.27]);paddleMesh.upload();
   const carMesh=new Mesh();carMesh.box(0,6,0,88,25,44,[.36,.43,.47]);carMesh.box(3,21,0,49,19,41,[.22,.30,.34]);carMesh.box(-8,34,0,24,3,38,[.40,.49,.50]);carMesh.box(40,9,0,4,12,33,[.78,.35,.23]);carMesh.box(-40,9,0,4,13,33,[.87,.67,.38]);carMesh.upload();
   const npcMeshes=studentColors.map(color=>{const m=new Mesh();m.cylinder(0,14,0,7,24,color,8);m.sphere(0,32,0,9,[.78,.55,.38],4,8);m.cylinder(-9,16,0,3,22,[.77,.55,.40],6);m.cylinder(9,18,0,3,28,[.77,.55,.40],6);m.cylinder(-4,2,0,2.4,10,[.20,.29,.37],6);m.cylinder(4,2,0,2.4,10,[.20,.29,.37],6);return m.upload();});
+  // Reactive citizens are lightweight procedural meshes, baked once into GPU
+  // buffers instead of regenerated on every frame. They use the original
+  // student's shirt palette, and animate without extra assets or packages.
+  const REACTION_FRAMES=12;
+  const reactionAnimations=['HOME','HOME_URGENT','SOS','SOS_URGENT','CELEBRATE'];
+  const citizenSkin=[.76,.53,.38],citizenHair=[.115,.125,.16];
+  function citizenLimb(mesh,from,to,radius,color){
+    const axis=norm(to.map((v,i)=>v-from[i]));
+    const guide=Math.abs(axis[1])<.88?[0,1,0]:[1,0,0];
+    const right=norm(cross(axis,guide)),side=cross(axis,right);
+    const ring=(p,t)=>p.map((v,i)=>v+radius*(Math.cos(t)*right[i]+Math.sin(t)*side[i]));
+    for(let j=0;j<7;j++){
+      const a=j*TAU/7,b=(j+1)*TAU/7;
+      mesh.quad(ring(from,a),ring(from,b),ring(to,b),ring(to,a),color);
+    }
+  }
+  function makeCitizenPose(color,kind,index){
+    const m=new Mesh(),phase=index*TAU/REACTION_FRAMES;
+    const isSOS=kind.startsWith('SOS'),urgent=kind.endsWith('URGENT'),celebrating=kind==='CELEBRATE';
+    const aliveY=isSOS?-9:0; // Keep the SOS student visibly immersed in water.
+    const chestY=aliveY+22,headY=aliveY+37;
+    const skin=citizenSkin,shirt=color;
+    const pace=Math.sin(phase),counter=Math.cos(phase);
+    // Compact character proportions match the size of the existing students.
+    m.box(0,chestY,0,15,23,17,shirt);
+    m.box(0,chestY+10,0,15,3,17,shirt.map(v=>Math.min(1,v*1.15)));
+    m.cylinder(0,aliveY+13,0,4.4,5,skin,8);
+    if(!isSOS){
+      for(const side of [-1,1]){
+        const stride=celebrating?Math.sin(phase)*3.2:Math.sin(phase+side)*1.2;
+        citizenLimb(m,[-1,aliveY+12,side*5],[-1+stride,aliveY+1,side*5.5],3.1,[.17,.24,.30]);
+        m.box(3+stride,aliveY+2,side*6,9,4,5,[.11,.16,.19]);
+      }
+    }
+    // Head, hair, face and eyes point down local +X, toward the player.
+    m.sphere(1,headY,0,9,skin,5,9);
+    m.sphere(-1.5,headY+5,0,8.8,citizenHair,4,9);
+    m.sphere(8.9,headY+1,-3.2,1.25,[.95,.96,.87],3,6);
+    m.sphere(8.9,headY+1,3.2,1.25,[.95,.96,.87],3,6);
+    m.sphere(9.9,headY+1,-3.2,.65,[.10,.14,.17],3,5);
+    m.sphere(9.9,headY+1,3.2,.65,[.10,.14,.17],3,5);
+    if(urgent||isSOS)m.box(10,headY-5,0,1,3.8,3.5,[.25,.18,.17]);
+    else m.box(9.7,headY-5,0,1,1.1,5.5,[.28,.16,.15]);
+    // Arms are actual jointed geometry, not textures or stationary overlays.
+    // Different frame meshes produce overhead waving, water-treading, or cheers.
+    for(const side of [-1,1]){
+      const shoulder=[0,chestY+7,side*10.5];
+      let elbow,hand;
+      if(celebrating){
+        elbow=[4,chestY+17+Math.sin(phase+side)*2,side*13];
+        hand=[5+Math.sin(phase+side)*5,chestY+30+6*Math.sin(phase*1.0+side),side*15];
+      }else if(isSOS){
+        const raised=urgent?12:5;
+        const splashWave= Math.sin(phase+(side===-1?0:Math.PI));
+        elbow=[5,chestY+5+raised*.65+5*splashWave,side*14];
+        hand=[7+3*Math.cos(phase),chestY+13+raised+7*splashWave,side*18];
+      }else if(urgent){
+        elbow=[6,chestY+16+3*Math.sin(phase+side),side*13];
+        hand=[4+Math.cos(phase+side)*5,chestY+31+7*Math.sin(phase+side),side*17];
+      }else if(side===1){
+        elbow=[5,chestY+16+3*pace,side*13];
+        hand=[5+Math.cos(phase)*5,chestY+29+5*pace,side*16];
+      }else{
+        elbow=[0,chestY-5+2*pace,side*12];
+        hand=[3,chestY-12+2*counter,side*11];
+      }
+      citizenLimb(m,shoulder,elbow,3.7,shirt);
+      citizenLimb(m,elbow,hand,2.7,skin);
+      m.sphere(hand[0],hand[1],hand[2],3.1,skin,3,6);
+    }
+    // Stranded home students visibly retain a small school bag.
+    if(!isSOS&&!celebrating){
+      m.box(-9,chestY-2,0,5,16,13,[.24,.34,.36]);
+      m.box(-12,chestY+3,0,1.5,4,7,[.85,.67,.36]);
+    }
+    return m.upload();
+  }
+  const citizenFrames={};
+  for(const kind of reactionAnimations){
+    citizenFrames[kind]=studentColors.map(color=>
+      Array.from({length:REACTION_FRAMES},(_,frame)=>makeCitizenPose(color,kind,frame)));
+  }
+  const urgencyMarker=new Mesh();
+  urgencyMarker.box(0,6,0,3.4,13,3.4,[1,.31,.22]);
+  urgencyMarker.box(0,-5,0,4.3,4.5,4.3,[1,.67,.34]);
+  urgencyMarker.upload();
+  const happySparkle=new Mesh();
+  for(const x of [-1,1])for(const z of [-1,1]){
+    happySparkle.tri([0,12,0],[x*3,0,z*2],[0,-4,0],[.99,.85,.30]);
+    happySparkle.tri([0,-4,0],[x*3,0,z*2],[0,12,0],[.99,.76,.24]);
+  }
+  happySparkle.upload();
+  // These two bystanders stand beside, not on top of, the original animated
+  // shopkeepers. They respond when the rescue boat passes their storefronts.
+  const reactiveBystanders=[{x:-452,z:776,colorId:3},{x:407,z:606,colorId:4}];
+  function citizenFrame(kind,colorId,clock){
+    const frame=((Math.floor(clock*REACTION_FRAMES/TAU)%REACTION_FRAMES)+REACTION_FRAMES)%REACTION_FRAMES;
+    return citizenFrames[kind][colorId%studentColors.length][frame];
+  }
+  function passengerReaction(ride){
+    const px=ride.personX??ride.x,pz=ride.personZ??ride.z;
+    const d=distance(S.x,S.z,px,pz);
+    const urgent=ride.timeLeft<=25 || (ride.type==='DROWNING'&&ride.timeLeft<=40);
+    const responding=d<300;
+    const energetic=urgent||d<155;
+    const speed=energetic?3.4:responding?2.3:1.15;
+    const facing=Math.atan2(S.z-pz,S.x-px)/RAD;
+    return {px,pz,d,urgent,responding,energetic,speed,facing};
+  }
   const markerMesh=new Mesh();markerMesh.ring(0,0,0,36,6,[.97,.43,.27]);markerMesh.upload();
   const debrisMesh=new Mesh();debrisMesh.box(0,1,0,56,15,33,[.35,.30,.22]);debrisMesh.box(9,8,0,10,8,29,[.48,.34,.23]);debrisMesh.upload();
   // Python's distinct water-current direction clues: repeated arrows move
@@ -771,7 +880,7 @@
     powerVisual.repairedIndex=-1;powerVisual.repairedAt=-999;
     Object.assign(impactShake, {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0});
     Object.assign(boatImpact, {pitch:0,pitchV:0,roll:0,rollV:0,heave:0,heaveV:0,recoilX:0,recoilZ:0,cooldown:0});
-    S.waveStrength=0;S.waveSplashClock=0;S.waveSplashes=[];S.impactSplashes=[];
+    S.waveStrength=0;S.waveSplashClock=0;S.waveSplashes=[];S.impactSplashes=[];S.postWinClock=0;
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
@@ -1003,9 +1112,9 @@
     if(!S.powerOff){S.powerClock+=dt;if(S.powerClock>=15){S.powerOff=true;S.powerClock=0;notify(`${power[S.powerIndex].name} district power outage!`,2.6);}}
     if(S.request){S.requestLeft-=dt;if(S.requestLeft<=0){S.request=null;S.spawnClock=0;}}
     else {S.spawnClock+=dt;if(S.spawnClock>=9.5){S.spawnClock=0;offerRide();}}
-    for(const r of S.rides){r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(r.state==='ONBOARD'?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
+    for(const r of S.rides){r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);const wasOnboard=r.state==='ONBOARD';r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(wasOnboard?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
     S.rides=S.rides.filter(r=>r.state!=='FAILED');S.missedEffects=S.missedEffects.filter(e=>S.time-e.at<4.35);
-    S.deliveryEffects=S.deliveryEffects.filter(e=>S.time-e.at<1.65);
+    S.deliveryEffects=S.deliveryEffects.filter(e=>S.time-e.at<4.35);
     if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;for(const [i,r] of arrived.entries()){
       const seats=[[8,-19],[8,19],[67,0]], [bx,bz]=seats[Math.min(i,2)],h=S.angle*RAD;
       const startX=S.x+(bx*Math.cos(h)-bz*Math.sin(h))*.62,startZ=S.z+(bx*Math.sin(h)+bz*Math.cos(h))*.62;
@@ -1279,13 +1388,35 @@
       render(driverFrames[(f+24)%24],model(dx,9,dz,car.angle,1));
     }
     S.debris.forEach((d,i)=>render(sourceMeshes?.['debris-'+(i%3)]||debrisMesh,model(d.x,0,d.z,(i*57)%360,1)));
+    // Waiting students react to both the incoming boat and their remaining time.
+    // Their arms are animated mesh poses, with distinct home/SOS movements.
     for(const r of S.rides)if(r.state==='WAITING'){
-      const bounce=Math.sin(S.bobTime*4+r.id)*2;
-      const home=r.type==='HOME';
-      const px=r.personX??r.x,pz=r.personZ??r.z;
-      if(home){render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],model(px,19+.6*Math.sin(S.bobTime*3+r.id),pz,-90+Math.sin(S.bobTime*2+r.id)*5,.63));}
-      else {const frame=Math.floor((S.time*3.25)%24);const anim=sourceMeshes?.['struggling-'+frame];if(anim)render(anim,model(px,0,pz,0,1));else render(npcMeshes[r.colorId],model(px,8+bounce,pz,-90,.70));}
+      const mood=passengerReaction(r),home=r.type==='HOME';
+      const kind=(home?'HOME':'SOS')+(mood.energetic?'_URGENT':'');
+      const clock=S.time*mood.speed+r.id*.65;
+      const bob=(home?.6:1.5)*Math.sin(S.time*(mood.energetic?6.1:3.0)+r.id);
+      const y=home?19+bob:10+bob;
+      const scale=home?.74:.90;
+      render(citizenFrame(kind,r.colorId,clock),model(mood.px,y,mood.pz,mood.facing,scale));
+      if(mood.urgent){
+        const blink=.8+.22*Math.sin(S.time*9+r.id);
+        render(urgencyMarker,model(mood.px,y+(home?47:31)+3*Math.sin(S.time*4+r.id),mood.pz,0,blink));
+      }
+      if(!home&&mood.responding){
+        // Water agitation grows near rescuers or near the deadline.
+        const pulse=.55+.18*Math.sin(S.time*(mood.urgent?9:5)+r.id);
+        render(waterRipple,model(mood.px,9.75,mood.pz,0,mood.urgent?1.1+pulse:pulse));
+      }
       render(markerMesh,model(r.x,3+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
+    }
+    for(const c of reactiveBystanders){
+      const d=distance(S.x,S.z,c.x,c.z);
+      if(d>850)continue;
+      const alert=d<300;
+      const kind=alert?'HOME_URGENT':'HOME';
+      const facing=alert?Math.atan2(S.z-c.z,S.x-c.x)/RAD:-90;
+      render(citizenFrame(kind,c.colorId,S.time*(alert?2.6:.7)+c.colorId),
+        model(c.x,22+.7*Math.sin(S.bobTime*2+c.colorId),c.z,facing,.70));
     }
     if(S.request){/* Offered riders appear on the map, not in the city until accepted. */}
     for(const splash of S.pickupEffects){const age=S.time-splash.at;
@@ -1336,9 +1467,20 @@
       });
       // Original BRACU drop-off: students leave their seats and walk to the dock.
       for(const e of S.deliveryEffects){
-        const progress=clamp((S.time-e.at)/1.65,0,1),walk=progress*progress*(3-2*progress);
-        const x=e.x0+(e.x1-e.x0)*walk,z=e.z0+(e.z1-e.z0)*walk,y=e.y0+(30-e.y0)*walk+8*Math.sin(Math.PI*progress);
-        render(sourceMeshes?.['student-'+e.colorId]||npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
+        const age=S.time+(S.mode==='WON'?S.postWinClock:0)-e.at;
+        if(age>4.35)continue;
+        const progress=clamp(age/1.65,0,1),walk=progress*progress*(3-2*progress);
+        const x=e.x0+(e.x1-e.x0)*walk,z=e.z0+(e.z1-e.z0)*walk;
+        const celebrating=age>=1.65;
+        const jump=celebrating?Math.abs(Math.sin((age-1.65)*6.2))*5:8*Math.sin(Math.PI*progress);
+        const y=e.y0+(30-e.y0)*walk+jump;
+        if(celebrating){
+          render(citizenFrame('CELEBRATE',e.colorId,age*3.6+e.colorId),model(x,y,z,-90,.62));
+          for(let k=0;k<3;k++){
+            const angle=S.time*2.1+k*TAU/3+e.colorId;
+            render(happySparkle,model(x+22*Math.cos(angle),y+26+5*Math.sin(S.time*4+k),z+22*Math.sin(angle),angle/RAD,.45));
+          }
+        }else render(sourceMeshes?.['student-'+e.colorId]||npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
       }
       for(const effect of S.missedEffects){
         const age=S.time-effect.at;
@@ -1365,11 +1507,11 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights};}
-  window.majhiVersion='fidelity9';
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),powerRepairFX:powerVisual.repairedIndex,impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
+  window.majhiVersion='fidelity9-reactive-citizens';
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
-    if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else S.bobTime+=dt*.5;
+    if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else {S.bobTime+=dt*.5;if(S.mode==='WON')S.postWinClock=(S.postWinClock||0)+dt;}
     const frameStart=performance.now();try{draw();renderRain(dt);}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
     S.frameMS=performance.now()-frameStart;S.frameWorst=Math.max(S.frameWorst*.999,S.frameMS);hudClock+=dt;if(hudClock>.11){hudClock=0;if(S.mode!=='MENU')refreshHUD();}
   }
