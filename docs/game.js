@@ -570,7 +570,7 @@
   // driver quarrels; the vehicles never steal the player's rescue missions.
   function createRickshawFleet(){return [
     {id:0,name:'Rickshaw Salam',x:-1100,z:500,angle:0,speed:81,colorId:1,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0,incidentCar:null,quarrelUntil:0,nextCrashAt:31,wheelSpin:0},
-    {id:1,name:'Rickshaw Babul',x:1100,z:-50,angle:180,speed:90,colorId:4,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0,incidentCar:null,quarrelUntil:0,nextCrashAt:56,wheelSpin:1.8},
+    {id:1,name:'Rickshaw Masud',x:1100,z:-50,angle:180,speed:90,colorId:4,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0,incidentCar:null,quarrelUntil:0,nextCrashAt:56,wheelSpin:1.8},
     {id:2,name:'Rickshaw Liton',x:550,z:1050,angle:270,speed:85,colorId:2,waypoints:[],targetId:null,pause:0,rescuedAt:-99,rescuedColor:0,deliveries:0,incidentCar:null,quarrelUntil:0,nextCrashAt:79,wheelSpin:3.3}
   ];}
   function chooseRickshawTarget(r){
@@ -599,7 +599,7 @@
   function beginRickshawQuarrel(r){
     const car=parkedCars[r.incidentCar];
     if(!car)return;
-    r.quarrelUntil=S.time+6.2;r.pause=0;r.waypoints=[];
+    r.quarrelUntil=S.time+15.0;r.pause=0;r.waypoints=[];
     S.rickshawQuarrels.push({id:r.id,carIndex:r.incidentCar,at:S.time,until:r.quarrelUntil});
     S.rickshawCrashCount++;
     S.pickupEffects.push({x:(car.x+r.x)*.5,z:(car.z+r.z)*.5,at:S.time,type:'RICKSHAW_BUMP'});
@@ -1570,255 +1570,384 @@
       }
     }
   }
-  const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0};
+  const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0};
 
-  // DHAKA SOUNDSCAPE — packaged original sound design and original Bengali
-  // synthetic voice clips. All assets are local to GitHub Pages under docs/audio.
-  // Voice recordings can later replace the MP3s without modifying game logic.
+  // DHAKA AUDIO V2 — natural user-recorded voices, seven selected memes,
+  // menu song and flashlight scare, backed by the existing nonverbal SFX.
+  // All paths below exist in the supplied docs/audio/ package.
   const gameAudio=(()=>{
-    // Original locally packaged audio. Speech uses different synthesized Bengali
-    // character profiles, not recordings or voice clones of real people.
-    const assets=["bell_1", "bell_2", "car_horn", "city", "cng_driver", "cng_driver_2", "cng_driver_3", "cng_engine", "cng_horn_1", "cng_horn_2", "current", "current_warn", "delivery", "electric", "guard_denied", "guard_id_1", "guard_id_2", "guard_id_3", "guard_id_4", "guard_pass", "guard_rule", "impact_1", "impact_2", "market_crowd", "meme_argument", "meme_boing", "meme_heaven", "meme_oops", "meme_quiz", "meme_stamp", "meme_success", "meme_sus", "neighbor_light", "neighbor_window", "paddle_1", "paddle_2", "paddle_3", "passenger_board", "passenger_help", "passenger_laptop", "passenger_thanks", "pickup", "power_cheer", "power_restore", "rain", "rain_heavy", "rickshaw_0", "rickshaw_1", "rickshaw_2", "rickshaw_3", "rickshaw_bell_1", "rickshaw_boss_1", "rickshaw_boss_2", "rickshaw_boss_3", "rickshaw_boss_4", "rickshaw_chain", "rickshaw_pickup", "rickshaw_pickup_new", "rickshaw_quarrel_1", "rickshaw_quarrel_2", "rickshaw_quarrel_3", "rickshaw_quarrel_4", "rickshaw_redlight", "rickshaw_sassy_1", "rickshaw_sassy_2", "shop_tea_1", "shop_tea_2", "shopkeeper", "student_angry_2", "student_angry_3", "student_assignment", "student_attendance_1", "student_attendance_2", "student_cgpa_1", "student_cgpa_2", "student_id_forgot", "student_no_id", "student_registrar_1", "student_registrar_2", "student_rescued_1", "student_rescued_2", "student_semester_1", "student_semester_2", "swimmer_current", "swimmer_help_1", "swimmer_help_2", "swimmer_help_3", "swimmer_rain", "swimmer_rescued", "thunder", "warning", "water"];
-    const voiceMeta={"swimmer_help_1": {"role": "STRANDED RESIDENT", "text": "মাঝি ভাই, এদিকে আসেন! পানিতে টান দিচ্ছে!"}, "swimmer_help_2": {"role": "SWIMMER", "text": "ওই যে নৌকা! ভাই, আমাকে উঠান!"}, "swimmer_help_3": {"role": "STRANDED RESIDENT", "text": "সাঁতার কাটতে কাটতে হাঁপাইয়া গেছি ভাই!"}, "swimmer_current": {"role": "SWIMMER", "text": "স্রোত অনেক বেশি, সাবধানে আসেন!"}, "swimmer_rescued": {"role": "STRANDED RESIDENT", "text": "বাঁচাইছেন ভাই, আল্লাহ ভরসা!"}, "swimmer_rain": {"role": "STRANDED RESIDENT", "text": "এই বৃষ্টি আর থামবে না নাকি!"}, "student_registrar_1": {"role": "BRACU STUDENT", "text": "রেজিস্ট্রার অফিসে ইমেইল করছি, রিপ্লাই নাই!"}, "student_registrar_2": {"role": "BRACU STUDENT", "text": "বন্যায় আসছি তাও এক্সটেনশন দেয় না!"}, "student_cgpa_1": {"role": "BRACU STUDENT", "text": "ভাই, তোমার সিজিপিএ কত?"}, "student_cgpa_2": {"role": "BRACU STUDENT", "text": "সিজিপিএ জিজ্ঞেস কইরো না ভাই!"}, "student_semester_1": {"role": "BRACU STUDENT", "text": "তুমি এখন কোন সেমিস্টারে?"}, "student_semester_2": {"role": "BRACU STUDENT", "text": "এই সেমিস্টার শেষ হলেই বাঁচি!"}, "student_attendance_1": {"role": "BRACU STUDENT", "text": "একটা ক্লাস মিস করলে অ্যাটেনডেন্স যাবে!"}, "student_attendance_2": {"role": "BRACU STUDENT", "text": "বন্যার মাঝেও কুইজ! এটা কেমন কথা!"}, "student_assignment": {"role": "BRACU STUDENT", "text": "ভাই ল্যাপটপে আমার থিসিস আছে!"}, "student_rescued_1": {"role": "BRACU STUDENT", "text": "নৌকায় উঠতে পারছি, এখন ক্যাম্পাসে চলেন!"}, "student_rescued_2": {"role": "BRACU STUDENT", "text": "মাঝি ভাই, ফাইভ স্টার রেটিং পাবেন!"}, "student_id_forgot": {"role": "BRACU STUDENT", "text": "স্যার, আইডি কার্ডটা বাসায় রেখে এসেছি!"}, "rickshaw_boss_1": {"role": "RICKSHAW DRIVER", "text": "মামা, রাস্তা আমার! আগে যেতে দেন!"}, "rickshaw_boss_2": {"role": "RICKSHAW DRIVER", "text": "এই পানি আমারে থামাইতে পারবো না!"}, "rickshaw_boss_3": {"role": "RICKSHAW DRIVER", "text": "রিকশার স্পিড দেখছেন? ফর্মুলা ওয়ান!"}, "rickshaw_boss_4": {"role": "RICKSHAW DRIVER", "text": "ওস্তাদ মানুষ, রাস্তা চিনাইতে আইসেন না!"}, "rickshaw_bell_1": {"role": "RICKSHAW DRIVER", "text": "সাইড দেন মামা! জরুরি প্যাসেঞ্জার!"}, "rickshaw_quarrel_1": {"role": "RICKSHAW DRIVER", "text": "মামা, সামনে চোখ আছে না?"}, "rickshaw_quarrel_2": {"role": "RICKSHAW DRIVER", "text": "গাড়ি পার্ক করছেন নদীর মধ্যে কেন?"}, "rickshaw_quarrel_3": {"role": "RICKSHAW DRIVER", "text": "আমি কী করুম? রাস্তাই তো ভাসে!"}, "rickshaw_quarrel_4": {"role": "RICKSHAW DRIVER", "text": "আচ্ছা যান, আজকে মাফ করলাম!"}, "rickshaw_pickup_new": {"role": "RICKSHAW DRIVER", "text": "উঠেন মামা, আমার রিকশা সাবমেরিন!"}, "rickshaw_redlight": {"role": "RICKSHAW DRIVER", "text": "লাল বাতি? পানির নিচে কই দেখমু!"}, "cng_driver_2": {"role": "CNG DRIVER", "text": "এই রাস্তায় সিএনজি চালানো যুদ্ধ ভাই!"}, "cng_driver_3": {"role": "CNG DRIVER", "text": "মিটার চলবে, পানি চলবে, সব চলবে!"}, "guard_id_1": {"role": "BRACU SECURITY", "text": "আইডি কার্ড দেখান। নিয়ম সবার জন্য এক।"}, "guard_id_2": {"role": "BRACU SECURITY", "text": "বন্যা হলেও ক্লাস বন্ধ নাই। ভিতরে যান!"}, "guard_id_3": {"role": "BRACU SECURITY", "text": "আইডি নাই? সরি, এন্ট্রি হবে না।"}, "guard_id_4": {"role": "BRACU SECURITY", "text": "ইমেইল করেন, কিন্তু আইডি লাগবেই!"}, "shop_tea_1": {"role": "SHOPKEEPER", "text": "গরম চা আছে! পানির মধ্যেও দোকান খোলা!"}, "shop_tea_2": {"role": "SHOPKEEPER", "text": "ভাই, বিস্কুট ভিজায়া খাবেন নাকি!"}, "neighbor_window": {"role": "NEIGHBOR", "text": "ছাদ থেকে দেখতেছি, সব রাস্তা নদী!"}, "neighbor_light": {"role": "NEIGHBOR", "text": "এই তো আলো আইলো! ফ্রিজটা বাঁচলো!"}, "student_angry_2": {"role": "BRACU STUDENT", "text": "স্যার, এত কষ্ট করে আইসা ঢুকতে পারব না?"}, "student_angry_3": {"role": "BRACU STUDENT", "text": "এই বৃষ্টিতে আবার আইডি আনতে যামু!"}, "rickshaw_0": {"role": "RICKSHAW DRIVER", "text": "মামা, সামনে দেখেন না?"}, "rickshaw_1": {"role": "RICKSHAW DRIVER", "text": "আপনিও তো রাস্তার মাঝে!"}, "rickshaw_2": {"role": "RICKSHAW DRIVER", "text": "গাড়িটা দেখেন কী অবস্থা!"}, "rickshaw_3": {"role": "RICKSHAW DRIVER", "text": "রাস্তা তো নদী, ভাই!"}, "rickshaw_sassy_1": {"role": "RICKSHAW DRIVER", "text": "আমারে আগে যেতে দেন!"}, "rickshaw_sassy_2": {"role": "RICKSHAW DRIVER", "text": "নিয়ম মানলে কি আর রিকশা চালানো যায়?"}, "rickshaw_pickup": {"role": "RICKSHAW DRIVER", "text": "উঠেন, নিরাপদে পৌঁছে দিই!"}, "passenger_help": {"role": "STRANDED RESIDENT", "text": "ভাই, আমাকে বাঁচান!"}, "passenger_board": {"role": "BRACU STUDENT", "text": "ভাই, তাড়াতাড়ি করেন, ক্লাস মিস হবে!"}, "passenger_laptop": {"role": "BRACU STUDENT", "text": "ল্যাপটপটা আগে বাঁচান!"}, "passenger_thanks": {"role": "BRACU STUDENT", "text": "ধন্যবাদ, মাঝি ভাই!"}, "shopkeeper": {"role": "SHOPKEEPER", "text": "দোকানের মাল উপরে তুলেন!"}, "cng_driver": {"role": "CNG DRIVER", "text": "রাস্তায় পানি, সিএনজি যাবে না ভাই!"}, "power_cheer": {"role": "NEIGHBOR", "text": "আলো এসেছে, বিদ্যুৎ এসেছে!"}, "guard_denied": {"role": "BRACU SECURITY", "text": "আইডি কার্ড ছাড়া ঢোকা যাবে না।"}, "guard_rule": {"role": "BRACU SECURITY", "text": "নিয়ম তো নিয়ম, ভাই!"}, "student_no_id": {"role": "BRACU STUDENT", "text": "স্যার, বন্যায় এসেছি, কার্ড আনতে ভুলেছি!"}, "guard_pass": {"role": "BRACU SECURITY", "text": "আইডি ঠিক আছে। ক্লাস চলছে, ভেতরে যান!"}, "current_warn": {"role": "STRANDED RESIDENT", "text": "ওই দিকে স্রোত বেশি, সাবধানে!"}};
-    const voiceNames=new Set(Object.keys(voiceMeta));
-    let ctx=null, master=null, ambient=null, effects=null, voices=null, limiter=null;
-    let ready=false,started=false,loading=null;
-    const buffers={},loops={},cooldowns=new Map(),quarrelTurn=new Map();
-    let on=true,speech=true,captionsOn=true,volume=.78,voiceUserVolume=1.0;
-    const ambientVolume=.64,voicesVolume=1.28;
-    let activeVoice=null,voiceBusyUntil=0,activeVoicePriority=-1,subtitleUntil=0;
-    let clock=0,hornAt=8,bellAt=4.5,thunderAt=35,peopleAt=10,paddleAt=0;
-    let impactVariant=0,paddleVariant=0,bellVariant=0,hornVariant=0,dialogueCounter=0;
-    let redLightTauntAt=-80,lastZone='',lastGateKey='',lastAiRescues=0;
-    let ui=null,subtitle=null;
-    const pick=(a)=>a[Math.floor(Math.random()*a.length)];
-    const subtitleStatus=()=>subtitle&&subtitle.classList.contains('mj-voice-show');
-    function status(msg){const el=ui?.querySelector('[data-audio-status]');if(el)el.textContent=msg;}
-    async function init(){
+    const voiceText={
+      rickshaw_salam_01:['SALAM','মামা, রাস্তা ছাড়েন! আমি এক্সপার্ট ড্রাইভার, বুঝছেন?'],
+      rickshaw_salam_02:['SALAM','এই মামা! সামনে দেখেন না? গাড়ি চালান নাকি ঘুমান?'],
+      rickshaw_salam_03:['SALAM','উঠেন মামা, উঠেন! আমার রিকশায় উঠলে কোনো টেনশন নাই!'],
+      rickshaw_masud_01:['MASUD','এই মামা, সাইড দেন! মাসুদ ভাই আসতেছে! এই রাস্তায় আমারে আটকায় কে?'],
+      rickshaw_masud_02:['MASUD','দোষ আমার? আমার রিকশার সামনে গাড়ি রাখছেন কেন? চোখে দেখেন না?'],
+      rickshaw_masud_03:['MASUD','পুরা ঢাকা ডুইবা গেলেও মাসুদ ভাইয়ের রিকশা থামবে না!'],
+      rickshaw_liton_01:['LITON','মামা, হর্ন দিয়া লাভ নাই! এই পানিতে আমার রিকশাই স্পিডবোট!'],
+      rickshaw_liton_02:['LITON','আরে ভাই, একটু ঘষা লাগছে! এত নাটক করার কী আছে?'],
+      rickshaw_liton_03:['LITON','উঠেন, উঠেন! লিটন থাকতে কাউরে পানিতে থাকতে হবে না!'],
+      guard_rahman_01:['UNCLE RAHMAN','আইডি কার্ড ঠিক আছে। যান, তাড়াতাড়ি ক্লাসে ঢোকেন।'],
+      guard_rahman_02:['UNCLE RAHMAN','এই যে! আইডি কার্ড কোথায়? আইডি ছাড়া ক্যাম্পাসে ঢোকা যাবে না!'],
+      guard_rahman_03:['UNCLE RAHMAN','পুরা ঢাকা পানির নিচে থাকলেও নিয়ম তো নিয়ম! আগে আইডি আনেন!'],
+      student_id_missing_01:['BRACU STUDENT','আঙ্কেল! আইডি কার্ডটা বাসায় রয়ে গেছে! আজকে একটু ঢুকতে দেন!'],
+      student_id_missing_02:['BRACU STUDENT','আঙ্কেল প্লিজ! আজকে অ্যাটেনডেন্স মিস করলে শেষ!'],
+      student_id_missing_03:['BRACU STUDENT','আঙ্কেল, পুরা ঢাকা ডুইবা গেছে! আর আপনি আইডি কার্ড নিয়া বসে আছেন?!'],
+      student_adittya_01:['ADITTYA','রেজিস্ট্রার অফিসে তিনবার মেইল দিছি। এখনো একটা রিপ্লাই নাই!'],
+      student_adittya_02:['ADITTYA','তোর সিজিপিএ কত? থাক ভাই, আমারটা জিজ্ঞেস করিস না!'],
+      student_adittya_03:['ADITTYA','পুরা ঢাকা ডুইবা গেছে, আর আমাদের কালকে সকাল আটটায় কুইজ!'],
+      student_nafisa_01:['NAFISA','আজকে প্রেজেন্টেশন! পুরা রাস্তা পানির নিচে, কিন্তু ক্লাস ক্যানসেল না!'],
+      student_nafisa_02:['NAFISA','আর একটা সেমিস্টার বাকি! তার আগেই ঢাকা পুরা নদী হয়ে গেছে!'],
+      student_nafisa_03:['NAFISA','তোর আইডি কার্ড ব্যাগে আছে তো? আঙ্কেল গেটে আটকাবে কিন্তু!'],
+      civilian_shamim_01:['SHAMIM','এই যে ভাই! এদিকে! আমি পানিতে আটকা পড়ছি!'],
+      civilian_shamim_02:['SHAMIM','তাড়াতাড়ি করেন! স্রোত অনেক বেশি! আমি আর ধরে রাখতে পারতেছি না!'],
+      civilian_shamim_03:['SHAMIM','ভাই, আপনি না আসলে আজকে কী যে হইতো! অনেক ধন্যবাদ!'],
+      civilian_mitu_01:['MITU','নৌকাটা এদিকে আনেন! রাস্তা খুঁজতে আইসা দেখি নদী!'],
+      civilian_mitu_02:['MITU','স্রোত আমারে টানতেছে! ঢাকার রাস্তা চলে না, কিন্তু পানির স্পিড দেখছেন?!'],
+      civilian_mitu_03:['MITU','অবশেষে বাঁচলাম! এখন নৌকার জন্যও অপেক্ষা করতে হয়! ধন্যবাদ ভাই!'],
+      cng_jashim_01:['JASHIM','মামা, সিএনজি লাগবে? এই পানিতে ভাড়া একটু বেশি!'],
+      cng_jashim_02:['JASHIM','এই রিকশাওয়ালা মামা! পুরা রাস্তা আপনার বাপের নাকি?'],
+      cng_jashim_03:['JASHIM','সিএনজি আর চলে না! এখন আমাকেই নৌকা ভাড়া করতে হবে!'],
+      shopkeeper_kuddus_01:['KUDDUS CHACHA','চা খাবেন? দোকান ডুইবা গেছে, কিন্তু কেটলি এখনো গরম!'],
+      shopkeeper_kuddus_02:['KUDDUS CHACHA','রাস্তা নদী হইয়া গেছে, কিন্তু বাকির খাতা শুকনা আছে!'],
+      shopkeeper_kuddus_03:['KUDDUS CHACHA','ওই রিকশাওয়ালা! আমার দোকানের সামনে রেস লাগাইছেন কেন?'],
+      menu_majhi_call:['SALAM','মামা! ব্র্যাকু যাবেন? ক্লাস কিন্তু বন্ধ নাই!']
+    };
+    const voicesByPerson={rickshaw_salam:['rickshaw_salam_01','rickshaw_salam_02','rickshaw_salam_03'],
+      rickshaw_masud:['rickshaw_masud_01','rickshaw_masud_02','rickshaw_masud_03'],
+      rickshaw_liton:['rickshaw_liton_01','rickshaw_liton_02','rickshaw_liton_03']};
+    const ambientNames=['rain','rain_heavy','water','current','city','cng_engine','rickshaw_chain','market_crowd'];
+    const legacySfx=['bell_1','bell_2','car_horn','cng_horn_1','cng_horn_2','delivery','electric','impact_1','impact_2',
+      'paddle_1','paddle_2','paddle_3','pickup','power_restore','thunder','warning'];
+    const memes=['meme_error','meme_heavenly_choir','meme_metal_pipe','meme_mission_passed',
+      'meme_record_scratch','meme_sad_trombone','meme_vine_boom'];
+    const exitNames=['exit_horror_riser','exit_flashlight_click','exit_impact'];
+    const paths={};
+    for(const n of Object.keys(voiceText))paths[n]=`./audio/voices/${n}.wav`;
+    for(const n of [...ambientNames,...legacySfx])paths[n]=`./audio/${n}.mp3`;
+    for(const n of memes)paths[n]=`./audio/meme/${n}.mp3`;
+    for(const n of exitNames)paths[n]=`./audio/sfx/${n}.mp3`;
+    paths.menu_music='./audio/ambience/menu_music.mp3';
+    const alias={
+      swimmer_help_1:'civilian_shamim_01',swimmer_help_2:'civilian_mitu_01',swimmer_help_3:'civilian_shamim_01',
+      swimmer_current:'civilian_shamim_02',current_warn:'civilian_shamim_02',swimmer_rescued:'civilian_shamim_03',
+      swimmer_rain:'civilian_mitu_01',passenger_help:'civilian_shamim_01',
+      student_registrar_1:'student_adittya_01',student_registrar_2:'student_adittya_01',
+      student_cgpa_1:'student_adittya_02',student_cgpa_2:'student_adittya_02',
+      student_semester_1:'student_nafisa_02',student_semester_2:'student_nafisa_02',
+      student_attendance_1:'student_nafisa_01',student_attendance_2:'student_adittya_03',
+      student_assignment:'student_nafisa_01',student_rescued_1:'student_nafisa_01',
+      student_rescued_2:'student_adittya_02',passenger_board:'student_nafisa_01',
+      passenger_laptop:'student_nafisa_01',passenger_thanks:'student_nafisa_02',
+      student_id_forgot:'student_id_missing_01',student_no_id:'student_id_missing_01',
+      student_angry_2:'student_id_missing_02',student_angry_3:'student_id_missing_03',
+      guard_pass:'guard_rahman_01',guard_denied:'guard_rahman_02',guard_rule:'guard_rahman_03',
+      guard_id_1:'guard_rahman_01',guard_id_2:'guard_rahman_01',guard_id_3:'guard_rahman_02',guard_id_4:'guard_rahman_03',
+      cng_driver:'cng_jashim_01',cng_driver_2:'cng_jashim_02',cng_driver_3:'cng_jashim_03',
+      shopkeeper:'shopkeeper_kuddus_01',shop_tea_1:'shopkeeper_kuddus_01',shop_tea_2:'shopkeeper_kuddus_02',
+      rickshaw_boss_1:'rickshaw_masud_01',rickshaw_boss_2:'rickshaw_salam_01',
+      rickshaw_boss_3:'rickshaw_liton_01',rickshaw_boss_4:'rickshaw_masud_01',
+      rickshaw_pickup:'rickshaw_salam_03',rickshaw_pickup_new:'rickshaw_masud_03',
+      rickshaw_quarrel_1:'rickshaw_salam_02',rickshaw_quarrel_2:'rickshaw_masud_02',
+      rickshaw_quarrel_3:'rickshaw_liton_02',rickshaw_quarrel_4:'rickshaw_masud_02',
+      rickshaw_redlight:'rickshaw_masud_01',rickshaw_bell_1:'rickshaw_liton_01',
+      rickshaw_sassy_1:'rickshaw_masud_01',rickshaw_sassy_2:'rickshaw_liton_01',
+      rickshaw_0:'rickshaw_salam_02',rickshaw_1:'rickshaw_masud_02',
+      rickshaw_2:'rickshaw_liton_02',rickshaw_3:'rickshaw_masud_02',
+      power_cheer:'student_nafisa_02',neighbor_window:'student_nafisa_01',neighbor_light:'student_nafisa_02'
+    };
+    const buffers={},loops={},cooldowns=new Map(),quarrelsSeen=new Set();
+    let ctx=null,master=null,ambient=null,effects=null,voices=null,limiter=null;
+    let loading=null,ready=false,started=false,on=true,speech=true,captionsOn=true;
+    let volume=.78,voiceUserVolume=1,activeVoice=null,activeVoicePriority=-1,voiceBusyUntil=0;
+    let menuCalled=false,exitBusyUntil=0,lastZone='',lastAiRescues=0;
+    let clock=0,peopleAt=10,bellAt=8,hornAt=9,thunderAt=25,paddleAt=0;
+    let subtitle=null,ui=null,subtitleUntil=0;
+    let lastCampusHeaven=false,rewardShownUntil=0,lastHtmlExit=0;
+    const pick=a=>a[Math.floor(Math.random()*a.length)];
+    const sayMeta=n=>voiceText[alias[n]||n];
+    const status=message=>{const item=ui?.querySelector('[data-audio-status]');if(item)item.textContent=message;};
+    function init(){
+      // Set loading before awaiting anything: a menu pointerdown immediately
+      // followed by Start Rescue must not create two AudioContexts.
       if(loading)return loading;
-      const Audio=window.AudioContext||window.webkitAudioContext;
-      if(!Audio){status('Audio unavailable');return false;}
-      try{
-        ctx=new Audio();master=ctx.createGain();ambient=ctx.createGain();effects=ctx.createGain();voices=ctx.createGain();
-        limiter=ctx.createDynamicsCompressor();limiter.threshold.value=-15;limiter.knee.value=16;
-        limiter.ratio.value=4;limiter.attack.value=.006;limiter.release.value=.2;
-        ambient.connect(master);effects.connect(master);voices.connect(master);master.connect(limiter);limiter.connect(ctx.destination);
-        master.gain.value=volume;ambient.gain.value=ambientVolume;effects.gain.value=.88;
-        voices.gain.value=voicesVolume*voiceUserVolume;
-        await ctx.resume();
-      }catch(e){console.warn('Dhaka audio initialization:',e);status('Audio unavailable');return false;}
-      status('Loading Dhaka…');
       loading=(async()=>{
-        const outcomes=await Promise.allSettled(assets.map(async name=>{
-          const response=await fetch('./audio/'+name+'.mp3');
-          if(!response.ok)throw Error(name+' '+response.status);
-          buffers[name]=await ctx.decodeAudioData(await response.arrayBuffer());
-        }));
-        const failed=outcomes.filter(v=>v.status==='rejected');
-        if(failed.length)console.warn('Missing Dhaka audio assets',failed.length,failed.slice(0,4));
+        const AudioContext=window.AudioContext||window.webkitAudioContext;
+        if(!AudioContext){status('Audio unavailable');return false;}
+        try{
+          ctx=new AudioContext();master=ctx.createGain();ambient=ctx.createGain();effects=ctx.createGain();voices=ctx.createGain();
+          limiter=ctx.createDynamicsCompressor();limiter.threshold.value=-14;limiter.knee.value=14;
+          limiter.ratio.value=4;limiter.attack.value=.005;limiter.release.value=.18;
+          ambient.connect(master);effects.connect(master);voices.connect(master);master.connect(limiter);limiter.connect(ctx.destination);
+          await ctx.resume();
+        }catch(error){console.warn('Majhi audio unavailable:',error);status('Audio unavailable');return false;}
+        status('Loading Dhaka audio…');
+        const jobs=Object.entries(paths).map(async([name,path])=>{
+          try{const response=await fetch(path);if(!response.ok)throw Error(response.status);
+            buffers[name]=await ctx.decodeAudioData(await response.arrayBuffer());
+          }catch(error){console.warn('Audio missing:',path,error.message);}
+        });
+        await Promise.all(jobs);
         ready=Object.keys(buffers).length>0;
-        if(ready){for(const n of ['rain','rain_heavy','water','current','city','cng_engine','rickshaw_chain','market_crowd'])startLoop(n);applyMix();}
-        status(failed.length?`${failed.length} sound files missing`:'Dhaka soundscape ready');
+        if(ready){for(const n of [...ambientNames,'menu_music'])startLoop(n);updateMix();}
+        status(`${Object.keys(buffers).length}/${Object.keys(paths).length} audio clips ready`);
         return ready;
-      })();return loading;
+      })();
+      return loading;
     }
     function startLoop(name){
       if(!ctx||!buffers[name]||loops[name])return;
       const src=ctx.createBufferSource(),gain=ctx.createGain();src.buffer=buffers[name];src.loop=true;
       gain.gain.value=0;src.connect(gain);gain.connect(ambient);
-      src.start(0,Math.random()*Math.max(.01,src.buffer.duration-.5));loops[name]={src,gain};
+      src.start();loops[name]={src,gain};
     }
-    function applyMix(){
+    function updateMix(){
       if(!ctx||!master)return;
-      const active=started&&on&&S.mode==='PLAYING',campus=campusRainWeight(S.x,S.z);
-      const voiceActive=active&&(ctx.currentTime<voiceBusyUntil);
-      const nearestCng=parkedCars.filter((_,i)=>dhakaVehicleType(i)==='cng').reduce((d,c)=>Math.min(d,distance(S.x,S.z,c.x,c.z)),9999);
-      const nearestRick=S.aiRickshaws.reduce((d,r)=>Math.min(d,distance(S.x,S.z,r.x,r.z)),9999);
-      const bazaar=Math.min(distance(S.x,S.z,320,715),distance(S.x,S.z,-367,885),distance(S.x,S.z,178,885));
-      const levels={rain:active?.35*campus:0,rain_heavy:active?.09*campus:0,
-        water:active?.25:0,current:active?.43*(S.waveStrength||0):0,city:active?.50*campus:0,
-        cng_engine:active?.22*clamp(1-nearestCng/530,0,1):0,
-        rickshaw_chain:active?.16*clamp(1-nearestRick/310,0,1):0,
-        market_crowd:active?.19*clamp(1-bazaar/380,0,1):0};
-      for(const [name,level] of Object.entries(levels))if(loops[name])
-        loops[name].gain.gain.setTargetAtTime(level,ctx.currentTime,.38);
-      // Important dialogue automatically ducks the background city and rain.
-      ambient.gain.setTargetAtTime(ambientVolume*(voiceActive?.28:1),ctx.currentTime,voiceActive?.06:.45);
-      effects.gain.setTargetAtTime(voiceActive?.55:.88,ctx.currentTime,.16);
+      const playing=S.mode==='PLAYING',menu=S.mode==='MENU',active=on&&(playing||menu);
+      const nearCampus=playing?1-campusRainWeight(S.x,S.z):0;
+      const voiceActive=ctx.currentTime<voiceBusyUntil;
+      const nearestCng=parkedCars.filter((_,i)=>dhakaVehicleType(i)==='cng')
+        .reduce((d,c)=>Math.min(d,distance(S.x,S.z,c.x,c.z)),99999);
+      const nearestRick=(S.aiRickshaws||[]).reduce((d,r)=>Math.min(d,distance(S.x,S.z,r.x,r.z)),99999);
+      const bazaar=Math.min(...dhakaShopFronts.map(([x,z])=>distance(S.x,S.z,x,z)));
+      const levels={rain:active?(playing?.34*campusRainWeight(S.x,S.z):.16):0,
+        rain_heavy:active?(playing?.09*campusRainWeight(S.x,S.z):.045):0,
+        water:active?(playing?.22:.13):0,current:playing?.35*S.waveStrength:0,
+        city:active?(playing?.31*campusRainWeight(S.x,S.z):.19):0,
+        cng_engine:playing?.19*clamp(1-nearestCng/580,0,1):0,
+        rickshaw_chain:playing?.16*clamp(1-nearestRick/350,0,1):0,
+        market_crowd:playing?.14*clamp(1-bazaar/430,0,1):0,
+        menu_music:menu?.36:0};
+      for(const [name,level] of Object.entries(levels))if(loops[name])loops[name].gain.gain.setTargetAtTime(level,ctx.currentTime,.33);
+      ambient.gain.setTargetAtTime(voiceActive?.45:.79,ctx.currentTime,.14);
+      effects.gain.setTargetAtTime(voiceActive?.55:.92,ctx.currentTime,.15);
+      voices.gain.setTargetAtTime(speech?Math.min(1.38,1.11*voiceUserVolume):0,ctx.currentTime,.14);
       master.gain.setTargetAtTime(on?volume:0,ctx.currentTime,.1);
-      voices.gain.setTargetAtTime(speech?voicesVolume*voiceUserVolume:0,ctx.currentTime,.12);
     }
-    function showSubtitle(name){
-      if(!subtitle||!captionsOn||!voiceMeta[name]||S.campusGateScene)return;
-      subtitle.querySelector('[data-voice-who]').textContent=voiceMeta[name].role;
-      subtitle.querySelector('[data-voice-line]').textContent=voiceMeta[name].text;
-      subtitle.classList.add('mj-voice-show');
-      subtitleUntil=S.time+(buffers[name]?.duration||2)+.5;
+    function showSubtitle(name,duration){
+      const meta=sayMeta(name);if(!subtitle||!captionsOn||!meta||S.campusGateScene)return;
+      subtitle.querySelector('[data-voice-who]').textContent=meta[0];
+      subtitle.querySelector('[data-voice-line]').textContent=meta[1];
+      subtitle.classList.add('mj-voice-show');subtitleUntil=ctx.currentTime+duration+.25;
     }
-    function emit(name,options={}){
-      if(!started||!on||!ctx||ctx.state==='closed'||!buffers[name])return null;
-      const isVoice=voiceNames.has(name);
-      if(isVoice&&!speech)return null;
-      const now=ctx.currentTime,lock=name+':'+(options.key||'default');
+    function emit(id,options={}){
+      const name=alias[id]||id;if(!ctx||!on||!buffers[name]||ctx.state!=='running')return null;
+      const isVoice=!!voiceText[name];if(isVoice&&!speech)return null;
+      const now=ctx.currentTime,lock=name+':'+(options.key||'general');
       if(now<(cooldowns.get(lock)||0))return null;
       const x=options.x??S.x,z=options.z??S.z,dist=distance(S.x,S.z,x,z);
-      const max=options.range??(isVoice?560:760);
+      const max=options.range??(isVoice?660:780);
       if(!options.ignoreDistance&&dist>max)return null;
-      const near=options.ignoreDistance?1:Math.max(0,1-dist/max);
-      // Speech is less severely attenuated than loud ambience; close lines
-      // stay understandable even with engine, rain and water playing.
-      const proximity=options.ignoreDistance?1:isVoice?(.27+.73*Math.pow(near,.62)):Math.pow(near,1.12);
-      const amount=Math.max(0,Math.min(1.5,(options.volume??1)*proximity*(isVoice?1.3:1)));
-      if(amount<.015)return null;
-      cooldowns.set(lock,now+(options.cooldown??(isVoice?.9:.10)));
-      if(cooldowns.size>180)cooldowns.clear();
-      const src=ctx.createBufferSource(),gain=ctx.createGain();src.buffer=buffers[name];src.playbackRate.value=options.rate??1;
-      gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(amount,now+.02);
+      const close=options.ignoreDistance?1:Math.max(0,1-dist/max);
+      const proximity=options.ignoreDistance?1:(isVoice ? .30+.70*Math.pow(close,.65) : Math.pow(close,1.12));
+      const amount=clamp((options.volume??1)*proximity,0,1.3);
+      if(amount<.02)return null;
+      cooldowns.set(lock,now+(options.cooldown??.7));if(cooldowns.size>160)cooldowns.clear();
+      const src=ctx.createBufferSource(),gain=ctx.createGain();src.buffer=buffers[name];
+      src.playbackRate.value=options.rate??1;
       const duration=src.buffer.duration/src.playbackRate.value;
-      gain.gain.setTargetAtTime(0,now+Math.max(.09,duration-.21),.09);
+      gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(amount,now+.022);
+      gain.gain.setValueAtTime(amount,now+Math.max(.03,duration-.09));
+      gain.gain.linearRampToValueAtTime(0,now+duration);
       src.connect(gain);
       const bus=isVoice?voices:effects;
       if(ctx.createStereoPanner&&!options.ignoreDistance){
         const pan=ctx.createStereoPanner(),dir=Math.atan2(z-S.z,x-S.x)-S.angle*RAD;
-        pan.pan.value=clamp(Math.sin(dir)*.64,-.72,.72);
-        gain.connect(pan);pan.connect(bus);
+        pan.pan.value=clamp(Math.sin(dir)*.65,-.72,.72);gain.connect(pan);pan.connect(bus);
       }else gain.connect(bus);
-      src.start();src.stop(now+duration+.24);
+      src.start();src.stop(now+duration+.012);
       return {src,duration};
     }
     function play(name,options={}){return !!emit(name,options);}
     function voice(name,x,z,level=1,options={}){
-      if(!ctx||!on||!speech||!buffers[name])return false;
-      const priority=options.priority??0,force=options.force||false;
+      const actual=alias[name]||name;
+      if(!voiceText[actual]||!speech||!on||!ctx||ctx.state!=='running')return false;
+      if(S.campusGateScene)return false;
+      const priority=options.priority??0;
       if(ctx.currentTime<voiceBusyUntil){
-        if(!force||priority<activeVoicePriority)return false;
+        if(!options.force||priority<activeVoicePriority)return false;
         try{activeVoice?.stop();}catch(_e){}
       }
-      const node=emit(name,{x,z,volume:level,cooldown:options.cooldown??.45,
-        ignoreDistance:options.ignoreDistance??false,key:options.key||'voice'});
+      const node=emit(actual,{x,z,volume:level,ignoreDistance:options.ignoreDistance,
+        key:options.key||'voice',cooldown:options.cooldown??.7,range:options.range});
       if(!node)return false;
       activeVoice=node.src;activeVoicePriority=priority;
-      voiceBusyUntil=ctx.currentTime+Math.min(4.0,node.duration*.94);
-      showSubtitle(name);applyMix();return true;
+      voiceBusyUntil=ctx.currentTime+node.duration+.08;
+      showSubtitle(actual,node.duration);updateMix();return true;
+    }
+    function talkSequence(names,options={}){
+      if(!ctx||ctx.state!=='running'||!on||!speech){options.done?.();return;}
+      const playNext=(index)=>{
+        if(options.cancel?.()){options.done?.();return;}
+        if(index>=names.length){options.done?.();return;}
+        const id=names[index];options.turn?.(index);
+        const node=emit(id,{x:options.x??S.x,z:options.z??S.z,
+          ignoreDistance:options.ignoreDistance??true,volume:1.0,key:`seq-${options.key}-${index}`,cooldown:0});
+        if(!node){playNext(index+1);return;}
+        activeVoice=node.src;activeVoicePriority=5;voiceBusyUntil=ctx.currentTime+node.duration+.08;
+        showSubtitle(id,node.duration);node.src.onended=()=>playNext(index+1);
+      };
+      playNext(0);
+    }
+    function startGate(scene){
+      if(scene.audioStarted)return;
+      scene.audioStarted=true;scene.audioComplete=false;scene.dialogueTurn=0;
+      const missing=scene.forgotId;
+      if(!speech||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
+      init().then(ok=>{
+        if(!ok||S.campusGateScene!==scene||!speech||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
+        try{activeVoice?.stop();}catch(_e){}
+        voiceBusyUntil=0;
+        if(missing)play('meme_vine_boom',{ignoreDistance:true,volume:.67,key:`id-${scene.index}`,cooldown:0});
+        const lines=missing?['guard_rahman_02','student_id_missing_01','student_id_missing_02','guard_rahman_03','student_id_missing_03']:
+          ['guard_rahman_01'];
+        talkSequence(lines,{key:`gate-${scene.index}`,ignoreDistance:true,cancel:()=>S.campusGateScene!==scene,
+          turn:i=>{scene.dialogueTurn=i;},
+          done:()=>{
+            scene.audioComplete=true;scene.finishedAt=S.time;
+            if(missing&&S.campusGateScene===scene)play('meme_error',{ignoreDistance:true,volume:.52,key:`rejected-${scene.index}`,cooldown:0});
+          }});
+      });
+    }
+    function beginQuarrel(r,incident){
+      const key=`${incident.id}:${incident.at}`;if(quarrelsSeen.has(key))return;
+      quarrelsSeen.add(key);
+      // Sometimes Masud's overconfident crash gets an abrupt record scratch.
+      const crashMeme=r.id===1&&Math.random()<.5?'meme_record_scratch':'meme_metal_pipe';
+      play(crashMeme,{x:r.x,z:r.z,volume:.55,cooldown:0,key});
+      play('car_horn',{x:r.x,z:r.z,volume:.52,key});
+      const driver=['rickshaw_salam_02','rickshaw_masud_02','rickshaw_liton_02'][r.id];
+      const car=parkedCars[incident.carIndex],withCng=car&&dhakaVehicleType(incident.carIndex)==='cng';
+      if(distance(S.x,S.z,r.x,r.z)>660)return;
+      talkSequence(withCng?[driver,'cng_jashim_02']:[driver],
+        {key:`quarrel-${key}`,x:r.x,z:r.z,ignoreDistance:false,
+         cancel:()=>S.mode!=='PLAYING'||!!S.campusGateScene,
+         done:()=>play('meme_sad_trombone',{x:r.x,z:r.z,volume:.52,cooldown:0,key:`trombone-${key}`})});
+      if(quarrelsSeen.size>50)quarrelsSeen.clear();
+    }
+    function showReward(points){
+      play('meme_mission_passed',{ignoreDistance:true,volume:.84,key:`mission-${S.time}`,cooldown:0});
+      const id='majhi-group-reward';let el=document.getElementById(id);
+      if(!el){el=document.createElement('div');el.id=id;el.style.cssText='position:fixed;left:50%;top:20%;transform:translateX(-50%);z-index:2147481000;pointer-events:none;text-align:center;opacity:0;transition:opacity .22s;color:#fce9ab;font:900 clamp(18px,4vw,46px) system-ui;text-shadow:0 3px 12px #081b20,0 5px 20px #000';document.body.appendChild(el);}
+      el.innerHTML=`MISSION PASSED!<div style="font-size:.62em;color:#99e4b5">RESPECT +</div><div style="font-size:.45em;color:#faf4e6">SCORE +${Math.round(points)}</div>`;
+      el.style.opacity='1';rewardShownUntil=performance.now()+3200;
+      return buffers.meme_mission_passed?.duration||3.2;
+    }
+    function exitScare(){
+      if(!on)return;
+      // On the very first menu click, the full audio pack may still be loading.
+      // Play the three tiny exit files directly instead of missing the scare.
+      if(!ctx||!ready){
+        if(performance.now()-lastHtmlExit<2900)return;
+        lastHtmlExit=performance.now();exitBusyUntil=(ctx?.currentTime||0)+3.2;
+        const raw=(name,amount)=>{const a=new Audio(paths[name]);a.volume=amount*volume;
+          a.play().catch(()=>{});};
+        raw('exit_horror_riser',.55);
+        window.setTimeout(()=>raw('exit_flashlight_click',.77),450);
+        window.setTimeout(()=>raw('exit_impact',.80),970);
+        return;
+      }
+      const now=ctx.currentTime;if(now<exitBusyUntil)return;exitBusyUntil=now+3;
+      play('exit_horror_riser',{ignoreDistance:true,volume:.65,cooldown:0,key:'exit-'+now});
+      if(loops.menu_music)loops.menu_music.gain.gain.setTargetAtTime(0,now,.025);
+      window.setTimeout(()=>play('exit_flashlight_click',{ignoreDistance:true,volume:.83,cooldown:0,key:'exit-click-'+now}),450);
+      window.setTimeout(()=>play('exit_impact',{ignoreDistance:true,volume:.93,cooldown:0,key:'exit-impact-'+now}),970);
     }
     function initUI(){
       if(ui)return;
       ui=document.createElement('div');ui.id='majhi-dhaka-audio';
-      ui.innerHTML=`<button type="button" data-audio-toggle aria-label="Mute game audio" aria-pressed="true">🔊 DHAKA AUDIO</button>
-        <button type="button" data-audio-voices aria-label="Toggle character voices" aria-pressed="true">🎤 VOICES ON</button>
-        <label>MASTER <input data-audio-volume aria-label="Master volume" type="range" min="0" max="100" step="5" value="78"></label>
-        <label>VOICE <input data-voice-volume aria-label="Voice volume" type="range" min="0" max="100" step="5" value="100"></label>
-        <button type="button" data-audio-caption aria-label="Toggle dialogue captions" aria-pressed="true">CC ON</button>
-        <span data-audio-status role="status">Sound starts with rescue</span>`;
-      ui.style.cssText='position:fixed;top:7px;left:50%;transform:translateX(-50%);z-index:12500;display:flex;align-items:center;gap:6px;max-width:96vw;padding:7px 10px;border:1px solid #607e8b;border-radius:12px;background:rgba(7,25,34,.92);box-shadow:0 4px 22px rgba(0,0,0,.35);color:#d2e8df;font:700 10px system-ui,sans-serif;pointer-events:auto;backdrop-filter:blur(8px)';
-      const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:6px 8px;font:800 10px system-ui;white-space:nowrap;cursor:pointer}#majhi-dhaka-audio button:focus-visible{outline:2px solid #ffc974}#majhi-dhaka-audio label{display:flex;align-items:center;gap:4px;white-space:nowrap}#majhi-dhaka-audio input{width:62px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{color:#a8d2c2;max-width:96px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#majhi-dhaka-subtitle{position:fixed;z-index:12495;bottom:8%;left:50%;transform:translateX(-50%);width:min(610px,80vw);pointer-events:none;background:rgba(5,21,29,.87);border:1px solid rgba(236,196,117,.5);border-radius:13px;padding:8px 16px;text-align:center;font:700 15px 'Noto Sans Bengali','Nirmala UI',system-ui,sans-serif;color:#f8f3da;opacity:0;transition:opacity .18s ease}#majhi-dhaka-subtitle.mj-voice-show{opacity:1}#majhi-dhaka-subtitle [data-voice-who]{font:800 10px system-ui,sans-serif;color:#efce79;letter-spacing:.09em;margin-bottom:4px}@media(max-width:950px){#majhi-dhaka-audio{top:auto!important;bottom:10px;padding:5px 7px;gap:4px;font-size:8px}#majhi-dhaka-audio button{font-size:9px;padding:5px}#majhi-dhaka-audio input{width:46px}#majhi-dhaka-audio [data-audio-status]{display:none}#majhi-dhaka-subtitle{bottom:15%;font-size:12px}}`;
+      ui.innerHTML=`<button data-audio-toggle type="button">🔊 DHAKA AUDIO</button>
+        <button data-audio-voices type="button">🎤 VOICES ON</button>
+        <label>MASTER <input data-audio-volume type="range" min="0" max="100" value="78"></label>
+        <label>VOICE <input data-voice-volume type="range" min="0" max="100" value="100"></label>
+        <button data-audio-caption type="button">CC ON</button><span data-audio-status>Click to enable sound</span>`;
+      ui.style.cssText='position:fixed;top:7px;left:50%;transform:translateX(-50%);z-index:12500;display:flex;align-items:center;gap:6px;max-width:96vw;padding:7px 10px;border:1px solid #607e8b;border-radius:12px;background:rgba(7,25,34,.92);color:#d2e8df;font:700 10px system-ui;pointer-events:auto';
+      const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:6px 8px;font:800 10px system-ui;cursor:pointer}#majhi-dhaka-audio label{display:flex;align-items:center;gap:5px}#majhi-dhaka-audio input{width:66px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{max-width:130px;overflow:hidden;white-space:nowrap;color:#b2d9ce}#majhi-dhaka-subtitle{position:fixed;z-index:12495;bottom:8%;left:50%;transform:translateX(-50%);width:min(620px,78vw);pointer-events:none;background:rgba(5,21,29,.89);border:1px solid #e9c476;border-radius:13px;padding:8px 16px;text-align:center;font:700 15px 'Nirmala UI',system-ui,sans-serif;color:#f8f3da;opacity:0;transition:opacity .18s}#majhi-dhaka-subtitle.mj-voice-show{opacity:1}#majhi-dhaka-subtitle [data-voice-who]{font:800 10px system-ui;color:#efce79;letter-spacing:.09em;margin-bottom:4px}@media(max-width:950px){#majhi-dhaka-audio{top:auto!important;bottom:8px;padding:5px 6px;font-size:8px}#majhi-dhaka-audio button{font-size:9px;padding:5px}#majhi-dhaka-audio input{width:43px}#majhi-dhaka-audio [data-audio-status]{display:none}#majhi-dhaka-subtitle{bottom:16%;font-size:12px}}`;
       document.head.appendChild(style);document.body.appendChild(ui);
-      subtitle=document.createElement('div');subtitle.id='majhi-dhaka-subtitle';subtitle.setAttribute('aria-live','off');
-      subtitle.innerHTML='<div data-voice-who></div><div data-voice-line></div>';document.body.appendChild(subtitle);
-      const toggle=ui.querySelector('[data-audio-toggle]'),talk=ui.querySelector('[data-audio-voices]'),cap=ui.querySelector('[data-audio-caption]');
-      toggle.addEventListener('click',()=>{on=!on;toggle.textContent=on?'🔊 DHAKA AUDIO':'🔇 SOUND OFF';toggle.setAttribute('aria-pressed',String(on));if(on&&started){ctx?.resume();init();}applyMix();});
-      talk.addEventListener('click',()=>{speech=!speech;talk.textContent=speech?'🎤 VOICES ON':'🎤 VOICES OFF';talk.setAttribute('aria-pressed',String(speech));if(!speech){try{activeVoice?.stop();}catch(_e){}voiceBusyUntil=0;subtitle?.classList.remove('mj-voice-show');}applyMix();});
-      cap.addEventListener('click',()=>{captionsOn=!captionsOn;cap.textContent=captionsOn?'CC ON':'CC OFF';cap.setAttribute('aria-pressed',String(captionsOn));if(!captionsOn)subtitle?.classList.remove('mj-voice-show');});
-      ui.querySelector('[data-audio-volume]').addEventListener('input',e=>{volume=Number(e.target.value)/100;applyMix();});
-      ui.querySelector('[data-voice-volume]').addEventListener('input',e=>{voiceUserVolume=Number(e.target.value)/100;applyMix();});
+      subtitle=document.createElement('div');subtitle.id='majhi-dhaka-subtitle';subtitle.innerHTML='<div data-voice-who></div><div data-voice-line></div>';document.body.appendChild(subtitle);
+      ui.querySelector('[data-audio-toggle]').onclick=()=>{on=!on;ui.querySelector('[data-audio-toggle]').textContent=on?'🔊 DHAKA AUDIO':'🔇 MUTED';if(on)ctx?.resume();else{try{activeVoice?.stop();}catch(_){}}updateMix();};
+      ui.querySelector('[data-audio-voices]').onclick=()=>{speech=!speech;ui.querySelector('[data-audio-voices]').textContent=speech?'🎤 VOICES ON':'🎤 VOICES OFF';if(!speech){try{activeVoice?.stop();}catch(_){}voiceBusyUntil=0;}updateMix();};
+      ui.querySelector('[data-audio-caption]').onclick=()=>{captionsOn=!captionsOn;ui.querySelector('[data-audio-caption]').textContent=captionsOn?'CC ON':'CC OFF';if(!captionsOn)subtitle.classList.remove('mj-voice-show');};
+      ui.querySelector('[data-audio-volume]').oninput=e=>{volume=Number(e.target.value)/100;updateMix();};
+      ui.querySelector('[data-voice-volume]').oninput=e=>{voiceUserVolume=Number(e.target.value)/100;updateMix();};
     }
-    function begin(){
-      started=true;initUI();if(on)init().then(()=>ctx?.resume());
-      clock=0;hornAt=6;bellAt=5;thunderAt=27;peopleAt=8;paddleAt=0;
-      lastZone='';lastGateKey='';lastAiRescues=0;voiceBusyUntil=0;redLightTauntAt=-60;
-      activeVoice=null;quarrelTurn.clear();subtitle?.classList.remove('mj-voice-show');
+    function menuBegin(){
+      if(S.mode!=='MENU'||started)return;
+      started=true;init().then(ok=>{
+        if(!ok||S.mode!=='MENU')return;
+        updateMix();
+        if(!menuCalled){menuCalled=true;window.setTimeout(()=>{if(S.mode==='MENU')voice('menu_majhi_call',S.x,S.z,.82,{ignoreDistance:true,priority:2,force:true});},5200);}
+      });
     }
+    function begin(){started=true;initUI();init().then(()=>ctx?.resume());
+      clock=0;peopleAt=8;bellAt=7;hornAt=6;thunderAt=26;paddleAt=0;
+      lastZone='';lastAiRescues=0;lastCampusHeaven=false;quarrelsSeen.clear();
+      subtitle?.classList.remove('mj-voice-show');activeVoicePriority=-1;voiceBusyUntil=0;
+      updateMix();}
     function update(dt){
-      if(!started||!ctx||!ready)return;
-      clock+=dt;if(clock<.11)return;dt=clock;clock=0;applyMix();
-      if(subtitleStatus()&&S.time>subtitleUntil)subtitle?.classList.remove('mj-voice-show');
-      if(S.mode!=='PLAYING'||!on)return;
-      if(S.rowing&&S.time-paddleAt>(S.boostOn?.42:.57)){
-        paddleAt=S.time;play('paddle_'+(1+(paddleVariant++%3)),{ignoreDistance:true,volume:S.boostOn?.90:.64,cooldown:0});
+      if(!ctx||!ready)return;
+      if(S.mode==='PAUSED'&&ctx.state==='running')ctx.suspend();
+      else if(S.mode!=='PAUSED'&&ctx.state==='suspended'&&started&&on)ctx.resume();
+      if(subtitle&&subtitle.classList.contains('mj-voice-show')&&ctx.currentTime>=subtitleUntil)subtitle.classList.remove('mj-voice-show');
+      const rewardEl=document.getElementById('majhi-group-reward');
+      if(rewardEl&&performance.now()>rewardShownUntil)rewardEl.style.opacity='0';
+      if(S.mode==='MENU'&&ctx.currentTime<exitBusyUntil){
+        // Keep the song muted until the exit gag has finished.
+        if(loops.menu_music)loops.menu_music.gain.gain.setTargetAtTime(0,ctx.currentTime,.03);
+        return;
       }
-      if(S.current&&!lastZone){play('warning',{ignoreDistance:true,volume:.32});voice('current_warn',S.x,S.z,.85,{priority:2});}
+      clock+=dt;if(clock<.12)return;dt=clock;clock=0;updateMix();
+      if(S.mode!=='PLAYING'||!on)return;
+      const heaven=campusRainWeight(S.x,S.z)<.27;
+      if(heaven&&!lastCampusHeaven)play('meme_heavenly_choir',{ignoreDistance:true,volume:.45,cooldown:8});
+      lastCampusHeaven=heaven;
+      if(S.rowing&&S.time-paddleAt>(S.boostOn?.42:.57)){
+        paddleAt=S.time;play('paddle_'+(1+Math.floor(S.time*3)%3),{ignoreDistance:true,volume:S.boostOn?.8:.6,cooldown:0});}
+      if(S.current&&!lastZone){play('warning',{ignoreDistance:true,volume:.32});voice('current_warn',S.x,S.z,.9,{priority:2});}
       lastZone=S.current;
       if(S.aiRescueCount>lastAiRescues){
-        const r=S.aiRickshaws.find(x=>S.time-x.rescuedAt<.25&&distance(x.x,x.z,S.x,S.z)<410);
-        if(r){play('bell_1',{x:r.x,z:r.z,volume:.68,cooldown:.8});voice(pick(['rickshaw_pickup_new','rickshaw_pickup']),r.x,r.z,.9,{priority:1});}
-        else {const b=S.aiBoats.find(x=>S.time-x.rescuedAt<.25&&distance(x.x,x.z,S.x,S.z)<360);
-          if(b)voice('swimmer_rescued',b.x,b.z,.94,{priority:1});}
+        const r=S.aiRickshaws.find(x=>S.time-x.rescuedAt<.28&&distance(x.x,x.z,S.x,S.z)<520);
+        if(r){play('bell_1',{x:r.x,z:r.z,volume:.72});voice(voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][2],r.x,r.z,1,{priority:1});}
+        else {const b=S.aiBoats.find(x=>S.time-x.rescuedAt<.28&&distance(x.x,x.z,S.x,S.z)<500);
+          if(b)voice('civilian_shamim_03',b.x,b.z,.92,{priority:2});}
         lastAiRescues=S.aiRescueCount;
       }
-      if(S.traffic==='RED'&&S.time-redLightTauntAt>33){
-        const cheeky=S.aiRickshaws.find(r=>distance(r.x,r.z,0,-55)<175&&distance(r.x,r.z,S.x,S.z)<520&&r.quarrelUntil<=S.time);
-        if(cheeky){redLightTauntAt=S.time;play('bell_2',{x:cheeky.x,z:cheeky.z,volume:.84});voice('rickshaw_redlight',cheeky.x,cheeky.z,.96,{priority:1});}
+      if(S.time>bellAt){const r=S.aiRickshaws.filter(x=>distance(x.x,x.z,S.x,S.z)<570)[0];
+        if(r)play('bell_'+(1+r.id%2),{x:r.x,z:r.z,volume:.84});bellAt=S.time+7+Math.random()*7;}
+      if(S.time>hornAt){const p=parkedCars.filter((_,i)=>dhakaVehicleType(i)==='cng').find(x=>distance(x.x,x.z,S.x,S.z)<620);
+        if(p){play('cng_horn_1',{x:p.x,z:p.z,volume:.8});if(Math.random()<.3)voice(pick(['cng_jashim_01','cng_jashim_03']),p.x,p.z,.91,{priority:0});}
+        hornAt=S.time+9+Math.random()*11;
       }
-      if(S.time>bellAt){
-        const near=S.aiRickshaws.slice().sort((a,b)=>distance(a.x,a.z,S.x,S.z)-distance(b.x,b.z,S.x,S.z))[0];
-        if(near&&distance(near.x,near.z,S.x,S.z)<580)play('bell_'+(1+(bellVariant++%2)),{x:near.x,z:near.z,volume:.85});
-        bellAt=S.time+5.8+Math.random()*6.8;
-      }
-      if(S.time>hornAt){
-        const p=parkedCars.filter((_,i)=>dhakaVehicleType(i)==='cng').sort((a,b)=>distance(a.x,a.z,S.x,S.z)-distance(b.x,b.z,S.x,S.z))[0];
-        if(p&&distance(p.x,p.z,S.x,S.z)<650){
-          play('cng_horn_'+(1+(hornVariant++%2)),{x:p.x,z:p.z,volume:.93});
-          if(Math.random()<.34)voice(pick(['cng_driver','cng_driver_2','cng_driver_3']),p.x,p.z,.97,{priority:0});
-        }else if(S.movingCars?.length){const car=S.movingCars[0];play('car_horn',{x:car.x,z:car.z,volume:.64});}
-        hornAt=S.time+6.4+Math.random()*8;
-      }
-      for(const incident of S.rickshawQuarrels){
-        const r=S.aiRickshaws.find(x=>x.id===incident.id);if(!r)continue;
-        const turn=Math.max(0,Math.min(3,Math.floor((S.time-incident.at)/1.25)));
-        const key=incident.id+':'+incident.at,was=quarrelTurn.get(key)??-1;
-        if(turn>was){
-          quarrelTurn.set(key,turn);
-          if(turn===0){play('impact_1',{x:r.x,z:r.z,volume:.85});play('car_horn',{x:r.x,z:r.z,volume:.55});play('meme_argument',{x:r.x,z:r.z,volume:.46,cooldown:.8});}
-          voice('rickshaw_quarrel_'+(turn+1),r.x,r.z,1.0,{priority:2,force:true,key:'incident-'+incident.id+'-'+turn});
-          if(turn===3&&Math.random()<.45)play('meme_oops',{x:r.x,z:r.z,volume:.46,cooldown:2});
+      for(const incident of S.rickshawQuarrels){const r=S.aiRickshaws.find(x=>x.id===incident.id);if(r)beginQuarrel(r,incident);}
+      if(S.time>peopleAt&&!S.campusGateScene&&ctx.currentTime>voiceBusyUntil+.2){
+        const choices=[];
+        for(const r of S.rides){const x=r.personX??r.x,z=r.personZ??r.z;
+          if(r.state==='WAITING'&&distance(x,z,S.x,S.z)<510){
+            const pool=r.type==='DROWNING'?['civilian_shamim_01','civilian_shamim_02','civilian_mitu_01','civilian_mitu_02']:
+              (r.name==='Nafisa'?['student_nafisa_01','student_nafisa_03']:
+                ['student_adittya_01','student_adittya_03']);
+            choices.push({x,z,clip:pick(pool),priority:r.type==='DROWNING'?2:1});
+          }else if(r.state==='ONBOARD')choices.push({x:S.x,z:S.z,clip:pick(['student_adittya_01','student_adittya_02','student_adittya_03','student_nafisa_01','student_nafisa_02','student_nafisa_03']),priority:1});
         }
-      }
-      if(quarrelTurn.size>30)quarrelTurn.clear();
-      const scene=S.campusGateScene;
-      if(scene){
-        const age=S.time-scene.start,turn=scene.forgotId?Math.min(3,Math.floor(age/1.525)):0;
-        const key=scene.index+':'+scene.start+':'+turn;
-        if(key!==lastGateKey){lastGateKey=key;
-          const clip=scene.forgotId?(['student_id_forgot','guard_id_1','student_angry_2','guard_id_3'][turn]):'guard_pass';
-          voice(clip,S.x,S.z,1.08,{priority:3,force:true,ignoreDistance:true,key:'gate-'+key});
-          if(turn===0)play(scene.forgotId?'meme_sus':'meme_stamp',{ignoreDistance:true,volume:.36,cooldown:1});
-          if(scene.forgotId&&turn===3)play('meme_oops',{ignoreDistance:true,volume:.38,cooldown:1});
-          if(!scene.forgotId&&turn===0)play('meme_heaven',{ignoreDistance:true,volume:.32,cooldown:2});
+        for(const p of S.cityPeople){if(distance(p.x,p.z,S.x,S.z)>410)continue;
+          const pool=p.role==='SWIM'?['civilian_shamim_01','civilian_mitu_01']:
+            p.role==='SHOP'?['shopkeeper_kuddus_01','shopkeeper_kuddus_02','shopkeeper_kuddus_03']:
+            p.role==='WADE'?['civilian_mitu_01','student_adittya_03']:[];
+          if(pool.length)choices.push({x:p.x,z:p.z,clip:pick(pool),priority:p.role==='SWIM'?2:0});
         }
+        for(const r of S.aiRickshaws){if(distance(r.x,r.z,S.x,S.z)<430&&r.incidentCar===null)
+          choices.push({x:r.x,z:r.z,clip:voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][0],priority:0});}
+        choices.sort((a,b)=>b.priority-a.priority||distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z));
+        if(choices.length){const c=choices[Math.floor(Math.random()*Math.min(3,choices.length))];voice(c.clip,c.x,c.z,1,{priority:c.priority});}
+        peopleAt=S.time+9+Math.random()*7;
       }
-      if(S.time>peopleAt){
-        const candidates=[];
-        for(const r of S.rides){
-          const x=r.personX??r.x,z=r.personZ??r.z;
-          if(r.state==='WAITING'&&distance(x,z,S.x,S.z)<380){
-            const names=r.type==='DROWNING'?['swimmer_help_1','swimmer_help_2','swimmer_help_3','swimmer_current','passenger_help']:
-              ['student_registrar_1','student_cgpa_1','student_semester_1','student_attendance_1','student_assignment'];
-            candidates.push({x,z,clip:pick(names),priority:r.type==='DROWNING'?2:1});
-          }
-          if(r.state==='ONBOARD'){
-            candidates.push({x:S.x,z:S.z,clip:pick(['student_registrar_1','student_registrar_2','student_cgpa_1','student_cgpa_2','student_semester_1','student_semester_2','student_attendance_1','student_attendance_2','student_assignment','student_rescued_2']),priority:1});
-          }
-        }
-        for(const p of S.cityPeople){
-          if(distance(p.x,p.z,S.x,S.z)>340)continue;
-          const pool=p.role==='SWIM'?['swimmer_help_1','swimmer_help_2','swimmer_help_3','swimmer_rain']:
-            p.role==='SHOP'?['shop_tea_1','shop_tea_2','shopkeeper']:
-            p.role==='WADE'?['student_registrar_1','student_attendance_2','swimmer_rain']:
-            p.role==='BALCONY'?['neighbor_window','neighbor_light']:[];
-          if(pool.length)candidates.push({x:p.x,z:p.z,clip:pick(pool),priority:p.role==='SWIM'?1:0});
-        }
-        for(const r of S.aiRickshaws){if(distance(r.x,r.z,S.x,S.z)<440&&r.incidentCar===null)
-          candidates.push({x:r.x,z:r.z,clip:pick(['rickshaw_boss_1','rickshaw_boss_2','rickshaw_boss_3','rickshaw_boss_4','rickshaw_bell_1']),priority:0});}
-        if(candidates.length){candidates.sort((a,b)=>b.priority-a.priority||distance(a.x,a.z,S.x,S.z)-distance(b.x,b.z,S.x,S.z));
-          const c=candidates[Math.min(candidates.length-1,(dialogueCounter++%3))];voice(c.clip,c.x,c.z,.96,{priority:c.priority});}
-        peopleAt=S.time+7+Math.random()*6;
-      }
-      if(S.time>thunderAt){if(campusRainWeight(S.x,S.z)>.35)play('thunder',{ignoreDistance:true,volume:.65});thunderAt=S.time+32+Math.random()*28;}
+      if(S.time>thunderAt){if(campusRainWeight(S.x,S.z)>.3)play('thunder',{ignoreDistance:true,volume:.65});thunderAt=S.time+31+Math.random()*23;}
     }
-    return {initUI,begin,update,play,voice,
-      repair(){play('power_restore',{ignoreDistance:true,volume:.92});play('meme_success',{ignoreDistance:true,volume:.23});voice('power_cheer',S.x,S.z,.96,{priority:2});},
-      impact(power){play('impact_'+(1+(impactVariant++%2)),{ignoreDistance:true,volume:.84*power});if(power>.95&&Math.random()<.21)play('meme_boing',{ignoreDistance:true,volume:.22,cooldown:3});},
-      getState(){return {started,ready,on,voices:speech,captions:captionsOn,loaded:Object.keys(buffers).length,expected:assets.length,masterVolume:volume,voiceVolume:voiceUserVolume,activeVoicePriority};}};
+    return {initUI,menuBegin,begin,update,play,voice,startGate,showReward,exitScare,
+      repair(){play('power_restore',{ignoreDistance:true,volume:.8});},
+      impact(power){play('impact_'+(1+(Math.floor(S.time*3)%2)),{ignoreDistance:true,volume:.75*power});},
+      getState(){return {started,ready,on,voices:speech,captions:captionsOn,
+        loaded:Object.keys(buffers).length,expected:Object.keys(paths).length,
+        masterVolume:volume,voiceVolume:voiceUserVolume,activeVoicePriority};}};
   })();
   // Collision impact: a strong jolt that quickly settles, in both camera modes.
   const IMPACT_SHAKE_DURATION = 0.58;
@@ -1903,7 +2032,7 @@
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0});
     S.cityPeople=CITY_PEOPLE.map((p,i)=>({...p,uid:i}));S.cityPersonId=CITY_PEOPLE.length;
     S.aiRickshaws=createRickshawFleet();S.rickshawRescueCount=0;S.rickshawCrashCount=0;S.rickshawQuarrels=[];
     S.aiBoats=createRescueFleet();S.aiRespawnQueue=[];S.aiRescueCount=0;
@@ -1952,7 +2081,7 @@
       $('modal-main').textContent=type==='PAUSED'?'RESUME GAME':'GOT IT';$('modal-secondary').classList.toggle('hidden',type!=='PAUSED');
     } else {
       const won=type==='WON';$('modal-eyebrow').textContent=won?'MISSION COMPLETE':'MISSION OVER';$('modal-title').textContent=won?'THE CAMPUS IS SAFE!':'THE CITY GOT THE BETTER OF US';
-      $('modal-content').innerHTML=`<p>${won?'Beautiful rowing. You delivered six students safely!':S.gameOverReason}</p><p><b>Final score:</b> ${S.score} &nbsp; · &nbsp; <b>Delivered:</b> ${S.delivered} &nbsp; · &nbsp; <b>Missed:</b> ${S.failed}</p><p><b>Water rescues:</b> ${S.rescued} &nbsp; · &nbsp; <b>Traffic violations:</b> ${S.violations} &nbsp; · &nbsp; <b>Time:</b> ${formatTime(S.time)}</p><p>You can restart whenever you like. The original PyOpenGL desktop edition is preserved in the GitHub repository.</p>`;
+      $('modal-content').innerHTML=`<p>${won?'Beautiful rowing. You delivered six students safely!':S.gameOverReason}</p><p><b>Final score:</b> ${S.score} &nbsp; · &nbsp; <b>Delivered:</b> ${S.delivered} &nbsp; · &nbsp; <b>Missed:</b> ${S.failed}</p><p><b>Water rescues:</b> ${S.rescued} &nbsp; · &nbsp; <b>Traffic violations:</b> ${S.violations} &nbsp; · &nbsp; <b>Time:</b> ${formatTime(S.time-S.gatePausedTime)}</p><p>You can restart whenever you like. The original PyOpenGL desktop edition is preserved in the GitHub repository.</p>`;
       $('modal-main').textContent='PLAY AGAIN';
     }
   }
@@ -2072,7 +2201,7 @@
     if(S.wiperDirection>0&&S.wiperAngle>=158){S.wiperAngle=158;S.wiperDirection=-1;}
     else if(S.wiperDirection<0&&S.wiperAngle<=18){S.wiperAngle=18;S.wiperDirection=1;S.wiperActive=false;}
   }
-  function step(dt){S.time+=dt;S.bobTime+=dt;updateWorldRain(dt);S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
+  function step(dt){if(S.campusQueue.length)S.gatePausedTime+=dt;S.time+=dt;S.bobTime+=dt;updateWorldRain(dt);S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
     S.boost=clamp(S.boost+(S.boostOn?-30:15)*dt,0,100);if(S.boost<=0)S.boostOn=false;
     updateImpactShake(dt);
     const forward=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
@@ -2142,14 +2271,14 @@
     if(!inTraffic)S.trafficSafe=[S.x,S.z];
     if(inTraffic&&!S.wasTraffic&&S.traffic==='RED'){[S.x,S.z]=S.trafficSafe;S.score=Math.max(0,S.score-35);S.violations++;notify('RED LIGHT! Returned to the stop line. -35 points',3);S.wasTraffic=false;}else S.wasTraffic=inTraffic;
     if(!S.powerOff){S.powerClock+=dt;if(S.powerClock>=15){S.powerOff=true;S.powerClock=0;notify(`${power[S.powerIndex].name} district power outage!`,2.6);gameAudio.play('electric',{ignoreDistance:true,volume:.48});}}
-    if(S.request){S.requestLeft-=dt;if(S.requestLeft<=0){S.request=null;S.spawnClock=0;}}
-    else {S.spawnClock+=dt;if(S.spawnClock>=9.5){S.spawnClock=0;offerRide();}}
-    for(const r of S.rides){r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);const wasOnboard=r.state==='ONBOARD';r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(wasOnboard?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);gameAudio.play('warning',{ignoreDistance:true,volume:.40});}}
+    if(!S.campusQueue.length){if(S.request){S.requestLeft-=dt;if(S.requestLeft<=0){S.request=null;S.spawnClock=0;}}
+    else {S.spawnClock+=dt;if(S.spawnClock>=9.5){S.spawnClock=0;offerRide();}}}
+    for(const r of S.rides){if(S.campusQueue.length)continue;r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);const wasOnboard=r.state==='ONBOARD';r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(wasOnboard?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);gameAudio.play('warning',{ignoreDistance:true,volume:.40});}}
     S.rides=S.rides.filter(r=>r.state!=='FAILED');S.missedEffects=S.missedEffects.filter(e=>S.time-e.at<4.35);
     updateCampusGateSequence();
     if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;
       for(const r of arrived){r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;}
-      queueCampusArrivals(arrived,S.x,S.z,S.angle);gameAudio.play('delivery',{ignoreDistance:true,volume:.88});gameAudio.voice('passenger_thanks',S.x,S.z,1.02,{priority:2,force:true});
+      queueCampusArrivals(arrived,S.x,S.z,S.angle,gained);gameAudio.play('delivery',{ignoreDistance:true,volume:.88});gameAudio.voice('passenger_thanks',S.x,S.z,1.02,{priority:2,force:true});
       S.rides=S.rides.filter(r=>r.state!=='DELIVERED');
       S.deliveryBanner={at:S.time,count:arrived.length,points:gained};
       notify(`Delivered ${arrived.length} student(s) to BRACU! Gate check চলছে! +${gained} points`,4.4);
@@ -2173,7 +2302,7 @@
         nearby.timeLeft=Math.min(nearby.timeLeft,Math.round(clamp(28+returnDistance/105,34,62)));
         nearby.warning=false;
         S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;gameAudio.play('pickup',{ignoreDistance:true,volume:.73});gameAudio.voice(nearby.type==='DROWNING'?'swimmer_rescued':(nearby.id%4===0?'passenger_laptop':'student_rescued_1'),S.x,S.z,1.07,{priority:2,force:true});S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
-    if(S.delivered>=6&&S.campusQueue.length===0&&!S.campusGateScene&&!S.deliveryEffects.length){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
+    if(S.delivered>=6){if(S.campusQueue.length===0&&!S.campusGateScene&&!S.deliveryEffects.length&&S.time>=(S.rewardUntil||0)){S.mode='WON';keys.clear();nextModal('WON');}}else if(S.time-S.gatePausedTime>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time-S.gatePausedTime>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
   function refreshMap(){
@@ -2207,7 +2336,7 @@
     ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(-10,11);ctx.lineTo(0,6);ctx.lineTo(10,11);ctx.closePath();ctx.fillStyle='#ffda8b';ctx.fill();ctx.strokeStyle='#10212d';ctx.stroke();ctx.restore();
   }
   function refreshHUD(){if(S.mode==='MENU')return;
-    $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(900-S.time);$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
+    $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(900-(S.time-S.gatePausedTime));$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
     const trafficLabel=$('traffic-status'),powerLabel=$('power-status');
     const perf=$('performance-status');if(perf){perf.classList.toggle('hidden',!S.frameProfile);if(S.frameProfile)perf.textContent=`${S.frameMS.toFixed(1)}ms frame · worst ${S.frameWorst.toFixed(1)}ms · ${S.quality}`;}
     if(trafficLabel){trafficLabel.textContent=`${S.traffic==='GREEN'?'🟢 GREEN':'🔴 RED'} LIGHT`;trafficLabel.className='status-pill '+(S.traffic==='GREEN'?'status-green':'status-red');}
@@ -2466,7 +2595,8 @@
       gameCode:`GAME-${String(index+1).padStart(3,'0')}`,
       initials};
   }
-  function queueCampusArrivals(arrived,startX,startZ,heading){
+  function queueCampusArrivals(arrived,startX,startZ,heading,points){
+    const group=++S.gateGroupCounter;S.gateRewardGroups.push({group,points,played:false});
     let base=Math.max(S.time,S.campusDropCursor||S.time);
     for(const [i,r] of arrived.entries()){
       const seats=[[8,-19],[8,19],[67,0]], [bx,bz]=seats[Math.min(i,2)],h=heading*RAD;
@@ -2474,8 +2604,8 @@
       S.campusEntryCounter=(S.campusEntryCounter||0)+1;
       const forgot=S.campusEntryCounter%3===0;
       S.campusQueue.push({name:r.name,colorId:r.colorId,startX:sx,startZ:sz,dropAt:base,
-        forgotId:forgot,walkStarted:false,sceneDone:false,walkTime:2.15,gateDelay:2.45,index:S.campusEntryCounter-1});
-      base+=forgot?8.5:4.5;
+        forgotId:forgot,group,walkStarted:false,sceneDone:false,walkTime:2.15,gateDelay:2.45,index:S.campusEntryCounter-1});
+      base+=forgot?39:10.4;
     }
     S.campusDropCursor=base;
   }
@@ -2495,23 +2625,33 @@
       }
       if(entry.walkStarted&&!entry.sceneDone&&!entry.sceneAt&&S.time>=entry.dropAt+entry.gateDelay){
         entry.sceneAt=S.time;
-        if(!S.campusGateScene)S.campusGateScene={...entry,start:S.time};
+        if(!S.campusGateScene){S.campusGateScene={...entry,start:S.time};gameAudio.startGate(S.campusGateScene);}
       }
     }
     if(!S.campusGateScene){
       const pending=S.campusQueue.find(e=>e.sceneAt&&!e.sceneDone);
-      if(pending)S.campusGateScene={...pending,start:S.time};
+      if(pending){S.campusGateScene={...pending,start:S.time};gameAudio.startGate(S.campusGateScene);}
     }else{
       const scene=S.campusGateScene;
       const age=S.time-scene.start;
-      const duration=scene.forgotId?6.1:2.6;
-      if(age>=duration){
+      // Gate animations wait for the actual recorded voice sequence to end.
+      // A 40-second safety cutoff prevents a missing/failed asset locking play.
+      const completed=scene.audioComplete&&age>=1.7&&S.time-(scene.finishedAt||S.time)>=.42;
+      if(completed||age>40){
         const match=S.campusQueue.find(e=>e.index===scene.index);
         if(match)match.sceneDone=true;
         S.campusGateScene=null;
       }
     }
     S.campusQueue=S.campusQueue.filter(e=>!(e.sceneDone&&S.time>(e.sceneAt||0)+.3));
+    for(const reward of S.gateRewardGroups){
+      if(reward.played)continue;
+      if(S.campusQueue.some(e=>e.group===reward.group))continue;
+      if(S.campusGateScene)continue;
+      reward.played=true;const songLength=gameAudio.showReward(reward.points);
+      S.rewardUntil=Math.max(S.rewardUntil||0,S.time+Math.max(3.2,songLength+.2));
+    }
+    S.gateRewardGroups=S.gateRewardGroups.filter(r=>!r.played);
   }
   function drawSpeechBox(text,x,y,maxWidth=250,fill='#fff8e5',stroke='#253b46',textColor='#19333d'){
     const scale=clamp(weather.width/1400,.78,1.25),pad=12*scale,lineH=16*scale;
@@ -2690,7 +2830,7 @@
     }
     root.classList.add('mj-show');
     const age=S.time-scene.start;
-    const turn=scene.forgotId?Math.min(3,Math.floor(age/1.525)):0;
+    const turn=scene.forgotId?Math.min(4,scene.dialogueTurn||0):0;
     const sceneKey=`${scene.index}:${scene.start}:${scene.forgotId}:${turn}`;
     if(sceneKey===campusGateShownKey)return;
     campusGateShownKey=sceneKey;
@@ -2721,15 +2861,17 @@
     }else{
       get('mj-gate-dialogue-title').textContent='NO ID, NO ENTRY! 😡';
       const lines=[
-        ['Sir! Eto pani diye ashlam. ID ta bashay fele eshechi!','ID chara campus-e dhuka jabe na. Rules are rules!'],
-        ['Sir, class miss hobe! Ektu consider koren!','Bhai, BRACU te class bondho hoy na. ID lagbe.'],
-        ['Ami nao kore eshechi! Attendance ta ki hobe?!','Bujhlam. Kintu ID chhara entry hobe na.'],
-        ['Ei brishtite abar ID ante jabo?! 😡','Sorry bhai. Next time ID niye asben.']
+        ['আঙ্কেল! এত পানি পার হয়ে আসছি!','এই যে! আইডি কার্ড কোথায়? আইডি ছাড়া ঢোকা যাবে না!'],
+        ['আঙ্কেল! আইডি কার্ডটা বাসায় রয়ে গেছে! আজকে একটু ঢুকতে দেন!','আইডি ছাড়া ক্যাম্পাসে ঢোকা যাবে না!'],
+        ['আঙ্কেল প্লিজ! আজকে অ্যাটেনডেন্স মিস করলে শেষ!','নিয়ম সবার জন্য সমান।'],
+        ['আঙ্কেল, এত পানি পার হয়ে আসছি!','পুরা ঢাকা পানির নিচে থাকলেও নিয়ম তো নিয়ম! আগে আইডি আনেন!'],
+        ['পুরা ঢাকা ডুইবা গেছে! আর আপনি আইডি কার্ড নিয়া বসে আছেন?! 😡','নিয়ম তো নিয়ম।']
       ];
       get('mj-gate-student-msg').textContent=lines[turn][0];
       get('mj-gate-guard-msg').textContent=lines[turn][1];
-      student.classList.toggle('mj-dim',turn%2===1);
-      guard.classList.toggle('mj-dim',turn%2===0);
+      const studentSpeaking=[1,2,4].includes(turn);
+      student.classList.toggle('mj-dim',!studentSpeaking);
+      guard.classList.toggle('mj-dim',studentSpeaking);
       get('mj-gate-foot').textContent='Flood: maximum · University rules: undefeated';
     }
   }
@@ -3006,7 +3148,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity17-loud-dhaka-busy-city-voices-sounds';
+  window.majhiVersion='fidelity18-real-bengali-voices-meme-timing';
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
@@ -3045,6 +3187,7 @@
       if(!el || S.mode!=='MENU')return;
       const label=[el.id,el.textContent,el.getAttribute('aria-label'),el.dataset?.action].filter(Boolean).join(' ');
       if(!/exit\s*(?:game)?|quit\s*(?:game)?|leave\s*(?:game)?/i.test(label))return;
+      gameAudio.exitScare();
       const area=el.getBoundingClientRect();
       const x=area.left+area.width*.5,y=area.top+area.height*.5;
       overlay.style.setProperty('--glare-x',(x/window.innerWidth*100).toFixed(1)+'%');
@@ -3062,6 +3205,10 @@
   }
   installExitFlashlightGlare();
   gameAudio.initUI();
+  // Browser audio is unlocked by a real gesture; no autoplay bypass.
+  const enableMenuAudio=()=>{if(S.mode==='MENU')gameAudio.menuBegin();};
+  document.addEventListener('pointerdown',enableMenuAudio,{passive:true});
+  document.addEventListener('keydown',enableMenuAudio);
   $('play-button').onclick=reset;
   $('help-button').onclick=()=>nextModal('HELP');
   $('camera-button').onclick=()=>action('c');$('pause-button').onclick=togglePause;
