@@ -2206,7 +2206,6 @@
       }
     }
     renderComicBubbles();
-    drawCampusGateOverlay();
   }
   function fauxBracMeta(entry,index=0){
     const bloods=['A+','B+','O+','AB+'];
@@ -2226,13 +2225,16 @@
       const forgot=S.campusEntryCounter%3===0;
       S.campusQueue.push({name:r.name,colorId:r.colorId,startX:sx,startZ:sz,dropAt:base,
         forgotId:forgot,walkStarted:false,sceneDone:false,walkTime:2.15,gateDelay:2.45,index:S.campusEntryCounter-1});
-      base+=2.35;
+      base+=forgot?8.5:4.5;
     }
     S.campusDropCursor=base;
   }
   function updateCampusGateSequence(){
     if(S.mode!=='PLAYING')return;
-    S.deliveryEffects=S.deliveryEffects.filter(e=>S.time-e.at<6.3);
+    S.deliveryEffects=S.deliveryEffects.filter(e=>{
+      const guest=S.campusQueue.find(q=>q.index===e.entryIndex);
+      return guest?!guest.sceneDone:S.time-e.at<8.5;
+    });
     for(const entry of S.campusQueue){
       if(!entry.walkStarted&&S.time>=entry.dropAt){
         entry.walkStarted=true;
@@ -2275,66 +2277,211 @@
     wx.restore();
     return {width,height};
   }
-  function drawCampusGateOverlay(){
-    const scene=S.campusGateScene;if(!scene||S.mode!=='PLAYING')return;
-    const w=weather.width,h=weather.height,scale=clamp(Math.min(w/1400,h/850),.76,1.12),age=S.time-scene.start;
-    const pass=!scene.forgotId,meta=fauxBracMeta(scene,scene.index),cardW=400*scale,cardH=250*scale;
-    const x=(w-cardW)/2,y=Math.max(156*scale,h-cardH-34*scale);
-    wx.save();
-    wx.fillStyle='rgba(5,18,25,.12)';wx.fillRect(0,0,w,h);
-    wx.font=`900 ${21*scale}px system-ui, sans-serif`;wx.textAlign='center';
-    wx.fillStyle=pass?'#f5d48d':'#ffb0a4';
-    wx.fillText(pass?'GUARD: ID CHECK PASSED! CLASS IS ON!':'GUARD: BRAC ID KOTHAY?',w*.5,y-18*scale);
-    wx.shadowColor='rgba(0,0,0,.24)';wx.shadowBlur=18*scale;wx.shadowOffsetY=5*scale;
-    wx.fillStyle=scene.forgotId?'rgba(255,248,248,.985)':'rgba(255,255,255,.985)';wx.strokeStyle='#b9c6d8';wx.lineWidth=2.4*scale;
-    wx.beginPath();wx.roundRect(x,y,cardW,cardH,16*scale);wx.fill();wx.stroke();
-    wx.shadowColor='transparent';
-
-    // BRAC-like top area
-    wx.fillStyle='#173a67';
-    wx.font=`900 ${20*scale}px Georgia, serif`;wx.textAlign='left';wx.fillText('BRAC',x+28*scale,y+34*scale);
-    wx.font=`700 ${13*scale}px Georgia, serif`;wx.fillText('UNIVERSITY',x+20*scale,y+54*scale);
-    wx.strokeStyle='#244a79';wx.lineWidth=2.8*scale;
-    wx.beginPath();wx.arc(x+55*scale,y+49*scale,31*scale,.78*Math.PI,1.95*Math.PI);wx.stroke();
-    wx.beginPath();wx.moveTo(x+39*scale,y+82*scale);wx.lineTo(x+55*scale,y+92*scale);wx.lineTo(x+71*scale,y+82*scale);wx.stroke();
-    wx.beginPath();wx.moveTo(x+42*scale,y+89*scale);wx.lineTo(x+55*scale,y+98*scale);wx.lineTo(x+68*scale,y+89*scale);wx.stroke();
-    wx.fillStyle='#5b728c';wx.font=`600 ${10*scale}px serif`;wx.fillText('Inspiring Excellence',x+14*scale,y+115*scale);
-
-    // photo block
-    wx.fillStyle=scene.forgotId?'#efd6d6':'#d7e3eb';wx.fillRect(x+263*scale,y+24*scale,109*scale,100*scale);
-    wx.fillStyle=scene.forgotId?'#a44a4a':'#31576f';wx.beginPath();wx.arc(x+317.5*scale,y+56*scale,22*scale,0,TAU);wx.fill();
-    wx.beginPath();wx.ellipse(x+317.5*scale,y+100*scale,34*scale,26*scale,0,0,TAU);wx.fill();
-
-    // BRAC wave band placed lower so it doesn't cover key text
-    wx.fillStyle='#234a8a';wx.beginPath();wx.moveTo(x,y+150*scale);
-    wx.bezierCurveTo(x+95*scale,y+136*scale,x+196*scale,y+175*scale,x+cardW,y+149*scale);
-    wx.lineTo(x+cardW,y+cardH);wx.lineTo(x,y+cardH);wx.closePath();wx.fill();
-
-    // name and role above wave
-    wx.textAlign='left';
-    wx.fillStyle=scene.forgotId?'#851818':'#1a2d45';
-    wx.font=`800 ${18*scale}px system-ui, sans-serif`;wx.fillText((scene.name||'STUDENT').toUpperCase(),x+24*scale,y+136*scale);
-    wx.font=`700 ${14*scale}px system-ui, sans-serif`;wx.fillText('STUDENT',x+264*scale,y+136*scale);wx.fillText(meta.dept,x+337*scale,y+136*scale);
-
-    // readable lower information area
-    wx.font=`700 ${12*scale}px system-ui, sans-serif`;wx.fillStyle='#243340';
-    const rows=[['ID No.',scene.forgotId?'MISSING':meta.id],['Validity',scene.forgotId?'Bari te rekhe এসেছে':meta.validity],['Blood Group',meta.blood]];
-    rows.forEach((row,i)=>{const yy=y+182*scale+i*21*scale;wx.fillText(row[0],x+86*scale,yy);wx.fillText(':',x+214*scale,yy);wx.fillText(row[1],x+242*scale,yy);});
-    wx.fillStyle='rgba(255,255,255,.90)';wx.font=`800 ${12.5*scale}px system-ui, sans-serif`;wx.fillText(meta.gameCode+' · CAMPUS ENTRY',x+17*scale,y+226*scale);
-
-    const bubbleY=Math.max(86*scale,y-8*scale),leftX=Math.max(16*scale,w*.055),rightX=Math.min(w-312*scale,x+cardW+12*scale);
-    if(pass){
-      drawSpeechBox('ID মিলেছে। যান, class cholche!',rightX,bubbleY,275*scale,'#d4f2dc','#2c5842','#153327');
-    }else{
-      const pulse=.55+.45*Math.sin(age*10);
-      wx.fillStyle=`rgba(255,80,80,${.14+.14*pulse})`;wx.beginPath();wx.arc(x+cardW-54*scale,y+46*scale,26*scale,0,TAU);wx.fill();
-      const studentLine=age<3.2?'Sir, flood e esechi! ID card ta বাসায় রয়ে গেছে!':'Please sir, ekbar ঢুকতে দেন! Attendance miss hobe!';
-      const guardLine=age<3.2?'Rule is rule. BRAC ID chara campus entry hobe na.':'না ভাই, নিয়ম কিন্তু নিয়ম. পরে portal e mail korun.';
-      drawSpeechBox(studentLine,leftX,bubbleY+96*scale,300*scale,'#ffe0de','#944045','#4a1818');
-      drawSpeechBox(guardLine,rightX,bubbleY,290*scale,'#d8ecf4','#355061','#17313e');
-      wx.save();wx.font=`900 ${14*scale}px system-ui, sans-serif`;wx.fillStyle='#ff5555';wx.textAlign='center';wx.fillText('STUDENT: ID নাই! 😡',w*.5,y+cardH+22*scale);wx.restore();
+  // This is a standalone foreground UI, not a weather-canvas drawing.
+  // A canvas is behind the HTML HUD and control widgets; that is why the
+  // earlier ID card and guard bubbles were obscured even after moving them.
+  // Everything lives in the same game.js, with no HTML/CSS files to replace.
+  let campusGateOverlay=null, campusGateShownKey='';
+  function campusGateUI(){
+    if(campusGateOverlay)return campusGateOverlay;
+    const style=document.createElement('style');
+    style.id='majhi-campus-gate-css';
+    style.textContent=`
+      #majhi-campus-gate{position:fixed;inset:0;z-index:2147482000;display:flex;
+        justify-content:center;align-items:center;box-sizing:border-box;pointer-events:none;
+        background:rgba(2,12,19,.62);backdrop-filter:blur(2px);
+        opacity:0;visibility:hidden;transition:opacity .24s ease,visibility .24s ease;
+        color:#f7f4e9;font-family:system-ui,'Noto Sans Bengali','Nirmala UI',sans-serif;}
+      #majhi-campus-gate.mj-show{opacity:1;visibility:visible;}
+      #majhi-campus-gate *{box-sizing:border-box;}
+      .mj-gate-stage{width:min(780px,96vw);max-height:94vh;display:flex;flex-direction:column;
+        align-items:center;gap:12px;justify-content:center;}
+      .mj-gate-head{padding:8px 16px;border-radius:99px;background:rgba(7,27,40,.94);
+        border:1px solid rgba(245,199,103,.64);color:#ffe3a1;font-weight:900;
+        font-size:clamp(12px,1.25vw,17px);letter-spacing:.055em;text-align:center;
+        box-shadow:0 4px 20px #0007;max-width:92vw;}
+      .mj-gate-head.mj-fail{border-color:#f4a19a;color:#ffdbd5;}
+      .mj-gate-row{display:flex;align-items:center;justify-content:center;gap:18px;max-width:100%;}
+      .mj-gate-card-wrap{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:7px;}
+      .mj-gate-card{width:min(300px,calc(62vh * .635));aspect-ratio:0.635;min-width:190px;
+        position:relative;overflow:hidden;border-radius:17px;color:#243448;
+        background:linear-gradient(125deg,#fafcfc 0%,#f6f9fa 58%,#f0f5f6 100%);
+        border:2px solid rgba(212,226,232,.96);
+        box-shadow:0 14px 42px #000a,0 0 0 5px #ffffff17;
+        font-family:Arial,system-ui,sans-serif;flex-shrink:0;}
+      .mj-card-logo{position:absolute;left:6%;top:10%;width:38%;height:30%;text-align:center;}
+      .mj-card-logo svg{display:block;width:82%;height:73%;margin:auto;}
+      .mj-card-motto{font-family:Georgia,serif;font-size:clamp(6px,.66vw,8px);
+        letter-spacing:.08em;color:#4d6680;white-space:nowrap;}
+      .mj-card-photo{position:absolute;right:5%;top:7%;width:40%;height:34%;
+        overflow:hidden;background:linear-gradient(150deg,#edf3f5,#b9d3d9 95%);
+        border:1px solid #d3dce0;}
+      .mj-photo-head{position:absolute;left:30%;top:18%;width:40%;height:34%;border-radius:50%;
+        background:var(--skin,#c58d69);box-shadow:0 -9px 0 -2px #162b32;}
+      .mj-photo-shirt{position:absolute;left:14%;bottom:-7%;width:72%;height:47%;border-radius:46% 46% 0 0;
+        background:var(--shirt,#7a3841);}
+      .mj-card-wave{position:absolute;left:0;top:39%;width:100%;height:18%;}
+      .mj-card-name{position:absolute;right:7%;top:56%;max-width:85%;font-size:clamp(12px,1.13vw,16px);
+        line-height:1.13;text-align:right;font-weight:650;text-transform:uppercase;
+        color:#273542;overflow-wrap:anywhere;}
+      .mj-card-role{position:absolute;right:7%;top:69%;font-weight:650;
+        font-size:clamp(10px,1vw,13px);display:flex;flex-direction:column;align-items:flex-end;
+        gap:1px;color:#273645;}
+      .mj-card-details{position:absolute;right:6%;left:31%;bottom:6%;display:grid;
+        grid-template-columns:minmax(0,1.1fr) 8px minmax(0,1fr);column-gap:4px;
+        align-items:center;row-gap:4px;font-size:clamp(10px,.89vw,12px);line-height:1.15;}
+      .mj-card-details span:nth-child(3n+3){text-align:right;white-space:nowrap;}
+      .mj-card-stripes{position:absolute;left:-2%;bottom:0%;width:24%;height:13%;pointer-events:none;}
+      .mj-card-stripes path{fill:none;stroke-width:6;stroke-linecap:round;}
+      .mj-card-fail-mark{display:none;position:absolute;inset:35% 7% auto 7%;z-index:3;
+        transform:rotate(-11deg);border:4px solid #cb333c;color:#a82734;background:#fff8;
+        font-weight:1000;font-size:clamp(15px,2vw,23px);letter-spacing:.09em;text-align:center;
+        padding:9px 3px;border-radius:5px;box-shadow:0 3px 16px #0002;}
+      .mj-gate-card.mj-fail .mj-card-fail-mark{display:block;}
+      .mj-gate-card.mj-fail .mj-card-photo{filter:saturate(.65);}
+      .mj-gate-card.mj-fail .mj-card-details{color:#a53d42;}
+      .mj-gate-illustrative{font-size:10px;color:#e8f0f4;background:#102c3bc9;
+        padding:3px 9px;border-radius:999px;letter-spacing:.035em;}
+      .mj-gate-dialogue{width:318px;max-width:min(318px,92vw);padding:15px 14px;
+        border-radius:16px;border:1px solid #83a6b285;background:#0a2431ed;
+        box-shadow:0 12px 35px #0009;display:flex;flex-direction:column;gap:10px;}
+      .mj-gate-dialogue-title{font-size:13px;font-weight:900;letter-spacing:.08em;
+        color:#f1d393;text-align:center;}
+      .mj-gate-line{border-radius:13px;padding:11px 12px;line-height:1.45;
+        border:2px solid transparent;transition:opacity .15s;}
+      .mj-gate-line.mj-guard{background:#d9e9ef;color:#153644;border-color:#547e8b;}
+      .mj-gate-line.mj-student{background:#ffe4dc;color:#622c2a;border-color:#c07769;}
+      .mj-gate-line.mj-dim{opacity:.42;}
+      .mj-gate-speaker{font-size:10px;font-weight:950;letter-spacing:.11em;margin-bottom:4px;}
+      .mj-gate-message{font-size:clamp(12px,1.05vw,15px);font-weight:750;overflow-wrap:anywhere;}
+      .mj-gate-foot{display:flex;justify-content:center;align-items:center;gap:7px;
+        color:#d9e8ed;text-align:center;font-size:11px;font-weight:650;}
+      .mj-gate-dot{height:8px;width:8px;background:#f1c778;border-radius:50%;}
+      @media(max-width:660px){
+        .mj-gate-stage{gap:6px;}
+        .mj-gate-row{flex-direction:column;gap:8px;}
+        .mj-gate-card{width:min(260px,calc(54vh * .635));min-width:180px;}
+        .mj-gate-dialogue{width:min(430px,90vw);padding:9px;gap:5px;}
+        .mj-gate-line{padding:6px 9px;}
+        .mj-gate-line.mj-dim{display:none;}
+        .mj-gate-head{font-size:12px;padding:5px 10px;}
+        .mj-gate-message{font-size:12px;}
+        .mj-gate-illustrative,.mj-gate-foot{font-size:9px;}
+      }
+      @media(max-height:600px){
+        .mj-gate-stage{gap:5px;}
+        .mj-gate-row{gap:9px;}
+        .mj-gate-card{width:min(225px,calc(57vh * .635));min-width:145px;}
+        .mj-gate-dialogue{padding:9px;gap:7px;}
+        .mj-gate-line{padding:7px 9px;}
+      }
+      @media(prefers-reduced-motion:reduce){#majhi-campus-gate,.mj-gate-line{transition:none;}}
+    `;
+    document.head.appendChild(style);
+    const root=document.createElement('section');
+    root.id='majhi-campus-gate';root.setAttribute('aria-label','BRAC University student ID gate check');
+    root.innerHTML=`
+      <div class="mj-gate-stage">
+        <div class="mj-gate-head" id="mj-gate-heading">BRACU CAMPUS SECURITY</div>
+        <div class="mj-gate-row">
+          <div class="mj-gate-card-wrap">
+            <div class="mj-gate-card" id="mj-gate-card">
+              <div class="mj-card-logo">
+                <svg viewBox="0 0 100 100" aria-hidden="true">
+                  <path d="M16 65 A39 39 0 1 1 84 65" fill="none" stroke="#24527e" stroke-width="2.8"/>
+                  <text x="50" y="39" font-family="Georgia,serif" font-size="19" fill="#2e4456" text-anchor="middle">BRAC</text>
+                  <text x="50" y="52" font-family="Georgia,serif" font-size="9.5" fill="#2e4456" text-anchor="middle">UNIVERSITY</text>
+                  <path d="M28 63 L50 78 L72 63 M33 70 L50 83 L67 70 M39 78 L50 87 L61 78" stroke="#355e83" stroke-width="2.6" fill="none"/>
+                </svg>
+                <div class="mj-card-motto">Inspiring Excellence</div>
+              </div>
+              <div class="mj-card-photo"><div class="mj-photo-head"></div><div class="mj-photo-shirt"></div></div>
+              <svg class="mj-card-wave" viewBox="0 0 400 90" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 76 C98 16 213 -13 309 7 C349 15 377 22 400 8 L400 48 C308 53 239 25 159 49 C90 70 46 88 0 103 Z" fill="#244887"/>
+              </svg>
+              <div class="mj-card-name" id="mj-gate-name">STUDENT</div>
+              <div class="mj-card-role"><span>STUDENT</span><span id="mj-gate-dept">CSE</span></div>
+              <div class="mj-card-details">
+                <span>ID No.</span><span>:</span><span id="mj-gate-id">DEMO-0001</span>
+                <span>Validity</span><span>:</span><span id="mj-gate-validity">Jun 2027</span>
+                <span>Blood Group</span><span>:</span><span id="mj-gate-blood">A+</span>
+              </div>
+              <svg class="mj-card-stripes" viewBox="0 0 105 85" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M-30 97 Q 5 37 100 22" stroke="#244888"/>
+                <path d="M-19 111 Q 18 57 105 37" stroke="#213446"/>
+                <path d="M-13 128 Q 29 77 104 53" stroke="#8d9a9e"/>
+              </svg>
+              <div class="mj-card-fail-mark">NO ID!</div>
+            </div>
+            <div class="mj-gate-illustrative">FICTIONAL STUDENT CARD · GAME PROP</div>
+          </div>
+          <div class="mj-gate-dialogue">
+            <div class="mj-gate-dialogue-title" id="mj-gate-dialogue-title">ID VERIFICATION</div>
+            <div class="mj-gate-line mj-student" id="mj-gate-student-row">
+              <div class="mj-gate-speaker" id="mj-gate-student-speaker">STUDENT</div>
+              <div class="mj-gate-message" id="mj-gate-student-msg"></div>
+            </div>
+            <div class="mj-gate-line mj-guard" id="mj-gate-guard-row">
+              <div class="mj-gate-speaker">SECURITY GUARD</div>
+              <div class="mj-gate-message" id="mj-gate-guard-msg"></div>
+            </div>
+            <div class="mj-gate-foot"><span class="mj-gate-dot"></span><span id="mj-gate-foot">Only BRACU has sunshine. Classes still on!</span></div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(root);
+    campusGateOverlay=root;
+    return root;
+  }
+  function updateCampusGateOverlay(){
+    const root=campusGateUI(),scene=S.campusGateScene;
+    if(S.mode!=='PLAYING'||!scene){
+      root.classList.remove('mj-show');campusGateShownKey='';return;
     }
-    wx.restore();
+    root.classList.add('mj-show');
+    const age=S.time-scene.start;
+    const turn=scene.forgotId?Math.min(3,Math.floor(age/1.525)):0;
+    const sceneKey=`${scene.index}:${scene.start}:${scene.forgotId}:${turn}`;
+    if(sceneKey===campusGateShownKey)return;
+    campusGateShownKey=sceneKey;
+    const get=id=>root.querySelector('#'+id),meta=fauxBracMeta(scene,scene.index),failed=scene.forgotId;
+    const name=String(scene.name||'STUDENT');
+    get('mj-gate-heading').textContent=failed?'BRACU SECURITY · ID MISSING':'BRACU SECURITY · ID VERIFIED';
+    get('mj-gate-heading').classList.toggle('mj-fail',failed);
+    get('mj-gate-card').classList.toggle('mj-fail',failed);
+    get('mj-gate-name').textContent=name.toUpperCase();
+    get('mj-gate-dept').textContent=meta.dept;
+    get('mj-gate-id').textContent=failed?'NOT PROVIDED':meta.gameCode;
+    get('mj-gate-validity').textContent=failed?'—':meta.validity;
+    get('mj-gate-blood').textContent=failed?'—':meta.blood;
+    get('mj-gate-card').style.setProperty('--shirt',[
+      '#b84d43','#437f99','#5c9468','#8f67ad','#538d75','#cf837e'
+    ][scene.colorId%6]);
+    get('mj-gate-card').style.setProperty('--skin',[
+      '#c98969','#be8267','#d59a73','#b97c63'
+    ][scene.colorId%4]);
+    get('mj-gate-student-speaker').textContent=name.toUpperCase();
+    const student=get('mj-gate-student-row'),guard=get('mj-gate-guard-row');
+    if(!failed){
+      get('mj-gate-dialogue-title').textContent='ID CHECK PASSED';
+      get('mj-gate-student-msg').textContent='Thank you, majhi! Class-e pouchhe gelam!';
+      get('mj-gate-guard-msg').textContent='ID thik ache. Class cholche — bhitore jaan!';
+      get('mj-gate-foot').textContent='Welcome to BRAC University · No flood holidays!';
+      student.classList.remove('mj-dim');guard.classList.remove('mj-dim');
+    }else{
+      get('mj-gate-dialogue-title').textContent='NO ID, NO ENTRY! 😡';
+      const lines=[
+        ['Sir! Eto pani diye ashlam. ID ta bashay fele eshechi!','ID chara campus-e dhuka jabe na. Rules are rules!'],
+        ['Sir, class miss hobe! Ektu consider koren!','Bhai, BRACU te class bondho hoy na. ID lagbe.'],
+        ['Ami nao kore eshechi! Attendance ta ki hobe?!','Bujhlam. Kintu ID chhara entry hobe na.'],
+        ['Ei brishtite abar ID ante jabo?! 😡','Sorry bhai. Next time ID niye asben.']
+      ];
+      get('mj-gate-student-msg').textContent=lines[turn][0];
+      get('mj-gate-guard-msg').textContent=lines[turn][1];
+      student.classList.toggle('mj-dim',turn%2===1);
+      guard.classList.toggle('mj-dim',turn%2===0);
+      get('mj-gate-foot').textContent='Flood: maximum · University rules: undefeated';
+    }
   }
   let comicView=null,comicProj=null,comicEye=null;
   function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
@@ -2609,7 +2756,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity13-overlay-fix-shop-visibility';
+  window.majhiVersion='fidelity14-centered-bracu-id-gate';
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
@@ -2622,7 +2769,7 @@
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else {S.bobTime+=dt*.5;if(S.mode==='WON')S.postWinClock=(S.postWinClock||0)+dt;}
-    const frameStart=performance.now();try{draw();renderRain(dt);}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
+    const frameStart=performance.now();try{draw();renderRain(dt);updateCampusGateOverlay();}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
     S.frameMS=performance.now()-frameStart;S.frameWorst=Math.max(S.frameWorst*.999,S.frameMS);hudClock+=dt;if(hudClock>.11){hudClock=0;if(S.mode!=='MENU')refreshHUD();}
   }
   // Intensified menu EXIT GAME flashlight gag. Injected here so the existing
