@@ -1,0 +1,319 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1">
+
+  <meta name="theme-color" content="#081c26">
+
+  <meta name="description"
+        content="Majhi Jaben?! Visual Lab 02 - Character and rowing animation prototype.">
+
+  <title>Majhi Jaben?! | Visual Lab 02</title>
+
+  <link rel="stylesheet" href="./style.css">
+  <script src="./visual-test.js" defer></script>
+</head>
+
+<body>
+
+  <div class="app">
+
+    <!-- HEADER -->
+    <header class="topbar">
+
+      <div class="brand">
+        <span class="eyebrow">MAJHI JABEN?! / VISUAL LAB 02</span>
+        <h1>The Art of Rowing</h1>
+        <p>Boatman and rowing mechanics prototype</p>
+      </div>
+
+      <a class="game-link" href="../index.html">
+        Original Game
+      </a>
+
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <main class="layout">
+
+      <!-- 3D SCENE -->
+      <section class="viewer" aria-label="3D boat inspection">
+
+        <canvas id="scene" tabindex="0">
+          Your browser does not support the 3D canvas.
+        </canvas>
+
+        <div class="scene-status">
+          <span class="status-dot"></span>
+          <span id="rendererStatus">Initializing visual lab...</span>
+        </div>
+
+        <div id="errorPanel" class="error-panel" hidden>
+          <h2>Renderer unavailable</h2>
+          <p id="errorMessage">
+            The 3D scene could not be initialized.
+          </p>
+        </div>
+
+        <div class="scene-heading">
+          <span>PROTOTYPE 02</span>
+          <h2>A Better Majhi</h2>
+          <p>
+            Adult proportions. Connected rowing mechanics.
+            A more believable wooden boat.
+          </p>
+        </div>
+
+        <div class="scene-footer">
+          <span>DRAG TO ROTATE</span>
+          <span>SCROLL TO ZOOM</span>
+          <span>SELECT CAMERA PRESETS</span>
+        </div>
+
+      </section>
+
+      <!-- INSPECTION PANEL -->
+      <aside class="panel">
+
+        <div class="panel-heading">
+          <span class="eyebrow">VISUAL DEVELOPMENT</span>
+          <h2>Inspection Controls</h2>
+          <p>
+            Inspect the character and rowing motion
+            before integrating anything into the game.
+          </p>
+        </div>
+
+        <!-- CAMERA CONTROLS -->
+        <section class="control-section">
+
+          <h3>Camera Views</h3>
+
+          <div class="camera-grid"
+               role="group"
+               aria-label="Camera view presets">
+
+            <button type="button"
+                    class="view-btn active"
+                    data-view="threequarter"
+                    aria-pressed="true">
+              3/4 View
+            </button>
+
+            <button type="button"
+                    class="view-btn"
+                    data-view="front"
+                    aria-pressed="false">
+              Front
+            </button>
+
+            <button type="button"
+                    class="view-btn"
+                    data-view="side"
+                    aria-pressed="false">
+              Side
+            </button>
+
+            <button type="button"
+                    class="view-btn"
+                    data-view="rear"
+                    aria-pressed="false">
+              Rear
+            </button>
+
+            <button type="button"
+                    class="view-btn"
+                    data-view="top"
+                    aria-pressed="false">
+              Top
+            </button>
+
+            <button type="button"
+                    class="view-btn"
+                    data-view="closeup"
+                    aria-pressed="false">
+              Close-up
+            </button>
+
+          </div>
+
+          <button type="button"
+                  id="resetCamera"
+                  class="secondary-btn">
+            Reset Camera
+          </button>
+
+        </section>
+
+        <!-- ROWING ANIMATION -->
+        <section class="control-section">
+
+          <h3>Rowing Animation</h3>
+
+          <button type="button"
+                  id="pauseRowing"
+                  class="primary-btn"
+                  aria-pressed="false">
+            Pause Rowing
+          </button>
+
+          <div class="control-label">
+            <label for="rowingSpeed">Rowing Tempo</label>
+            <output id="speedValue"
+                    for="rowingSpeed">1.0x</output>
+          </div>
+
+          <input type="range"
+                 id="rowingSpeed"
+                 min="0.3"
+                 max="2"
+                 step="0.1"
+                 value="1">
+
+          <div class="control-label">
+            <label for="strokePhase">Stroke Position</label>
+            <output id="phaseValue"
+                    for="strokePhase">0%</output>
+          </div>
+
+          <input type="range"
+                 id="strokePhase"
+                 min="0"
+                 max="100"
+                 step="1"
+                 value="0">
+
+          <div class="stroke-info">
+            <span class="eyebrow">CURRENT ROWING PHASE</span>
+            <strong id="phaseName">Catch</strong>
+            <p id="phaseDescription">
+              The paddle blades prepare to enter the water.
+            </p>
+          </div>
+
+        </section>
+
+        <!-- LIGHTING -->
+        <section class="control-section">
+
+          <h3>Lighting</h3>
+
+          <div class="lighting-options"
+               role="group"
+               aria-label="Lighting presets">
+
+            <button type="button"
+                    class="light-btn active"
+                    data-light="studio"
+                    aria-pressed="true">
+              Studio
+            </button>
+
+            <button type="button"
+                    class="light-btn"
+                    data-light="overcast"
+                    aria-pressed="false">
+              Overcast
+            </button>
+
+          </div>
+
+        </section>
+
+        <!-- DEBUG TOOLS -->
+        <section class="control-section">
+
+          <h3>Animation Debugging</h3>
+
+          <label class="check-option">
+            <input type="checkbox" id="showRig">
+            <span>Show hand grips and oar pivots</span>
+          </label>
+
+          <label class="check-option">
+            <input type="checkbox"
+                   id="showWater"
+                   checked>
+            <span>Show water surface</span>
+          </label>
+
+          <div class="debug-data">
+            <div>
+              <span>Renderer</span>
+              <strong>WebGL 2</strong>
+            </div>
+            <div>
+              <span>Frame Rate</span>
+              <strong id="fpsValue">-- FPS</strong>
+            </div>
+            <div>
+              <span>Animation</span>
+              <strong id="animationStatus">Running</strong>
+            </div>
+          </div>
+
+        </section>
+
+        <!-- INSPECTION GOALS -->
+        <section class="control-section">
+
+          <h3>What We Are Testing</h3>
+
+          <ol class="inspection-list">
+
+            <li>
+              <strong>Adult Character Proportions</strong>
+              <p>
+                Natural head size, shoulders, arms,
+                neck, clothing, and seated posture.
+              </p>
+            </li>
+
+            <li>
+              <strong>Connected Hands</strong>
+              <p>
+                Both hands maintain contact with
+                the paddle grips during rowing.
+              </p>
+            </li>
+
+            <li>
+              <strong>Real Rowing Cycle</strong>
+              <p>
+                Catch, drive, release, and recovery
+                with natural diagonal oar movement.
+              </p>
+            </li>
+
+            <li>
+              <strong>Believable Boat</strong>
+              <p>
+                Curved wooden hull, raised sides,
+                visible seating, and natural proportions.
+              </p>
+            </li>
+
+          </ol>
+
+        </section>
+
+        <div class="prototype-notice">
+          <strong>Independent Graphics Test</strong>
+          <p>
+            This prototype does not modify the playable
+            game, missions, passengers, voice recordings,
+            or existing graphics files.
+          </p>
+        </div>
+
+      </aside>
+
+    </main>
+
+  </div>
+
+</body>
+</html>
