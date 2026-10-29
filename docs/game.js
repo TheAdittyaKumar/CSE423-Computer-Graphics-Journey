@@ -1572,6 +1572,17 @@
   }
   const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0};
 
+  // Identity-first passenger casting. A named passenger NEVER borrows someone
+  // else's recording. Unrecorded students get subtitles instead of miscast audio.
+  // Additional voices can be added to this roster when their recordings exist.
+  const PASSENGER_VOICE_CAST=Object.freeze({
+    Adittya:Object.freeze({waiting:'student_adittya_03',onboard:'student_adittya_02',dropoff:'student_adittya_01',idProtest:'student_adittya_03'}),
+    Nafisa:Object.freeze({waiting:'student_nafisa_01',onboard:'student_nafisa_02',dropoff:'student_nafisa_03',idProtest:'student_nafisa_01'}),
+    Shamim:Object.freeze({waiting:'civilian_shamim_01',onboard:'civilian_shamim_03',dropoff:'civilian_shamim_03',idProtest:null}),
+    Mitu:Object.freeze({waiting:'civilian_mitu_01',onboard:'civilian_mitu_03',dropoff:'civilian_mitu_03',idProtest:null})
+  });
+  const passengerCast=name=>Object.prototype.hasOwnProperty.call(PASSENGER_VOICE_CAST,name)?name:null;
+  const passengerClip=(person,event)=>PASSENGER_VOICE_CAST[person?.voiceCharacter]?.[event]||null;
   // DHAKA AUDIO V2 — natural user-recorded voices, seven selected memes,
   // menu song and flashlight scare, backed by the existing nonverbal SFX.
   // All paths below exist in the supplied docs/audio/ package.
@@ -1665,6 +1676,7 @@
     let lastCampusHeaven=false,rewardShownUntil=0,lastHtmlExit=0;
     const pick=a=>a[Math.floor(Math.random()*a.length)];
     const sayMeta=n=>voiceText[alias[n]||n];
+    const speakerLine=(clip,person)=>clip?voiceText[clip]?.[1]:null;
     const status=message=>{const item=ui?.querySelector('[data-audio-status]');if(item)item.textContent=message;};
     function init(){
       // Set loading before awaiting anything: a menu pointerdown immediately
@@ -1774,12 +1786,25 @@
       voiceBusyUntil=ctx.currentTime+node.duration+.08;
       showSubtitle(actual,node.duration);updateMix();return true;
     }
-    function talkSequence(names,options={}){
+    // Sequence items may be real recordings or caption-only dialogue beats.
+    // A subtitle-only beat is never voiced by a different student actor.
+    function talkSequence(entries,options={}){
       if(!ctx||ctx.state!=='running'||!on||!speech){options.done?.();return;}
       const playNext=(index)=>{
         if(options.cancel?.()){options.done?.();return;}
-        if(index>=names.length){options.done?.();return;}
-        const id=names[index];options.turn?.(index);
+        if(index>=entries.length){options.done?.();return;}
+        const entry=typeof entries[index]==='string'?{clip:entries[index]}:entries[index];
+        options.turn?.(index,entry);
+        const id=entry.clip;
+        if(!id){
+          const duration=Math.max(1.15,Math.min(4.0,entry.duration||2.8));
+          // WebAudio clock (not a JS timer) also pauses caption-only lines
+          // correctly if the player pauses the game.
+          const silent=ctx.createBufferSource();
+          silent.buffer=ctx.createBuffer(1,Math.max(1,Math.round(duration*ctx.sampleRate)),ctx.sampleRate);
+          silent.onended=()=>playNext(index+1);
+          silent.start();return;
+        }
         const node=emit(id,{x:options.x??S.x,z:options.z??S.z,
           ignoreDistance:options.ignoreDistance??true,volume:1.0,key:`seq-${options.key}-${index}`,cooldown:0});
         if(!node){playNext(index+1);return;}
@@ -1788,25 +1813,50 @@
       };
       playNext(0);
     }
+    function makeGateScript(scene){
+      const profile=PASSENGER_VOICE_CAST[scene.voiceCharacter];
+      const recordedProtest=profile?.idProtest||null;
+      const recordedArrival=profile?.dropoff||null;
+      const t=(clip,fallback)=>voiceText[clip]?.[1]||fallback;
+      if(!scene.forgotId)return [
+        {clip:'guard_rahman_01',speaker:'guard',text:t('guard_rahman_01','আইডি ঠিক আছে, ভেতরে যান!')},
+        {clip:recordedArrival,speaker:'student',text:t(recordedArrival,'ধন্যবাদ আঙ্কেল! ক্লাসে যাই!'),duration:2.1}
+      ];
+      return [
+        {clip:'guard_rahman_02',speaker:'guard',text:t('guard_rahman_02','আইডি কার্ড কোথায়?')},
+        {clip:null,speaker:'student',text:'আঙ্কেল, আইডি কার্ডটা বাসায় রয়ে গেছে! এত পানি পার হয়ে আসছি!',duration:2.9},
+        {clip:recordedProtest,speaker:'student',
+          text:t(recordedProtest,'আঙ্কেল প্লিজ! আজকে একবার ঢুকতে দেন, অ্যাটেনডেন্স মিস হবে!'),duration:3.0},
+        {clip:'guard_rahman_03',speaker:'guard',text:t('guard_rahman_03','পুরা ঢাকা ডুবলেও নিয়ম তো নিয়ম!')},
+        {clip:null,speaker:'student',text:'আঙ্কেল! পুরা ঢাকা পানির নিচে, তারপরেও ঢুকতে দিবেন না?!',duration:2.8}
+      ];
+    }
     function startGate(scene){
       if(scene.audioStarted)return;
       scene.audioStarted=true;scene.audioComplete=false;scene.dialogueTurn=0;
-      const missing=scene.forgotId;
+      scene.dialogue=makeGateScript(scene);
       if(!speech||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
       init().then(ok=>{
         if(!ok||S.campusGateScene!==scene||!speech||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
         try{activeVoice?.stop();}catch(_e){}
         voiceBusyUntil=0;
-        if(missing)play('meme_vine_boom',{ignoreDistance:true,volume:.67,key:`id-${scene.index}`,cooldown:0});
-        const lines=missing?['guard_rahman_02','student_id_missing_01','student_id_missing_02','guard_rahman_03','student_id_missing_03']:
-          ['guard_rahman_01'];
-        talkSequence(lines,{key:`gate-${scene.index}`,ignoreDistance:true,cancel:()=>S.campusGateScene!==scene,
+        if(scene.forgotId)play('meme_vine_boom',{ignoreDistance:true,volume:.67,key:`id-${scene.index}`,cooldown:0});
+        talkSequence(scene.dialogue,{key:`gate-${scene.index}`,ignoreDistance:true,cancel:()=>S.campusGateScene!==scene,
           turn:i=>{scene.dialogueTurn=i;},
           done:()=>{
             scene.audioComplete=true;scene.finishedAt=S.time;
-            if(missing&&S.campusGateScene===scene)play('meme_error',{ignoreDistance:true,volume:.52,key:`rejected-${scene.index}`,cooldown:0});
+            if(scene.forgotId&&S.campusGateScene===scene)play('meme_error',{ignoreDistance:true,volume:.52,key:`rejected-${scene.index}`,cooldown:0});
           }});
       });
+    }
+    function speakPassenger(person,event,options={}){
+      if(!person)return false;
+      const clip=passengerClip(person,event);
+      // Never substitute an unrelated singer/actor based on rescue type or color.
+      if(!clip)return false;
+      return voice(clip,options.x??S.x,options.z??S.z,options.level??1,
+        {priority:options.priority??1,force:options.force??false,
+         ignoreDistance:options.ignoreDistance??false,range:options.range,key:options.key});
     }
     function beginQuarrel(r,incident){
       const key=`${incident.id}:${incident.at}`;if(quarrelsSeen.has(key))return;
@@ -1902,7 +1952,7 @@
       lastCampusHeaven=heaven;
       if(S.rowing&&S.time-paddleAt>(S.boostOn?.42:.57)){
         paddleAt=S.time;play('paddle_'+(1+Math.floor(S.time*3)%3),{ignoreDistance:true,volume:S.boostOn?.8:.6,cooldown:0});}
-      if(S.current&&!lastZone){play('warning',{ignoreDistance:true,volume:.32});voice('current_warn',S.x,S.z,.9,{priority:2});}
+      if(S.current&&!lastZone){play('warning',{ignoreDistance:true,volume:.32});}
       lastZone=S.current;
       if(S.aiRescueCount>lastAiRescues){
         const r=S.aiRickshaws.find(x=>S.time-x.rescuedAt<.28&&distance(x.x,x.z,S.x,S.z)<520);
@@ -1922,27 +1972,32 @@
         const choices=[];
         for(const r of S.rides){const x=r.personX??r.x,z=r.personZ??r.z;
           if(r.state==='WAITING'&&distance(x,z,S.x,S.z)<510){
-            const pool=r.type==='DROWNING'?['civilian_shamim_01','civilian_shamim_02','civilian_mitu_01','civilian_mitu_02']:
-              (r.name==='Nafisa'?['student_nafisa_01','student_nafisa_03']:
-                ['student_adittya_01','student_adittya_03']);
-            choices.push({x,z,clip:pick(pool),priority:r.type==='DROWNING'?2:1});
-          }else if(r.state==='ONBOARD')choices.push({x:S.x,z:S.z,clip:pick(['student_adittya_01','student_adittya_02','student_adittya_03','student_nafisa_01','student_nafisa_02','student_nafisa_03']),priority:1});
+            const clip=passengerClip(r,'waiting');
+            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>24)
+              choices.push({x,z,clip,ride:r,priority:r.type==='DROWNING'?2:1});
+          }else if(r.state==='ONBOARD'){
+            const clip=passengerClip(r,'onboard');
+            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>24)
+              choices.push({x:S.x,z:S.z,clip,ride:r,priority:1});
+          }
         }
         for(const p of S.cityPeople){if(distance(p.x,p.z,S.x,S.z)>410)continue;
-          const pool=p.role==='SWIM'?['civilian_shamim_01','civilian_mitu_01']:
-            p.role==='SHOP'?['shopkeeper_kuddus_01','shopkeeper_kuddus_02','shopkeeper_kuddus_03']:
-            p.role==='WADE'?['civilian_mitu_01','student_adittya_03']:[];
-          if(pool.length)choices.push({x:p.x,z:p.z,clip:pick(pool),priority:p.role==='SWIM'?2:0});
+          // Background swimmers/waders have a persistent *role* voice profile;
+          // don't switch from a male to a female actor mid-conversation.
+          const clip=p.role==='SWIM'||p.role==='WADE'?
+            ((p.uid%2===0)?'civilian_shamim_01':'civilian_mitu_01'):
+            p.role==='SHOP'?'shopkeeper_kuddus_01':null;
+          if(clip)choices.push({x:p.x,z:p.z,clip,priority:p.role==='SWIM'?2:0});
         }
         for(const r of S.aiRickshaws){if(distance(r.x,r.z,S.x,S.z)<430&&r.incidentCar===null)
           choices.push({x:r.x,z:r.z,clip:voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][0],priority:0});}
         choices.sort((a,b)=>b.priority-a.priority||distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z));
-        if(choices.length){const c=choices[Math.floor(Math.random()*Math.min(3,choices.length))];voice(c.clip,c.x,c.z,1,{priority:c.priority});}
+        if(choices.length){const c=choices[Math.floor(Math.random()*Math.min(3,choices.length))];if(voice(c.clip,c.x,c.z,1,{priority:c.priority})&&c.ride)c.ride.voiceLastSpokenAt=S.time;}
         peopleAt=S.time+9+Math.random()*7;
       }
       if(S.time>thunderAt){if(campusRainWeight(S.x,S.z)>.3)play('thunder',{ignoreDistance:true,volume:.65});thunderAt=S.time+31+Math.random()*23;}
     }
-    return {initUI,menuBegin,begin,update,play,voice,startGate,showReward,exitScare,
+    return {initUI,menuBegin,begin,update,play,voice,speakPassenger,startGate,showReward,exitScare,
       repair(){play('power_restore',{ignoreDistance:true,volume:.8});},
       impact(power){play('impact_'+(1+(Math.floor(S.time*3)%2)),{ignoreDistance:true,volume:.75*power});},
       getState(){return {started,ready,on,voices:speech,captions:captionsOn,
@@ -2049,7 +2104,7 @@
     const place=id<2?places[0]:places[Math.floor(Math.random()*places.length)];
     const dist=Math.abs(S.x-place.x)+Math.abs(S.z-place.z)+Math.abs(place.x)+Math.abs(place.z-1080);
     const deadline=clamp(Math.round(43+dist/130+(type==='HOME'?7:0)+rnd(-4,6)),66,118);
-    S.request={id,type,name:students[id%students.length],locationId:place.id,x:place.x,z:place.z,pickup:place.name,personX:place.personX,personZ:place.personZ,doorX:place.doorX,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',relocated:place.relocated,colorId:id%studentColors.length,warning:false};S.requestLeft=22;gameAudio.play('warning',{ignoreDistance:true,volume:.32,cooldown:3});}
+    S.request={id,type,name:students[id%students.length],voiceCharacter:passengerCast(students[id%students.length]),locationId:place.id,x:place.x,z:place.z,pickup:place.name,personX:place.personX,personZ:place.personZ,doorX:place.doorX,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',relocated:place.relocated,colorId:id%studentColors.length,warning:false};S.requestLeft=22;gameAudio.play('warning',{ignoreDistance:true,volume:.32,cooldown:3});}
   function accept(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming ride request.');return;}
     if(S.rides.length>=5){notify('Your rescue queue is full (5 active requests).');return;}
     S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;gameAudio.play('pickup',{ignoreDistance:true,volume:.35});refreshHUD();}
@@ -2278,7 +2333,7 @@
     updateCampusGateSequence();
     if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;
       for(const r of arrived){r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;}
-      queueCampusArrivals(arrived,S.x,S.z,S.angle,gained);gameAudio.play('delivery',{ignoreDistance:true,volume:.88});gameAudio.voice('passenger_thanks',S.x,S.z,1.02,{priority:2,force:true});
+      queueCampusArrivals(arrived,S.x,S.z,S.angle,gained);gameAudio.play('delivery',{ignoreDistance:true,volume:.88});
       S.rides=S.rides.filter(r=>r.state!=='DELIVERED');
       S.deliveryBanner={at:S.time,count:arrived.length,points:gained};
       notify(`Delivered ${arrived.length} student(s) to BRACU! Gate check চলছে! +${gained} points`,4.4);
@@ -2301,7 +2356,7 @@
         const returnDistance=distance(S.x,S.z,0,1080);
         nearby.timeLeft=Math.min(nearby.timeLeft,Math.round(clamp(28+returnDistance/105,34,62)));
         nearby.warning=false;
-        S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;gameAudio.play('pickup',{ignoreDistance:true,volume:.73});gameAudio.voice(nearby.type==='DROWNING'?'swimmer_rescued':(nearby.id%4===0?'passenger_laptop':'student_rescued_1'),S.x,S.z,1.07,{priority:2,force:true});S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
+        S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;gameAudio.play('pickup',{ignoreDistance:true,volume:.73});if(gameAudio.speakPassenger(nearby,'onboard',{x:S.x,z:S.z,level:1.07,priority:2,force:true,ignoreDistance:true}))nearby.voiceLastSpokenAt=S.time;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
     if(S.delivered>=6){if(S.campusQueue.length===0&&!S.campusGateScene&&!S.deliveryEffects.length&&S.time>=(S.rewardUntil||0)){S.mode='WON';keys.clear();nextModal('WON');}}else if(S.time-S.gatePausedTime>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time-S.gatePausedTime>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
@@ -2603,7 +2658,7 @@
       const sx=startX+(bx*Math.cos(h)-bz*Math.sin(h))*.62,sz=startZ+(bx*Math.sin(h)+bz*Math.cos(h))*.62;
       S.campusEntryCounter=(S.campusEntryCounter||0)+1;
       const forgot=S.campusEntryCounter%3===0;
-      S.campusQueue.push({name:r.name,colorId:r.colorId,startX:sx,startZ:sz,dropAt:base,
+      S.campusQueue.push({name:r.name,voiceCharacter:r.voiceCharacter||null,colorId:r.colorId,startX:sx,startZ:sz,dropAt:base,
         forgotId:forgot,group,walkStarted:false,sceneDone:false,walkTime:2.15,gateDelay:2.45,index:S.campusEntryCounter-1});
       base+=forgot?39:10.4;
     }
@@ -2852,28 +2907,19 @@
     ][scene.colorId%4]);
     get('mj-gate-student-speaker').textContent=name.toUpperCase();
     const student=get('mj-gate-student-row'),guard=get('mj-gate-guard-row');
-    if(!failed){
-      get('mj-gate-dialogue-title').textContent='ID CHECK PASSED';
-      get('mj-gate-student-msg').textContent='Thank you, majhi! Class-e pouchhe gelam!';
-      get('mj-gate-guard-msg').textContent='ID thik ache. Class cholche — bhitore jaan!';
-      get('mj-gate-foot').textContent='Welcome to BRAC University · No flood holidays!';
-      student.classList.remove('mj-dim');guard.classList.remove('mj-dim');
-    }else{
-      get('mj-gate-dialogue-title').textContent='NO ID, NO ENTRY! 😡';
-      const lines=[
-        ['আঙ্কেল! এত পানি পার হয়ে আসছি!','এই যে! আইডি কার্ড কোথায়? আইডি ছাড়া ঢোকা যাবে না!'],
-        ['আঙ্কেল! আইডি কার্ডটা বাসায় রয়ে গেছে! আজকে একটু ঢুকতে দেন!','আইডি ছাড়া ক্যাম্পাসে ঢোকা যাবে না!'],
-        ['আঙ্কেল প্লিজ! আজকে অ্যাটেনডেন্স মিস করলে শেষ!','নিয়ম সবার জন্য সমান।'],
-        ['আঙ্কেল, এত পানি পার হয়ে আসছি!','পুরা ঢাকা পানির নিচে থাকলেও নিয়ম তো নিয়ম! আগে আইডি আনেন!'],
-        ['পুরা ঢাকা ডুইবা গেছে! আর আপনি আইডি কার্ড নিয়া বসে আছেন?! 😡','নিয়ম তো নিয়ম।']
-      ];
-      get('mj-gate-student-msg').textContent=lines[turn][0];
-      get('mj-gate-guard-msg').textContent=lines[turn][1];
-      const studentSpeaking=[1,2,4].includes(turn);
-      student.classList.toggle('mj-dim',!studentSpeaking);
-      guard.classList.toggle('mj-dim',studentSpeaking);
-      get('mj-gate-foot').textContent='Flood: maximum · University rules: undefeated';
-    }
+    const dialogue=Array.isArray(scene.dialogue)?scene.dialogue:[];
+    const current=dialogue[Math.min(scene.dialogueTurn||0,Math.max(0,dialogue.length-1))];
+    const isGuard=current?.speaker==='guard';
+    get('mj-gate-dialogue-title').textContent=failed?'NO ID, NO ENTRY! 😡':'ID CHECK PASSED';
+    // Display only the current line: never claim the student said a different
+    // recorded line, and never show a second actor's dialogue in their panel.
+    get('mj-gate-student-msg').textContent=isGuard?'…':(current?.text||'…');
+    get('mj-gate-guard-msg').textContent=isGuard?(current?.text||'…'):'…';
+    student.classList.toggle('mj-dim',isGuard);
+    guard.classList.toggle('mj-dim',!isGuard);
+    get('mj-gate-foot').textContent=failed?
+      'Flood: maximum · University rules: undefeated':
+      'Welcome to BRAC University · No flood holidays!';
   }
   let comicView=null,comicProj=null,comicEye=null;
   function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
@@ -3148,7 +3194,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity18-real-bengali-voices-meme-timing';
+  window.majhiVersion='fidelity15-persistent-passenger-voices';
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
