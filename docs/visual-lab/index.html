@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0a1720"><title>Majhi Jaben?! • Visual Lab 01</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <div class="stage" id="stage">
+      <canvas id="preview" aria-label="Interactive 3D prototype of a boat, rowing majhi and flooded Dhaka"></canvas>
+      <div class="atmosphere"></div>
+      <div class="topbar">
+        <div class="identity"><span class="eyebrow">MAJHI JABEN?! <b>/ VISUAL LAB</b></span><strong>THE ART OF ROWING</strong><small>Prototype 01 · Independent from the playable game</small></div>
+        <a class="game-link" href="../index.html">↗ Original game</a>
+      </div>
+      <div class="chip left-chip"><span class="dot"></span> STANDALONE 3D TEST <span class="divider"></span> NO GAME FILES MODIFIED</div>
+      <div class="navhint">DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM</div>
+      <div class="bottomfade"></div>
+      <div class="scene-label"><span class="num">01 / 04</span><h1>One boat.<br><em>A better beginning.</em></h1><p>Curved wooden hull · rounded character anatomy · synchronized diagonal oars · water contact</p></div>
+    </div>
+    <aside class="panel">
+      <div class="panel-inner">
+        <div class="panel-heading"><span>DESIGN EXPERIMENT</span><span class="phase">01 / BOAT + ROWING</span></div>
+        <h2>A new visual direction, <em>not a game replacement.</em></h2>
+        <p class="intro">Inspect the majhi and boat from every angle. The hands follow the oar grips, and the blades pivot around fixed gunwale mounts instead of floating independently.</p>
+        <div class="metric-row"><div><small>RENDERER</small><b>WebGL 2</b></div><div><small>DEPENDENCIES</small><b>Zero</b></div><div><small>GAMEPLAY</small><b>Unchanged</b></div></div>
+        <div class="section-title">ANIMATION CONTROLS</div>
+        <button class="primary" id="play"><span id="playIcon">Ⅱ</span> <span id="playLabel">Pause rowing</span></button>
+        <div class="setting"><label for="speed">ROWING TEMPO <span id="speedValue">1.0×</span></label><input id="speed" type="range" min="0.4" max="1.8" step="0.1" value="1"></div>
+        <div class="setting"><label for="lighting">LIGHTING <span id="lightValue">Golden hour</span></label><input id="lighting" type="range" min="0" max="1" step="1" value="0"></div>
+        <label class="switchrow"><input type="checkbox" id="rig"><span>Show hand grips + oar pivots</span><span class="switch-decor"></span></label>
+        <div class="section-title">WHAT TO LOOK FOR</div>
+        <div class="feature"><span class="feature-number">01</span><div><b>Human proportions</b><p>Softer head, shorter neck, shoulders and arms instead of square blocks.</p></div></div>
+        <div class="feature"><span class="feature-number">02</span><div><b>Proper rowing mechanics</b><p>Both hands move with the oar grips, while each oar rotates through a continuous stroke at its mount.</p></div></div>
+        <div class="feature"><span class="feature-number">03</span><div><b>Water that doesn't tile</b><p>Layered surface normals and subtle motion, without exposed diamond-shaped mesh cells.</p></div></div>
+        <div class="feature"><span class="feature-number">04</span><div><b>A Dhaka setting</b><p>Balconies, cables, rooftop tanks, colorful shops and floodwater as environmental direction.</p></div></div>
+        <div class="notice"><b>This is a visual prototype.</b> It has no passengers, missions, collision logic or existing game audio. Nothing here replaces your working files.</div>
+        <p class="foot">Built for GitHub Pages · Open <code>docs/visual-lab/index.html</code> after uploading this folder.</p>
+      </div>
+    </aside>
+  </main>
+  <div id="error" hidden></div>
+  <script src="visual-test.js"></script>
+</body>
+</html>
