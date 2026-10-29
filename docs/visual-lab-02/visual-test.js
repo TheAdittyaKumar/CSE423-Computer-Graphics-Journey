@@ -253,9 +253,16 @@
 
   // Proper boat hull: curved chines, inward upper walls, raised narrow ends.
   // Its lower gunwales no longer resemble the tall sides of a metal bucket.
-  const BOAT_LENGTH=1.94;
-  const hullWidth=x=>.052+.775*Math.pow(Math.max(0,1-Math.pow(Math.abs(x)/BOAT_LENGTH,2.55)),.72);
-  const hullTop=x=>.805+.24*Math.pow(Math.abs(x)/BOAT_LENGTH,2.2);
+const BOAT_LENGTH = 1.94;
+
+const hullWidth = x => {
+  const u = clamp(Math.abs(x) / BOAT_LENGTH, 0, 1);
+  const body = Math.pow(Math.max(0, 1 - Math.pow(u, 2.45)), 0.72);
+  const tipFade = Math.pow(Math.max(0, 1 - u), 0.38);
+  return 0.82 * body * tipFade;
+};
+
+const hullTop = x => .805 + .24 * Math.pow(Math.abs(x) / BOAT_LENGTH, 2.2);
   function makeHull(){
     const outer=new Geometry(),inside=new Geometry(),floor=new Geometry();
     const N=56;
@@ -385,10 +392,24 @@
       for(const side of [-1,1])bone([x,.49,side*w*.66],[x,hullTop(x)-.13,side*w*.91],.028,wood.rib);
     }
     // Bound bow/stern rim and small prow rail protect curved tips.
-    bone([1.67,hullTop(1.67),-.23],[1.90,hullTop(1.90),0],.049,wood.edge);
-    bone([1.90,hullTop(1.90),0],[1.67,hullTop(1.67),.23],.049,wood.edge);
-    bone([-1.67,hullTop(-1.67),-.23],[-1.90,hullTop(-1.90),0],.049,wood.edge);
-    bone([-1.90,hullTop(-1.90),0],[-1.67,hullTop(-1.67),.23],.049,wood.edge);
+// Closed bow / stern rim caps so the boat does not look split open.
+for (const end of [-1, 1]) {
+  const xMid = end * 1.66;
+  const xTip = end * 1.92;
+  const yMid = hullTop(xMid);
+  const yTip = hullTop(xTip) - 0.01;
+
+  // top rim closure
+  bone([xMid, yMid, -0.18], [xTip, yTip, 0], .052, wood.edge);
+  bone([xTip, yTip, 0], [xMid, yMid, 0.18], .052, wood.edge);
+
+  // vertical center post to visually seal the opening
+  bone([xTip, 0.47, 0], [xTip, yTip, 0], .036, wood.rib);
+
+  // lower inner closure
+  bone([xMid, 0.46, -0.05], [xTip, 0.46, 0], .052, wood.rib);
+  bone([xTip, 0.46, 0], [xMid, 0.46, 0.05], .052, wood.rib);
+}
 
     // Gunwale-mounted oarlocks are stationary and are distinct from hands.
     for(const side of [-1,1]){
