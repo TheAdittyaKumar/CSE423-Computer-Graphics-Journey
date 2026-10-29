@@ -1,28 +1,52 @@
-Majhi Jaben?! Dhaka Soundscape
+Majhi Jaben?! — Original Dhaka soundscape expansion (2026)
 
-All audio in this folder was created for this update:
-- Ambient/effects: original procedural synthesis by the project assistant, 2026.
-- Bengali dialogue: original fictional lines rendered with the locally available eSpeak Bengali speech-synthesis engine, 2026. These are synthetic computer voices, not human actor recordings and do not copy audio from any show or film.
+40 original starter MP3 clips plus new original character lines and original comedy stingers.
 
-Included source names:
-"rickshaw_0" — মামা, সামনে দেখেন না?
-"rickshaw_1" — আপনিও তো রাস্তার মাঝে!
-"rickshaw_2" — গাড়িটা দেখেন কী অবস্থা!
-"rickshaw_3" — রাস্তা তো নদী, ভাই!
-"rickshaw_sassy_1" — আমারে আগে যেতে দেন!
-"rickshaw_sassy_2" — নিয়ম মানলে কি আর রিকশা চালানো যায়?
-"rickshaw_pickup" — উঠেন, নিরাপদে পৌঁছে দিই!
-"passenger_help" — ভাই, আমাকে বাঁচান!
-"passenger_board" — ভাই, তাড়াতাড়ি করেন, ক্লাস মিস হবে!
-"passenger_laptop" — ল্যাপটপটা আগে বাঁচান!
-"passenger_thanks" — ধন্যবাদ, মাঝি ভাই!
-"shopkeeper" — দোকানের মাল উপরে তুলেন!
-"cng_driver" — রাস্তায় পানি, সিএনজি যাবে না ভাই!
-"power_cheer" — আলো এসেছে, বিদ্যুৎ এসেছে!
-"guard_denied" — আইডি কার্ড ছাড়া ঢোকা যাবে না।
-"guard_rule" — নিয়ম তো নিয়ম, ভাই!
-"student_no_id" — স্যার, বন্যায় এসেছি, কার্ড আনতে ভুলেছি!
-"guard_pass" — আইডি ঠিক আছে। ক্লাস চলছে, ভেতরে যান!
-"current_warn" — ওই দিকে স্রোত বেশি, সাবধানে!
+Voices are offline Bengali eSpeak synthetic voices with varying delivery profiles, NOT real humans or voice clones. They may sound robotic and are intended as placeholders until original voice actor recordings are made with permission.
 
-If you replace these with human voice recordings, use recordings you made or have permission to redistribute.
+No copyrighted TV, game, viral meme music or movie sound clips are used; the eight short comedy/meme cues are originally synthesized for this game.
+
+New Bengali line inventory (file : role : line):
+swimmer_help_1: swimmer: মাঝি ভাই, এদিকে আসেন! পানিতে টান দিচ্ছে!
+swimmer_help_2: panicked: ওই যে নৌকা! ভাই, আমাকে উঠান!
+swimmer_help_3: swimmer: সাঁতার কাটতে কাটতে হাঁপাইয়া গেছি ভাই!
+swimmer_current: panicked: স্রোত অনেক বেশি, সাবধানে আসেন!
+swimmer_rescued: swimmer: বাঁচাইছেন ভাই, আল্লাহ ভরসা!
+swimmer_rain: swimmer: এই বৃষ্টি আর থামবে না নাকি!
+student_registrar_1: student: রেজিস্ট্রার অফিসে ইমেইল করছি, রিপ্লাই নাই!
+student_registrar_2: student2: বন্যায় আসছি তাও এক্সটেনশন দেয় না!
+student_cgpa_1: student2: ভাই, তোমার সিজিপিএ কত?
+student_cgpa_2: student3: সিজিপিএ জিজ্ঞেস কইরো না ভাই!
+student_semester_1: student: তুমি এখন কোন সেমিস্টারে?
+student_semester_2: student2: এই সেমিস্টার শেষ হলেই বাঁচি!
+student_attendance_1: student3: একটা ক্লাস মিস করলে অ্যাটেনডেন্স যাবে!
+student_attendance_2: student: বন্যার মাঝেও কুইজ! এটা কেমন কথা!
+student_assignment: student2: ভাই ল্যাপটপে আমার থিসিস আছে!
+student_rescued_1: student3: নৌকায় উঠতে পারছি, এখন ক্যাম্পাসে চলেন!
+student_rescued_2: student2: মাঝি ভাই, ফাইভ স্টার রেটিং পাবেন!
+student_id_forgot: student3: স্যার, আইডি কার্ডটা বাসায় রেখে এসেছি!
+rickshaw_boss_1: rickshaw: মামা, রাস্তা আমার! আগে যেতে দেন!
+rickshaw_boss_2: rickshaw2: এই পানি আমারে থামাইতে পারবো না!
+rickshaw_boss_3: rickshaw3: রিকশার স্পিড দেখছেন? ফর্মুলা ওয়ান!
+rickshaw_boss_4: rickshaw: ওস্তাদ মানুষ, রাস্তা চিনাইতে আইসেন না!
+rickshaw_bell_1: rickshaw2: সাইড দেন মামা! জরুরি প্যাসেঞ্জার!
+rickshaw_quarrel_1: rickshaw: মামা, সামনে চোখ আছে না?
+rickshaw_quarrel_2: rickshaw2: গাড়ি পার্ক করছেন নদীর মধ্যে কেন?
+rickshaw_quarrel_3: rickshaw3: আমি কী করুম? রাস্তাই তো ভাসে!
+rickshaw_quarrel_4: rickshaw2: আচ্ছা যান, আজকে মাফ করলাম!
+rickshaw_pickup_new: rickshaw3: উঠেন মামা, আমার রিকশা সাবমেরিন!
+rickshaw_redlight: rickshaw: লাল বাতি? পানির নিচে কই দেখমু!
+cng_driver_2: cng: এই রাস্তায় সিএনজি চালানো যুদ্ধ ভাই!
+cng_driver_3: cng: মিটার চলবে, পানি চলবে, সব চলবে!
+guard_id_1: guard: আইডি কার্ড দেখান। নিয়ম সবার জন্য এক।
+guard_id_2: guard: বন্যা হলেও ক্লাস বন্ধ নাই। ভিতরে যান!
+guard_id_3: guard: আইডি নাই? সরি, এন্ট্রি হবে না।
+guard_id_4: guard: ইমেইল করেন, কিন্তু আইডি লাগবেই!
+shop_tea_1: shop: গরম চা আছে! পানির মধ্যেও দোকান খোলা!
+shop_tea_2: shop: ভাই, বিস্কুট ভিজায়া খাবেন নাকি!
+neighbor_window: neighbor: ছাদ থেকে দেখতেছি, সব রাস্তা নদী!
+neighbor_light: neighbor: এই তো আলো আইলো! ফ্রিজটা বাঁচলো!
+student_angry_2: student2: স্যার, এত কষ্ট করে আইসা ঢুকতে পারব না?
+student_angry_3: student3: এই বৃষ্টিতে আবার আইডি আনতে যামু!
+
+Audio can be replaced one MP3 at a time with appropriately licensed/recorded speech.
