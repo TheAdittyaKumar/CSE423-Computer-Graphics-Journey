@@ -2205,8 +2205,8 @@
         wx.fillText(ready?'ELECTRICAL CONTROL · +100 POINTS':`${Math.ceil(dist-130)} UNITS TO REPAIR RANGE`,w*.5,y+boxH*.74);
       }
     }
-    drawCampusGateOverlay();
     renderComicBubbles();
+    drawCampusGateOverlay();
   }
   function fauxBracMeta(entry,index=0){
     const bloods=['A+','B+','O+','AB+'];
@@ -2277,52 +2277,62 @@
   }
   function drawCampusGateOverlay(){
     const scene=S.campusGateScene;if(!scene||S.mode!=='PLAYING')return;
-    const w=weather.width,h=weather.height,scale=clamp(w/1400,.72,1.06),age=S.time-scene.start;
-    const pass=!scene.forgotId,meta=fauxBracMeta(scene,scene.index),cardW=430*scale,cardH=260*scale;
-    const x=38*scale,y=52*scale;
+    const w=weather.width,h=weather.height,scale=clamp(Math.min(w/1400,h/850),.76,1.12),age=S.time-scene.start;
+    const pass=!scene.forgotId,meta=fauxBracMeta(scene,scene.index),cardW=400*scale,cardH=250*scale;
+    const x=(w-cardW)/2,y=Math.max(156*scale,h-cardH-34*scale);
     wx.save();
-    wx.fillStyle='rgba(5,18,25,.15)';wx.fillRect(0,0,w,h);
-    wx.font=`900 ${24*scale}px system-ui, sans-serif`;wx.textAlign='left';
-    wx.fillStyle=pass?'#f4d58b':'#ffab9c';
-    wx.fillText(pass?'GUARD: ID CHECK PASSED! CLASS IS ON!':'GUARD: BRAC ID KOTHAY?',x,y-18*scale);
-    wx.shadowColor='rgba(0,0,0,.28)';wx.shadowBlur=22*scale;wx.shadowOffsetY=6*scale;
-    wx.fillStyle=scene.forgotId?'rgba(255,244,244,.98)':'rgba(255,255,255,.98)';wx.strokeStyle='#b8c2d4';wx.lineWidth=2.6*scale;
-    wx.beginPath();wx.roundRect(x,y,cardW,cardH,18*scale);wx.fill();wx.stroke();
+    wx.fillStyle='rgba(5,18,25,.12)';wx.fillRect(0,0,w,h);
+    wx.font=`900 ${21*scale}px system-ui, sans-serif`;wx.textAlign='center';
+    wx.fillStyle=pass?'#f5d48d':'#ffb0a4';
+    wx.fillText(pass?'GUARD: ID CHECK PASSED! CLASS IS ON!':'GUARD: BRAC ID KOTHAY?',w*.5,y-18*scale);
+    wx.shadowColor='rgba(0,0,0,.24)';wx.shadowBlur=18*scale;wx.shadowOffsetY=5*scale;
+    wx.fillStyle=scene.forgotId?'rgba(255,248,248,.985)':'rgba(255,255,255,.985)';wx.strokeStyle='#b9c6d8';wx.lineWidth=2.4*scale;
+    wx.beginPath();wx.roundRect(x,y,cardW,cardH,16*scale);wx.fill();wx.stroke();
     wx.shadowColor='transparent';
-    // logo and photo blocks
-    wx.fillStyle='#16345c';wx.font=`900 ${18*scale}px Georgia, serif`;wx.fillText('BRAC',x+34*scale,y+34*scale);
-    wx.font=`700 ${12*scale}px Georgia, serif`;wx.fillText('UNIVERSITY',x+24*scale,y+54*scale);
-    wx.strokeStyle='#2b4e78';wx.lineWidth=3*scale;wx.beginPath();wx.arc(x+53*scale,y+50*scale,34*scale,.78*Math.PI,1.95*Math.PI);wx.stroke();
-    wx.beginPath();wx.moveTo(x+36*scale,y+83*scale);wx.lineTo(x+54*scale,y+94*scale);wx.lineTo(x+72*scale,y+83*scale);wx.stroke();
-    wx.beginPath();wx.moveTo(x+39*scale,y+91*scale);wx.lineTo(x+54*scale,y+100*scale);wx.lineTo(x+69*scale,y+91*scale);wx.stroke();
-    wx.fillStyle='#56708d';wx.font=`600 ${10*scale}px serif`;wx.fillText('Inspiring Excellence',x+17*scale,y+116*scale);
-    wx.fillStyle=scene.forgotId?'#f0d7d7':'#d8e2eb';wx.fillRect(x+246*scale,y+26*scale,130*scale,102*scale);
-    wx.fillStyle=scene.forgotId?'#9f3d3d':'#29506b';wx.beginPath();wx.arc(x+311*scale,y+60*scale,24*scale,0,TAU);wx.fill();
-    wx.beginPath();wx.ellipse(x+311*scale,y+104*scale,39*scale,31*scale,0,0,TAU);wx.fill();
-    // blue wave band
-    wx.fillStyle='#24498b';wx.beginPath();wx.moveTo(x,y+154*scale);
-    wx.bezierCurveTo(x+90*scale,y+136*scale,x+200*scale,y+178*scale,x+cardW,y+150*scale);
+
+    // BRAC-like top area
+    wx.fillStyle='#173a67';
+    wx.font=`900 ${20*scale}px Georgia, serif`;wx.textAlign='left';wx.fillText('BRAC',x+28*scale,y+34*scale);
+    wx.font=`700 ${13*scale}px Georgia, serif`;wx.fillText('UNIVERSITY',x+20*scale,y+54*scale);
+    wx.strokeStyle='#244a79';wx.lineWidth=2.8*scale;
+    wx.beginPath();wx.arc(x+55*scale,y+49*scale,31*scale,.78*Math.PI,1.95*Math.PI);wx.stroke();
+    wx.beginPath();wx.moveTo(x+39*scale,y+82*scale);wx.lineTo(x+55*scale,y+92*scale);wx.lineTo(x+71*scale,y+82*scale);wx.stroke();
+    wx.beginPath();wx.moveTo(x+42*scale,y+89*scale);wx.lineTo(x+55*scale,y+98*scale);wx.lineTo(x+68*scale,y+89*scale);wx.stroke();
+    wx.fillStyle='#5b728c';wx.font=`600 ${10*scale}px serif`;wx.fillText('Inspiring Excellence',x+14*scale,y+115*scale);
+
+    // photo block
+    wx.fillStyle=scene.forgotId?'#efd6d6':'#d7e3eb';wx.fillRect(x+263*scale,y+24*scale,109*scale,100*scale);
+    wx.fillStyle=scene.forgotId?'#a44a4a':'#31576f';wx.beginPath();wx.arc(x+317.5*scale,y+56*scale,22*scale,0,TAU);wx.fill();
+    wx.beginPath();wx.ellipse(x+317.5*scale,y+100*scale,34*scale,26*scale,0,0,TAU);wx.fill();
+
+    // BRAC wave band placed lower so it doesn't cover key text
+    wx.fillStyle='#234a8a';wx.beginPath();wx.moveTo(x,y+150*scale);
+    wx.bezierCurveTo(x+95*scale,y+136*scale,x+196*scale,y+175*scale,x+cardW,y+149*scale);
     wx.lineTo(x+cardW,y+cardH);wx.lineTo(x,y+cardH);wx.closePath();wx.fill();
-    wx.fillStyle=scene.forgotId?'#7a1111':'#173151';
-    wx.font=`800 ${11*scale}px system-ui, sans-serif`;wx.fillText((scene.name||'STUDENT').toUpperCase(),x+18*scale,y+152*scale);
-    wx.font=`700 ${11.5*scale}px system-ui, sans-serif`;wx.fillText('STUDENT',x+252*scale,y+154*scale);wx.fillText(meta.dept,x+336*scale,y+154*scale);
-    wx.font=`700 ${10.5*scale}px system-ui, sans-serif`;
-    wx.fillStyle='#243340';
-    wx.fillText('ID No.',x+116*scale,y+211*scale);wx.fillText(':',x+232*scale,y+211*scale);wx.fillText(scene.forgotId?'MISSING':meta.id,x+258*scale,y+211*scale);
-    wx.fillText('Validity',x+116*scale,y+232*scale);wx.fillText(':',x+232*scale,y+232*scale);wx.fillText(scene.forgotId?'Expired? Nah — Bari te!':meta.validity,x+258*scale,y+232*scale);
-    wx.fillText('Blood Group',x+116*scale,y+253*scale);wx.fillText(':',x+232*scale,y+253*scale);wx.fillText(meta.blood,x+258*scale,y+253*scale);
-    wx.fillStyle='rgba(255,255,255,.88)';wx.font=`800 ${13*scale}px system-ui, sans-serif`;wx.fillText(meta.gameCode+' · CAMPUS ENTRY',x+16*scale,y+236*scale);
-    const sceneX=w-(360*scale),sceneY=h-(235*scale);
+
+    // name and role above wave
+    wx.textAlign='left';
+    wx.fillStyle=scene.forgotId?'#851818':'#1a2d45';
+    wx.font=`800 ${18*scale}px system-ui, sans-serif`;wx.fillText((scene.name||'STUDENT').toUpperCase(),x+24*scale,y+136*scale);
+    wx.font=`700 ${14*scale}px system-ui, sans-serif`;wx.fillText('STUDENT',x+264*scale,y+136*scale);wx.fillText(meta.dept,x+337*scale,y+136*scale);
+
+    // readable lower information area
+    wx.font=`700 ${12*scale}px system-ui, sans-serif`;wx.fillStyle='#243340';
+    const rows=[['ID No.',scene.forgotId?'MISSING':meta.id],['Validity',scene.forgotId?'Bari te rekhe এসেছে':meta.validity],['Blood Group',meta.blood]];
+    rows.forEach((row,i)=>{const yy=y+182*scale+i*21*scale;wx.fillText(row[0],x+86*scale,yy);wx.fillText(':',x+214*scale,yy);wx.fillText(row[1],x+242*scale,yy);});
+    wx.fillStyle='rgba(255,255,255,.90)';wx.font=`800 ${12.5*scale}px system-ui, sans-serif`;wx.fillText(meta.gameCode+' · CAMPUS ENTRY',x+17*scale,y+226*scale);
+
+    const bubbleY=Math.max(86*scale,y-8*scale),leftX=Math.max(16*scale,w*.055),rightX=Math.min(w-312*scale,x+cardW+12*scale);
     if(pass){
-      drawSpeechBox('ID মিলেছে। যান, class cholche!',sceneX,sceneY,280*scale,'#d4f2dc','#2c5842','#153327');
+      drawSpeechBox('ID মিলেছে। যান, class cholche!',rightX,bubbleY,275*scale,'#d4f2dc','#2c5842','#153327');
     }else{
       const pulse=.55+.45*Math.sin(age*10);
-      wx.fillStyle=`rgba(255,80,80,${.16+.16*pulse})`;wx.beginPath();wx.arc(sceneX+72*scale,sceneY+122*scale,46*scale,0,TAU);wx.fill();
-      const studentLine=age<3.4?'Sir, flood e esechi! ID card ta bari te rekhe esechi!':'Please sir, ekbar ঢুকতে দেন! Attendance miss hobe!';
-      const guardLine=age<3.4?'Rule is rule. BRAC ID chara campus entry hobe na.':'Na bhai, নিয়ম কিন্তু নিয়ম. Portal e mail korun.';
-      drawSpeechBox(studentLine,sceneX-30*scale,sceneY+84*scale,320*scale,'#ffe0de','#944045','#4a1818');
-      drawSpeechBox(guardLine,sceneX+24*scale,sceneY-2*scale,300*scale,'#d8ecf4','#355061','#17313e');
-      wx.save();wx.font=`900 ${14*scale}px system-ui, sans-serif`;wx.fillStyle='#ff5555';wx.fillText('STUDENT: ID নাই! 😡',sceneX-8*scale,sceneY+205*scale);wx.restore();
+      wx.fillStyle=`rgba(255,80,80,${.14+.14*pulse})`;wx.beginPath();wx.arc(x+cardW-54*scale,y+46*scale,26*scale,0,TAU);wx.fill();
+      const studentLine=age<3.2?'Sir, flood e esechi! ID card ta বাসায় রয়ে গেছে!':'Please sir, ekbar ঢুকতে দেন! Attendance miss hobe!';
+      const guardLine=age<3.2?'Rule is rule. BRAC ID chara campus entry hobe na.':'না ভাই, নিয়ম কিন্তু নিয়ম. পরে portal e mail korun.';
+      drawSpeechBox(studentLine,leftX,bubbleY+96*scale,300*scale,'#ffe0de','#944045','#4a1818');
+      drawSpeechBox(guardLine,rightX,bubbleY,290*scale,'#d8ecf4','#355061','#17313e');
+      wx.save();wx.font=`900 ${14*scale}px system-ui, sans-serif`;wx.fillStyle='#ff5555';wx.textAlign='center';wx.fillText('STUDENT: ID নাই! 😡',w*.5,y+cardH+22*scale);wx.restore();
     }
     wx.restore();
   }
@@ -2393,7 +2403,7 @@
       // Rebuilt parked vehicles are drawn separately below, allowing CNGs and
       // the colorful rickshaw to REPLACE, not overlap, the baked source cars.
       // Omit the old solid-color traffic beacon; draw a realistic signal below.
-      render(campusLettering);render(shopSigns);render(cityFacadeDetails);render(storeCanopies);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);
+      render(campusLettering);render(shopSigns);render(cityFacadeDetails);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
@@ -2599,7 +2609,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity12-campus-gate-city-lighting';
+  window.majhiVersion='fidelity13-overlay-fix-shop-visibility';
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
