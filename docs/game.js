@@ -1673,7 +1673,7 @@
     person.voicePlayed[clip]=true;
     person.voiceLastSpokenAt=S.time;
   };
-  // DHAKA AUDIO V2 — natural user-recorded voices, seven selected memes,
+  // DHAKA AUDIO V3 — contextual non-passenger reactions, natural voices, seven memes,
   // menu song and flashlight scare, backed by the existing nonverbal SFX.
   // All paths below exist in the supplied docs/audio/ package.
   const gameAudio=(()=>{
@@ -1684,6 +1684,8 @@
       rickshaw_masud_01:['MASUD','এই মামা, সাইড দেন! মাসুদ ভাই আসতেছে! এই রাস্তায় আমারে আটকায় কে?'],
       rickshaw_masud_02:['MASUD','দোষ আমার? আমার রিকশার সামনে গাড়ি রাখছেন কেন? চোখে দেখেন না?'],
       rickshaw_masud_03:['MASUD','পুরা ঢাকা ডুইবা গেলেও মাসুদ ভাইয়ের রিকশা থামবে না!'],
+      rickshaw_masud_04:['MASUD','এই মামা! আমি ধাক্কা দেই নাই! পানির স্রোত আমার রিকশা ঠেইলা দিছে! দোষ থাকলে নদীর!'],
+      rickshaw_masud_05:['MASUD','উঠেন মামা, উঠেন! গুগল ম্যাপ বাদ দেন! এই রাস্তায় মাসুদ ম্যাপ চলে! শর্টকাট আমার মুখস্থ!'],
       rickshaw_liton_01:['LITON','মামা, হর্ন দিয়া লাভ নাই! এই পানিতে আমার রিকশাই স্পিডবোট!'],
       rickshaw_liton_02:['LITON','আরে ভাই, একটু ঘষা লাগছে! এত নাটক করার কী আছে?'],
       rickshaw_liton_03:['LITON','উঠেন, উঠেন! লিটন থাকতে কাউরে পানিতে থাকতে হবে না!'],
@@ -1702,15 +1704,19 @@
       civilian_shamim_01:['SHAMIM','এই যে ভাই! এদিকে! আমি পানিতে আটকা পড়ছি!'],
       civilian_shamim_02:['SHAMIM','তাড়াতাড়ি করেন! স্রোত অনেক বেশি! আমি আর ধরে রাখতে পারতেছি না!'],
       civilian_shamim_03:['SHAMIM','ভাই, আপনি না আসলে আজকে কী যে হইতো! অনেক ধন্যবাদ!'],
+      civilian_shamim_04:['SHAMIM','আরে বাপরে! ঢেউয়ের ধাক্কায় আবার ঘুরে গেলাম! এইটা রাস্তা, না ওয়াটার পার্ক?!'],
       civilian_mitu_01:['MITU','নৌকাটা এদিকে আনেন! রাস্তা খুঁজতে আইসা দেখি নদী!'],
       civilian_mitu_02:['MITU','স্রোত আমারে টানতেছে! ঢাকার রাস্তা চলে না, কিন্তু পানির স্পিড দেখছেন?!'],
       civilian_mitu_03:['MITU','অবশেষে বাঁচলাম! এখন নৌকার জন্যও অপেক্ষা করতে হয়! ধন্যবাদ ভাই!'],
+      civilian_mitu_04:['MITU','বাহ! রাস্তায় এত গর্ত ছিল, এখন সব সুইমিং পুল! সাঁতার কেটে অফিস যাই নাকি?!'],
       cng_jashim_01:['JASHIM','মামা, সিএনজি লাগবে? এই পানিতে ভাড়া একটু বেশি!'],
       cng_jashim_02:['JASHIM','এই রিকশাওয়ালা মামা! পুরা রাস্তা আপনার বাপের নাকি?'],
       cng_jashim_03:['JASHIM','সিএনজি আর চলে না! এখন আমাকেই নৌকা ভাড়া করতে হবে!'],
       shopkeeper_kuddus_01:['KUDDUS CHACHA','চা খাবেন? দোকান ডুইবা গেছে, কিন্তু কেটলি এখনো গরম!'],
       shopkeeper_kuddus_02:['KUDDUS CHACHA','রাস্তা নদী হইয়া গেছে, কিন্তু বাকির খাতা শুকনা আছে!'],
       shopkeeper_kuddus_03:['KUDDUS CHACHA','ওই রিকশাওয়ালা! আমার দোকানের সামনে রেস লাগাইছেন কেন?'],
+      shopkeeper_kuddus_04:['KUDDUS CHACHA','আরে ধুর! আবার কারেন্ট গেল! এই বন্যায় চা বেচবো নাকি মোমবাতি বেচবো, বুঝতেছি না!'],
+      shopkeeper_kuddus_05:['KUDDUS CHACHA','আহা! কারেন্ট আইছে! মামা, চায়ের সাথে মোবাইলও চার্জ দেন! তবে চার্জ দিতে পাঁচ টাকা আলাদা!'],
       // Transcripts for all 46 additional user-recorded student lines.
       student_adittya_solo_01:["ADITTYA","ল্যাপটপটা ঠিকঠাক আছে তো? এই পানিতে নষ্ট হইলে আমার পুরা সেমিস্টার শেষ!"],
       student_adittya_solo_02:["ADITTYA","আজকে রিকশার বদলে নৌকা! কালকে কি ক্যাম্পাসে যাইতে সাবমেরিন লাগবে?"],
@@ -1778,6 +1784,8 @@
     for(const n of memes)paths[n]=`./audio/meme/${n}.mp3`;
     for(const n of exitNames)paths[n]=`./audio/sfx/${n}.mp3`;
     paths.menu_music='./audio/ambience/menu_music.mp3';
+    // Original short paddle-and-water surge, triggered only when boost is enabled.
+    paths.boost_start='./audio/sfx/boost_start.wav';
     const alias={
       swimmer_help_1:'civilian_shamim_01',swimmer_help_2:'civilian_mitu_01',swimmer_help_3:'civilian_shamim_01',
       swimmer_current:'civilian_shamim_02',current_warn:'civilian_shamim_02',swimmer_rescued:'civilian_shamim_03',
@@ -1815,6 +1823,21 @@
     let clock=0,peopleAt=10,bellAt=8,hornAt=9,thunderAt=25,paddleAt=0;
     let subtitle=null,ui=null,subtitleUntil=0;
     let lastCampusHeaven=false,rewardShownUntil=0,lastHtmlExit=0;
+    // Kuddus is at this existing physical shop; his reactive remarks are heard
+    // locally, NOT from the distant electrical repair cabinet.
+    const KUDDUS_STALL={x:-367,z:868,district:districtForX(-367)};
+    let kuddusDistrictRepaired=false;
+    const kuddusEventSpoken=new Set();
+    const backgroundCivilianSpokenAt=new Map();
+    let lastBackgroundCivilianVoiceAt=-999;
+    const isKuddus=p=>p.role==='SHOP'&&distance(p.x,p.z,KUDDUS_STALL.x,KUDDUS_STALL.z)<4;
+    function kuddusEventClip(){
+      if(S.powerOff&&S.powerIndex===KUDDUS_STALL.district&&!kuddusEventSpoken.has('outage'))
+        return 'shopkeeper_kuddus_04';
+      if(kuddusDistrictRepaired&&!lightOffAt(KUDDUS_STALL.x,KUDDUS_STALL.z)&&
+         !kuddusEventSpoken.has('restored'))return 'shopkeeper_kuddus_05';
+      return null;
+    }
     const pick=a=>a[Math.floor(Math.random()*a.length)];
     const sayMeta=n=>voiceText[alias[n]||n];
     const speakerLine=(clip,person)=>clip?voiceText[clip]?.[1]:null;
@@ -2065,7 +2088,10 @@
       const crashMeme=r.id===1&&Math.random()<.5?'meme_record_scratch':'meme_metal_pipe';
       play(crashMeme,{x:r.x,z:r.z,volume:.55,cooldown:0,key});
       play('car_horn',{x:r.x,z:r.z,volume:.52,key});
-      const driver=['rickshaw_salam_02','rickshaw_masud_02','rickshaw_liton_02'][r.id];
+      // Masud occasionally blames the river for a real rickshaw collision.
+      const driver=r.id===1&&buffers.rickshaw_masud_04&&Math.random()<.72
+        ?'rickshaw_masud_04'
+        :['rickshaw_salam_02','rickshaw_masud_02','rickshaw_liton_02'][r.id];
       const car=parkedCars[incident.carIndex],withCng=car&&dhakaVehicleType(incident.carIndex)==='cng';
       if(distance(S.x,S.z,r.x,r.z)>660)return;
       talkSequence(withCng?[driver,'cng_jashim_02']:[driver],
@@ -2133,6 +2159,8 @@
       clock=0;peopleAt=8;bellAt=7;hornAt=6;thunderAt=26;paddleAt=0;
       lastZone='';lastAiRescues=0;lastCampusHeaven=false;quarrelsSeen.clear();
       cancelSequence();lastConversationAt=-999;conversationCursor=0;
+      kuddusDistrictRepaired=false;kuddusEventSpoken.clear();
+      backgroundCivilianSpokenAt.clear();lastBackgroundCivilianVoiceAt=-999;
       subtitle?.classList.remove('mj-voice-show');activeVoicePriority=-1;voiceBusyUntil=0;
       updateMix();}
     function update(dt){
@@ -2158,7 +2186,13 @@
       lastZone=S.current;
       if(S.aiRescueCount>lastAiRescues){
         const r=S.aiRickshaws.find(x=>S.time-x.rescuedAt<.28&&distance(x.x,x.z,S.x,S.z)<520);
-        if(r){play('bell_1',{x:r.x,z:r.z,volume:.72});voice(voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][2],r.x,r.z,1,{priority:1});}
+        if(r){
+          play('bell_1',{x:r.x,z:r.z,volume:.72});
+          // 'Masud Maps' belongs to his actual rescue pickup, not random traffic chatter.
+          const pickupVoice=r.id===1&&buffers.rickshaw_masud_05&&Math.random()<.75
+            ?'rickshaw_masud_05':voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][2];
+          voice(pickupVoice,r.x,r.z,1,{priority:1});
+        }
         else {const b=S.aiBoats.find(x=>S.time-x.rescuedAt<.28&&distance(x.x,x.z,S.x,S.z)<500);
           if(b)voice('civilian_shamim_03',b.x,b.z,.92,{priority:2});}
         lastAiRescues=S.aiRescueCount;
@@ -2188,11 +2222,23 @@
               choices.push({x:S.x,z:S.z,clip,ride:r,priority:2});
           }
         }
-        for(const p of S.cityPeople){if(distance(p.x,p.z,S.x,S.z)>410)continue;
-          const clip=p.role==='SWIM'||p.role==='WADE'?
-            ((p.uid%2===0)?'civilian_shamim_01':'civilian_mitu_01'):
-            p.role==='SHOP'?'shopkeeper_kuddus_01':null;
-          if(clip)choices.push({x:p.x,z:p.z,clip,priority:p.role==='SWIM'?1:0});
+        for(const p of S.cityPeople){
+          if(distance(p.x,p.z,S.x,S.z)>410)continue;
+          if(p.role==='SWIM'||p.role==='WADE'){
+            // These are AMBIENT civilians rescued by the AI fleet, not the
+            // player's mission targets. Never make them call for player pickup.
+            const clip=p.uid%2===0?'civilian_shamim_04':'civilian_mitu_04';
+            if(buffers[clip]&&S.time-lastBackgroundCivilianVoiceAt>24&&
+                S.time-(backgroundCivilianSpokenAt.get(p.uid)??-999)>80)
+              choices.push({x:p.x,z:p.z,clip,backgroundCivilian:p.uid,priority:1});
+          }else if(p.role==='SHOP'){
+            // Electricity jokes only come from Kuddus's own shop, when the
+            // local district's power state actually makes the line relevant.
+            const eventClip=isKuddus(p)?kuddusEventClip():null;
+            const clip=eventClip&&buffers[eventClip]?eventClip:'shopkeeper_kuddus_01';
+            if(buffers[clip])choices.push({x:p.x,z:p.z,clip,
+              kuddusEvent:eventClip===clip?eventClip:null,priority:eventClip===clip?1.5:0});
+          }
         }
         for(const r of S.aiRickshaws){if(distance(r.x,r.z,S.x,S.z)<430&&r.incidentCar===null)
           choices.push({x:r.x,z:r.z,clip:voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][0],priority:0});}
@@ -2201,7 +2247,15 @@
         const preferred=choices.filter(c=>c.priority===choices[0]?.priority).slice(0,3);
         if(preferred.length){
           const c=preferred[Math.floor(Math.random()*preferred.length)];
-          if(voice(c.clip,c.x,c.z,1,{priority:c.priority})&&c.ride)markPassengerClip(c.ride,c.clip);
+          if(voice(c.clip,c.x,c.z,1,{priority:c.priority})){
+            if(c.ride)markPassengerClip(c.ride,c.clip);
+            if(c.backgroundCivilian!==undefined){
+              backgroundCivilianSpokenAt.set(c.backgroundCivilian,S.time);
+              lastBackgroundCivilianVoiceAt=S.time;
+              if(backgroundCivilianSpokenAt.size>140)backgroundCivilianSpokenAt.clear();
+            }
+            if(c.kuddusEvent)kuddusEventSpoken.add(c.kuddusEvent==='shopkeeper_kuddus_04'?'outage':'restored');
+          }
         }
         }
         peopleAt=S.time+(conversationStarted?18:6+Math.random()*5);
@@ -2210,7 +2264,11 @@
     }
     return {initUI,menuBegin,begin,update,play,voice,speakPassenger,startGate,showReward,exitScare,
       prepare:()=>init(),unlock:()=>ctx?.resume().catch(()=>{}),
-      repair(){play('power_restore',{ignoreDistance:true,volume:.8});},
+      repair(){
+        // The powerIndex is still the district just repaired when this runs.
+        if(S.powerIndex===KUDDUS_STALL.district)kuddusDistrictRepaired=true;
+        play('power_restore',{ignoreDistance:true,volume:.8});
+      },
       impact(power){play('impact_'+(1+(Math.floor(S.time*3)%2)),{ignoreDistance:true,volume:.75*power});},
       getState(){return {started,ready,on,voices:speech,captions:captionsOn,
         loaded:Object.keys(buffers).length,expected:Object.keys(paths).length,
@@ -2323,7 +2381,7 @@
     S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;gameAudio.play('pickup',{ignoreDistance:true,volume:.35});refreshHUD();}
   function reject(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming request to reject.');return;}
     notify(`Ride rejected: ${S.request.name}`,2);S.request=null;S.spawnClock=0;refreshHUD();}
-  function boost(){if(S.mode!=='PLAYING')return;if(S.boostOn){S.boostOn=false;notify('Boost stopped. Meter recharging.',2);}else if(S.boost>=25){S.boostOn=true;notify('PADDLE BOOST! Press Space again to turn it off.',2);}else notify('Recharge boost to at least 25%.',2);}
+  function boost(){if(S.mode!=='PLAYING')return;if(S.boostOn){S.boostOn=false;notify('Boost stopped. Meter recharging.',2);}else if(S.boost>=25){S.boostOn=true;gameAudio.play('boost_start',{ignoreDistance:true,volume:.80,key:'boost-on',cooldown:.30});notify('PADDLE BOOST! Press Space again to turn it off.',2);}else notify('Recharge boost to at least 25%.',2);}
   function photo(){if(S.mode!=='PLAYING')return;if(S.photo){notify('You already photographed Shaheed Minar.');return;}
     if(distance(S.x,S.z,825,1080)>125){notify('Move onto the orange landmark photo ring first.');return;}
     const target=Math.atan2(1350-S.z,825-S.x)/RAD,delta=Math.abs(((S.angle-target+540)%360)-180);
