@@ -431,8 +431,10 @@
     {role:'BALCONY',building:7,colorId:4,phase:.8,personality:'STUDENT'},
     {role:'BALCONY',building:16,colorId:1,phase:2.7,personality:'UNCLE'},
     {role:'BALCONY',building:22,colorId:3,phase:4.2,personality:'PARENT'},
-    {role:'SHOP',x:-350,z:822,colorId:0,phase:.5,personality:'SHOPKEEPER'},
-    {role:'SHOP',x:319,z:650,colorId:5,phase:1.8,personality:'SHOPKEEPER'},
+    // Shopkeepers stay BEHIND the counters; their stock is behind them.
+    {role:'SHOP',x:-367,z:857,colorId:0,phase:.5,personality:'SHOPKEEPER'},
+    {role:'SHOP',x:178,z:857,colorId:2,phase:1.2,personality:'SHOPKEEPER'},
+    {role:'SHOP',x:320,z:687,colorId:5,phase:1.8,personality:'SHOPKEEPER'},
     {role:'ROPE',building:10,colorId:2,phase:2.1,personality:'HELPER'},
   ].map(p=>{
     if(p.building===undefined)return p;
@@ -731,7 +733,7 @@
     const clock=S.mode==='MENU'?S.bobTime:S.time;
     for(let i=0;i<S.cityPeople.length;i++){
       const person=S.cityPeople[i];
-      if(S.quality==='BALANCED' && person.uid%3===1)continue;
+      if(S.quality==='BALANCED' && person.uid%3===1 && person.role!=='SHOP')continue;
       const {x,z}=ambientCitizenPosition(person,clock);
       const dist=distance(S.x,S.z,x,z);
       if(dist>(S.mode==='MENU'?1400:790))continue;
@@ -762,10 +764,9 @@
         }
       }else if(person.role==='SHOP'){
         const cheer=residentCelebrating(person),lift=(1+Math.sin(clock*1.4+person.phase))*.5;
-        render(marketSupplies,model(x+16,17+lift*15,z+12));
-        render(marketSupplies,model(x-14,21+lift*6,z+12,0,.65));
+        // Never spawn moving supply boxes in front of customers or the display.
         render(citizenFrame(cheer?'CELEBRATE':'HOME',person.colorId,
-          clock*(cheer?3.2:1.2)+person.phase),model(x,18,z,-90,.67));
+          clock*(cheer?3.2:1.2)+person.phase),model(x,23,z,-90,.64));
       }else{
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.8)+person.phase),
           model(x,16+bob*.6,z,facing,.66));
@@ -774,7 +775,13 @@
   }
   // These two bystanders stand beside, not on top of, the original animated
   // shopkeepers. They respond when the rescue boat passes their storefronts.
-  const reactiveBystanders=[{x:-452,z:776,colorId:3},{x:407,z:606,colorId:4}];
+  // Only a few customers on the SIDES of stalls; the centre is left empty
+  // so players can look through to the shopkeeper and merchandise.
+  const reactiveBystanders=[
+    {x:-453,z:790,colorId:3}, // stationery customer, outside the left edge
+    {x:251,z:806,colorId:1},  // tea-stall customer, outside the right edge
+    {x:412,z:606,colorId:4}   // Food Valley customer, outside the right edge
+  ];
   function citizenFrame(kind,colorId,clock){
     const frame=((Math.floor(clock*REACTION_FRAMES/TAU)%REACTION_FRAMES)+REACTION_FRAMES)%REACTION_FRAMES;
     return citizenFrames[kind][colorId%studentColors.length][frame];
@@ -1314,6 +1321,14 @@
     }
   }
   const originalShops=[[-367,885,'ICON STATIONERY','BOOKS  PRINT  COPIES'],[320,715,'FOOD VALLEY','SNACKS  AND  MEALS']];
+  // The middle tea stall had no readable name at all. Add a simple board just
+  // above its awning, facing the boat approaching from negative Z.
+  const teaSignBoard=new Mesh();
+  teaSignBoard.box(178,91,885-55,144,28,4,[.13,.32,.31]);
+  teaSignBoard.box(178,105,885-57.5,145,3,1.8,[.87,.72,.38]);
+  teaSignBoard.box(178,77,885-57.5,145,2,1.8,[.87,.72,.38]);
+  teaSignBoard.upload();
+  paintShopLabel(178,885-58.1,84,'KUDDUS CHA STALL',132,13,[1,.95,.75]);
   for(const [x,z,name,subtitle] of originalShops){
     paintShopLabel(x,z-53.55,96,name,116,15.0,[.97,.97,.89]);
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
@@ -1515,43 +1530,46 @@
   }
   dhakaStoreLight.upload();
 
-  // Readable shop displays behind the existing counters and shopkeepers.
-  // This is decorative geometry only; it has no collision or mission effects.
-  function makeVisibleShopInterior(kind){
-    const m=new Mesh(),wood=[.37,.25,.18],steel=[.24,.31,.34];
-    // Recessed shelves sit behind the original street-facing counter.
-    for(const h of [25,36,47])m.box(0,h,8,87,2.4,10,wood);
-    for(const side of [-1,1])m.box(side*43,37,8,3,38,10,steel);
-    m.box(0,56,8,89,3.5,9,[.24,.30,.31]);
-    const palettes=kind==='stationery'
-      ? [[.88,.32,.26],[.22,.49,.78],[.90,.72,.29],[.26,.68,.52],[.70,.45,.75]]
+  // Less is more: original stalls have an open front and a counter. Stock
+  // belongs on small, REAR/side shelves, not on a 9x3 wall in the doorway.
+  // Here the local storefront starts at Z=0 (world Z=shop.z-55), and positive
+  // local Z points INSIDE the shop. The central 60-unit-wide view stays open.
+  function makeSimpleShopInterior(kind){
+    const m=new Mesh(),wood=[.43,.29,.19],steel=[.24,.33,.34];
+    const colors=kind==='stationery'
+      ? [[.84,.33,.28],[.24,.47,.70],[.84,.70,.32],[.34,.59,.49]]
       : kind==='food'
-        ? [[.92,.52,.17],[.73,.19,.16],[.97,.76,.31],[.25,.60,.35],[.79,.38,.18]]
-        : [[.36,.65,.70],[.85,.52,.26],[.41,.69,.39],[.86,.42,.46],[.93,.75,.38]];
-    for(let row=0;row<3;row++)for(let col=0;col<9;col++){
-      const x=-36+col*9, y=28+row*11;
-      const color=palettes[(row*2+col)%palettes.length];
-      if(kind==='stationery'){
-        // Upright exercise books, print paper, and notebooks.
-        m.box(x-2,y+2.8,2.1,3.1,8.2,3.3,color);
-        m.box(x+2,y+2.3,2.6,3.3,7.1,3.0,palettes[(row+col+2)%palettes.length]);
-        m.box(x,y-2.2,0.8,7.4,1.0,4,[.85,.86,.75]);
-      }else if(kind==='food'){
-        // Snack bags and small boxed food cartons.
-        m.box(x,y+2.6,2,6.8,7.2,4.5,color);
-        m.box(x,y+5.6,-.6,5.3,1.3,1.1,[.94,.86,.62]);
-        m.box(x,y+.5,-.6,4.5,1.0,1.1,[.23,.29,.25]);
-      }else{
-        m.box(x,y+2.1,2,6,7,4.5,color);
-        m.box(x,y+4.8,-.7,4,1.4,1.1,[.89,.87,.74]);
+        ? [[.86,.44,.19],[.76,.26,.18],[.89,.70,.27],[.31,.55,.38]]
+        : [[.72,.47,.28],[.43,.64,.51],[.83,.69,.36],[.38,.58,.67]];
+    // Two slim display units near the back corners. Nothing crosses the
+    // shopkeeper or covers the centre of the shop opening.
+    for(const side of [-1,1]){
+      const x=side*37,z=38;
+      m.box(x,35,z,23,2.4,11,wood);
+      m.box(x,46,z,23,2.4,11,wood);
+      m.box(x+side*10,39.5,z,2.1,27,11,steel);
+      for(let shelf=0;shelf<2;shelf++)for(let k=0;k<3;k++){
+        const xx=x-7+k*7.1,yy=40+shelf*11;
+        const c=colors[(k+shelf+ (side===1?1:0))%colors.length];
+        if(kind==='stationery'){
+          m.box(xx,yy,36,4,7,3.6,c); // exercise books
+          m.box(xx,yy+3.1,35.8,3.6,.6,3.6,[.96,.94,.80]);
+        }else if(kind==='food'){
+          m.box(xx,yy,37,5.6,7,4.1,c); // modest snack packets
+          m.box(xx,yy+2.2,34.6,4.0,1,1,[.96,.84,.56]);
+        }else{
+          m.box(xx,yy,37,5,6.5,3.8,c); // tea, biscuits, supplies
+        }
       }
     }
+    // A little surface detail on the counter's inside edge, below sightline.
+    m.box(0,30,16,28,2.2,9,[.59,.39,.23]);
     return m.upload();
   }
   const dhakaShopInteriors=[
-    makeVisibleShopInterior('stationery'),
-    makeVisibleShopInterior('general'),
-    makeVisibleShopInterior('food')
+    makeSimpleShopInterior('stationery'),
+    makeSimpleShopInterior('tea'),
+    makeSimpleShopInterior('food')
   ];
   const powerWindowPairs=buildings.map(b=>{
     const m=new Mesh();
@@ -1614,7 +1632,7 @@
       }
     }
   }
-  const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0};
+  const S={guideDismissed:false,cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0};
 
   // Each named student owns one voice identity from request -> boarding -> boat -> campus gate.
   // Never put "chat_*" in random chatter: chat clips are only used as fully
@@ -2313,7 +2331,7 @@
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',guideDismissed:false,time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0});
     S.cityPeople=CITY_PEOPLE.map((p,i)=>({...p,uid:i}));S.cityPersonId=CITY_PEOPLE.length;
     S.aiRickshaws=createRickshawFleet();S.rickshawRescueCount=0;S.rickshawCrashCount=0;S.rickshawQuarrels=[];
     S.aiBoats=createRescueFleet();S.aiRespawnQueue=[];S.aiRescueCount=0;
@@ -2324,13 +2342,13 @@
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
-    resolvePickupMoorings();offerRide();gameAudio.begin();notify('Take students to BRAC University before their timers expire!',5);refreshHUD();}
+    resolvePickupMoorings();offerRide();gameAudio.begin();notify('NEW? Press Y to accept the rescue request. Follow the PICKUP line on your minimap!',6);refreshHUD();}
   function offerRide(){if(S.request||S.rides.length>=5)return;
     const id=S.requestId++,type=id%2===0?'HOME':'DROWNING',places=(type==='HOME'?homes:rescues).filter(p=>!S.rides.some(r=>r.locationId===p.id));if(!places.length)return;
     const place=id<2?places[0]:places[Math.floor(Math.random()*places.length)];
     const dist=Math.abs(S.x-place.x)+Math.abs(S.z-place.z)+Math.abs(place.x)+Math.abs(place.z-1080);
     const deadline=clamp(Math.round(43+dist/130+(type==='HOME'?7:0)+rnd(-4,6)),66,118);
-    S.request={id,type,name:students[id%students.length],voiceCharacter:passengerCast(students[id%students.length]),locationId:place.id,x:place.x,z:place.z,pickup:place.name,personX:place.personX,personZ:place.personZ,doorX:place.doorX,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',relocated:place.relocated,colorId:id%studentColors.length,warning:false};S.requestLeft=22;gameAudio.play('warning',{ignoreDistance:true,volume:.32,cooldown:3});}
+    S.request={id,type,name:students[id%students.length],voiceCharacter:passengerCast(students[id%students.length]),locationId:place.id,x:place.x,z:place.z,pickup:place.name,personX:place.personX,personZ:place.personZ,doorX:place.doorX,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',relocated:place.relocated,colorId:id%studentColors.length,warning:false};S.requestLeft=S.time<1?48:22;gameAudio.play('warning',{ignoreDistance:true,volume:.32,cooldown:3});}
   function accept(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming ride request.');return;}
     if(S.rides.length>=5){notify('Your rescue queue is full (5 active requests).');return;}
     S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;gameAudio.play('pickup',{ignoreDistance:true,volume:.35});refreshHUD();}
@@ -2353,8 +2371,8 @@
       $('modal-eyebrow').textContent='YOUR MISSION';$('modal-title').textContent=type==='PAUSED'?'PAUSED':'HOW TO PLAY';
       $('modal-content').innerHTML=`<p>Dhaka is flooded and stranded students are trying to reach BRAC University. Deliver <b>6 students</b> in <b>15 minutes</b> before missing 6 rescue deadlines.</p><ul>
         <li><kbd>W</kbd>/<kbd>↑</kbd> forward, <kbd>S</kbd>/<kbd>↓</kbd> reverse, <kbd>A</kbd>/<kbd>←</kbd> & <kbd>D</kbd>/<kbd>→</kbd> steer the boat.</li>
-        <li>Press <kbd>Y</kbd> to accept an incoming ride or <kbd>N</kbd> to reject it. Follow the orange minimap markers to the pickup.</li>
-        <li><b>Stop your boat</b> at a pickup until the ring fills. Hold still about 1.3 seconds for a home pickup or 0.65 seconds for a rescue.</li>
+        <li>Press <kbd>Y</kbd> to accept an incoming ride or <kbd>N</kbd> to reject it. On the <b>zoomed minimap</b>, follow the thick golden route from your boat to the large <b>PICKUP</b> marker.</li>
+        <li><b>There is no pickup key.</b> Row into the glowing pickup ring, <b>release WASD / arrow keys</b>, and let the boat stop. After about 1.3 seconds for a home pickup or 0.65 seconds for a water rescue, the student boards automatically.</li>
         <li>Carry up to <b>3 passengers</b> to BRAC University. <b>After boarding, a shorter delivery countdown begins</b> (about 34–62 seconds depending on distance).</li>
         <li><kbd>Space</kbd> toggles boat boost; <kbd>C</kbd> changes camera; <kbd>P</kbd> photographs Shaheed Minar from its marked spot; <kbd>F</kbd> repairs an outage box; <kbd>V</kbd> wipes rain.</li>
         <li>Rough-current zones push the boat sideways and rock the hull. Steer or boost against the flow; hard collisions now jolt and splash.</li>
@@ -2586,35 +2604,158 @@
     if(S.delivered>=6){if(S.campusQueue.length===0&&!S.campusGateScene&&!S.deliveryEffects.length&&S.time>=(S.rewardUntil||0)){S.mode='WON';keys.clear();nextModal('WON');}}else if(S.time-S.gatePausedTime>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time-S.gatePausedTime>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
+  // A player-and-destination zoom. The old map squeezed 3300 world units into
+  // 240 pixels, making the pickup pin almost impossible to distinguish.
+  function currentNavTarget(){
+    if(seated().length)return {x:0,z:1080,kind:'BRACU',name:'BRACU DOCK'};
+    const waiting=S.rides.filter(r=>r.state==='WAITING');
+    waiting.sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z));
+    if(waiting.length){const r=waiting[0];return {x:r.x,z:r.z,kind:'PICKUP',name:r.name,ride:r};}
+    if(S.request)return {x:S.request.x,z:S.request.z,kind:'OFFER',name:S.request.name};
+    return null;
+  }
   function refreshMap(){
-    const w=map.width,h=map.height,px=x=>19+(x+1650)/3300*(w-38),py=z=>h-19-(z+1650)/3300*(h-38);
-    ctx.clearRect(0,0,w,h);ctx.fillStyle='#0b2a37';ctx.fillRect(0,0,w,h);
-    ctx.strokeStyle='#345565';ctx.lineWidth=5;
-    for(const x of [-1100,-550,0,550,1100]){ctx.beginPath();ctx.moveTo(px(x),py(-1650));ctx.lineTo(px(x),py(1650));ctx.stroke();}
-    for(const z of [-1150,-600,-50,500,1050]){ctx.beginPath();ctx.moveTo(px(-1650),py(z));ctx.lineTo(px(1650),py(z));ctx.stroke();}
-    ctx.fillStyle='#4c6270';for(const b of buildings)ctx.fillRect(px(b.x-b.hw),py(b.z+b.hd),(2*b.hw)/3300*(w-38),(2*b.hd)/3300*(h-38));
-    ctx.fillStyle='#91d89b';ctx.fillRect(px(-220),py(1620),px(270)-px(-220),py(1230)-py(1620));
-    // Each mission uses a separate shape + color, matching the desktop
-    // HOME / SOS / BRACU / DOCK / REPAIR / LANDMARK symbol legend.
-    function marker(x,z,kind,small=false){
-      const X=px(x),Y=py(z);ctx.save();ctx.translate(X,Y);
-      ctx.lineWidth=2.1;ctx.strokeStyle='#0a202b';
-      if(kind==='HOME'){ctx.fillStyle='#f4b56d';ctx.beginPath();ctx.moveTo(0,-9);ctx.lineTo(9,0);ctx.lineTo(0,9);ctx.lineTo(-9,0);ctx.closePath();ctx.fill();ctx.stroke();}
-      else if(kind==='SOS'){ctx.fillStyle='#ff7162';ctx.beginPath();ctx.arc(0,0,9,0,TAU);ctx.fill();ctx.stroke();ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#152831';ctx.fillText('!',0,.5);}
-      else if(kind==='CAMPUS'){ctx.fillStyle='#9ae4a3';ctx.fillRect(-8,-8,16,16);}
-      else if(kind==='DOCK'){ctx.fillStyle='#65cfea';ctx.beginPath();ctx.moveTo(0,10);ctx.lineTo(-9,-7);ctx.lineTo(9,-7);ctx.closePath();ctx.fill();ctx.stroke();}
-      else if(kind==='REPAIR'){ctx.fillStyle='#ffd17c';ctx.fillRect(-3,-10,6,20);ctx.fillRect(-10,-3,20,6);ctx.strokeRect(-10,-3,20,6);}
-      else if(kind==='PHOTO'){ctx.font='bold 21px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#d8b7f4';ctx.fillText('★',0,0);}
-      else if(kind==='PENDING'){ctx.strokeStyle='#a9b7c3';ctx.lineWidth=1.7;ctx.beginPath();ctx.arc(0,0,small?6:9,0,TAU);ctx.stroke();}
-      ctx.restore();
+    const w=map.width,h=map.height,nav=currentNavTarget();
+    const maxDelta=nav?Math.max(Math.abs(nav.x-S.x),Math.abs(nav.z-S.z)):0;
+    const span=clamp(maxDelta*1.55+360,570,3360);
+    const cx=nav?(S.x+nav.x)*.5:S.x,cz=nav?(S.z+nav.z)*.5:S.z;
+    const scale=(Math.min(w,h)-32)/span;
+    const px=x=>w*.5+(x-cx)*scale,py=z=>h*.5-(z-cz)*scale;
+    ctx.clearRect(0,0,w,h);
+    ctx.fillStyle='#0a2633';ctx.fillRect(0,0,w,h);
+    ctx.save();ctx.beginPath();ctx.rect(1,1,w-2,h-2);ctx.clip();
+    // Flooded streets and buildings, now at a useful local scale.
+    ctx.strokeStyle='#335362';ctx.lineWidth=Math.max(2,8*scale);
+    for(const x of [-1100,-550,0,550,1100]){
+      ctx.beginPath();ctx.moveTo(px(x),-10);ctx.lineTo(px(x),h+10);ctx.stroke();
     }
-    marker(0,1360,'CAMPUS');marker(0,1080,'DOCK');
-    for(const r of S.rides)if(r.state==='WAITING')marker(r.x,r.z,r.type==='HOME'?'HOME':'SOS');
-    if(S.request){marker(S.request.x,S.request.z,'PENDING',true);ctx.beginPath();ctx.arc(px(S.request.x),py(S.request.z),12+3*Math.sin(S.time*6),0,TAU);ctx.strokeStyle='#d9c48d';ctx.lineWidth=2.1;ctx.stroke();}
-    if(S.powerOff){const station=power[S.powerIndex];marker(station.x,station.z,'REPAIR');}
-    if(!S.photo)marker(825,1080,'PHOTO');
-    const a=S.angle*RAD;ctx.save();ctx.translate(px(S.x),py(S.z));ctx.rotate(-a+Math.PI/2);
-    ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(-10,11);ctx.lineTo(0,6);ctx.lineTo(10,11);ctx.closePath();ctx.fillStyle='#ffda8b';ctx.fill();ctx.strokeStyle='#10212d';ctx.stroke();ctx.restore();
+    for(const z of [-1150,-600,-50,500,1050]){
+      ctx.beginPath();ctx.moveTo(-10,py(z));ctx.lineTo(w+10,py(z));ctx.stroke();
+    }
+    ctx.fillStyle='#50616b';
+    for(const b of buildings){
+      const x=px(b.x-b.hw),y=py(b.z+b.hd),bw=2*b.hw*scale,bh=2*b.hd*scale;
+      if(x+bw>=0&&x<=w&&y+bh>=0&&y<=h)ctx.fillRect(x,y,bw,bh);
+    }
+    ctx.fillStyle='#4a815c';ctx.fillRect(px(-220),py(1620),490*scale,390*scale);
+    // The route is intentionally much more prominent than optional landmarks.
+    if(nav){
+      const fromX=px(S.x),fromY=py(S.z),toX=px(nav.x),toY=py(nav.z);
+      ctx.beginPath();ctx.moveTo(fromX,fromY);ctx.lineTo(toX,toY);
+      ctx.strokeStyle='rgba(1,13,18,.85)';ctx.lineWidth=8;ctx.stroke();
+      ctx.setLineDash([8,5]);ctx.lineDashOffset=-(S.time*12)%13;
+      ctx.strokeStyle=nav.kind==='BRACU'?'#96f5ac':'#ffca65';ctx.lineWidth=4.4;ctx.stroke();
+      ctx.setLineDash([]);ctx.lineDashOffset=0;
+    }
+    function pin(x,z,color,label,size=7){
+      const X=px(x),Y=py(z);
+      if(X<-16||X>w+16||Y<-16||Y>h+16)return;
+      ctx.beginPath();ctx.arc(X,Y,size+2,0,TAU);ctx.fillStyle='#06212a';ctx.fill();
+      ctx.beginPath();ctx.arc(X,Y,size,0,TAU);ctx.fillStyle=color;ctx.fill();
+      ctx.strokeStyle='#ffffff';ctx.lineWidth=1.4;ctx.stroke();
+      if(label){ctx.font='bold 10px system-ui,sans-serif';ctx.textAlign='center';
+        ctx.textBaseline='middle';ctx.fillStyle='#061b25';ctx.fillText(label,X,Y+.5);}
+    }
+    // Secondary pickups are smaller than the active target, so the player
+    // knows which icon to visit first.
+    for(const r of S.rides){
+      if(r.state!=='WAITING'||r===nav?.ride)continue;
+      pin(r.x,r.z,'#ef9866','',5.8);
+    }
+    if(S.powerOff&&distance(cx,cz,power[S.powerIndex].x,power[S.powerIndex].z)<span*.4)
+      pin(power[S.powerIndex].x,power[S.powerIndex].z,'#d6b87b','+',4.8);
+    if(nav?.kind!=='BRACU'&&distance(cx,cz,0,1080)<span*.49)
+      pin(0,1080,'#96e7a6','B',5.5);
+    // Keep optional landmark markers available whenever the local zoom shows them.
+    if(!S.photo&&distance(cx,cz,825,1080)<span*.47)
+      pin(825,1080,'#c9b0f6','★',6.2);
+    if(nav){
+      const X=px(nav.x),Y=py(nav.z),pulse=14+2*Math.sin(S.time*5);
+      ctx.beginPath();ctx.arc(X,Y,pulse,0,TAU);ctx.strokeStyle=nav.kind==='BRACU'?'#a5f7ad':'#ffcd6d';ctx.lineWidth=2.7;ctx.stroke();
+      pin(nav.x,nav.z,nav.kind==='BRACU'?'#8ef4a9':nav.kind==='OFFER'?'#eac68c':'#ff9c52',nav.kind==='BRACU'?'B':'!',9.5);
+      // Fixed-size legible badge, clamped inside the 240px minimap.
+      const label=nav.kind==='BRACU'?'BRACU DROP-OFF':nav.kind==='OFFER'?'PRESS Y TO ACCEPT':'PICKUP HERE';
+      ctx.font='800 11px system-ui,sans-serif';ctx.textAlign='center';
+      const badgeW=Math.min(w-8,ctx.measureText(label).width+20);
+      const labelX=clamp(X,4+badgeW/2,w-4-badgeW/2),labelY=Y>45?Y-30:Y+30;
+      ctx.fillStyle='rgba(1,22,30,.96)';ctx.beginPath();
+      ctx.roundRect(labelX-badgeW/2,labelY-10,badgeW,21,5);ctx.fill();
+      ctx.strokeStyle=nav.kind==='BRACU'?'#8df0a6':'#ffcc66';ctx.lineWidth=1.1;ctx.stroke();
+      ctx.fillStyle='#fff7e1';ctx.textBaseline='middle';ctx.fillText(label,labelX,labelY+.5);
+    }
+    // Boat arrow is always large enough to find, even when zoomed out.
+    const a=S.angle*RAD;
+    ctx.save();ctx.translate(px(S.x),py(S.z));ctx.rotate(-a+Math.PI/2);
+    ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(-10,11);ctx.lineTo(0,6);ctx.lineTo(10,11);ctx.closePath();
+    ctx.fillStyle='#fff8d3';ctx.fill();ctx.strokeStyle='#12232b';ctx.lineWidth=3;ctx.stroke();
+    ctx.restore();ctx.restore();
+    ctx.font='bold 11px system-ui,sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
+    ctx.fillStyle='rgba(6,25,34,.9)';ctx.fillRect(5,5,80,20);
+    ctx.fillStyle='#dcf5e6';ctx.fillText('ROUTE · LIVE',10,9);
+    ctx.fillStyle='rgba(6,25,34,.9)';ctx.fillRect(w-32,5,27,21);
+    ctx.fillStyle='#e8f7ef';ctx.textAlign='center';ctx.fillText('N ↑',w-18,9);
+    const info=$('majhi-map-target');
+    if(info){
+      if(nav){
+        const dist=Math.round(distance(S.x,S.z,nav.x,nav.z));
+        const dx=nav.x-S.x,dz=nav.z-S.z;
+        const cardinal=Math.abs(dx)>Math.abs(dz)?(dx>0?'EAST':'WEST'):(dz>0?'NORTH':'SOUTH');
+        info.textContent=`${nav.kind==='BRACU'?'🏫 BRACU':nav.kind==='OFFER'?'⌨ ACCEPT FIRST':'🟠 PICKUP'} · ${dist} units · ${cardinal}`;
+        info.style.color=nav.kind==='BRACU'?'#b6f7c3':'#ffd891';
+      }else{info.textContent='Waiting for another rescue request…';info.style.color='#b5d2d4';}
+    }
+  }
+
+  // Non-blocking contextual onboarding: the first rescue request is visible
+  // while the guide explains real controls. It follows the player's progress.
+  function installPickupGuide(){
+    const css=document.createElement('style');css.textContent=`
+      #majhi-map-target{margin:5px 0 3px;font:800 10px/1.4 system-ui,sans-serif;text-align:center;letter-spacing:.02em}
+      #majhi-pickup-guide{position:absolute;z-index:3;top:clamp(90px,14vh,150px);left:50%;transform:translateX(-50%);width:min(445px,42vw);padding:12px 35px 12px 16px;color:#fff4df;background:rgba(5,25,34,.91);border:1px solid #dfbd6c;border-radius:13px;box-shadow:0 11px 35px #0009;pointer-events:none}
+      #majhi-pickup-guide strong{display:block;color:#ffda86;font:900 13px system-ui,sans-serif;letter-spacing:.045em}
+      #majhi-pickup-guide .guide-detail{display:block;font:650 12px/1.5 system-ui,sans-serif;margin-top:4px;color:#e0edf0}
+      #majhi-pickup-guide button{pointer-events:auto;position:absolute;top:5px;right:7px;padding:5px 7px;border:0;border-radius:6px;color:#c7dadb;background:transparent;font-size:16px;cursor:pointer}
+      #majhi-pickup-guide button:hover{color:#fff;background:#2b4851}
+      @media(max-width:720px){#majhi-pickup-guide{top:175px;left:8px;right:8px;transform:none;width:auto;padding:8px 28px 8px 10px}#majhi-pickup-guide strong{font-size:10px}#majhi-pickup-guide .guide-detail{font-size:9px}#majhi-map-target{font-size:7px}}
+      @media(max-height:600px) and (min-width:721px){#majhi-pickup-guide{top:76px;padding:6px 26px 7px 9px}#majhi-pickup-guide .guide-detail{font-size:10px}}
+    `;document.head.appendChild(css);
+    const info=document.createElement('div');info.id='majhi-map-target';info.setAttribute('aria-live','off');
+    map.insertAdjacentElement('afterend',info);
+    const guide=document.createElement('aside');guide.id='majhi-pickup-guide';guide.className='hidden';
+    guide.setAttribute('aria-label','Your first passenger pickup guide');
+    guide.innerHTML='<strong id="majhi-guide-title"></strong><span class="guide-detail" id="majhi-guide-detail"></span><button type="button" title="Dismiss tutorial" aria-label="Dismiss tutorial">×</button>';
+    $('hud').appendChild(guide);
+    guide.querySelector('button').addEventListener('click',()=>{S.guideDismissed=true;guide.classList.add('hidden');});
+  }
+  installPickupGuide();
+  function refreshPickupGuide(){
+    const guide=$('majhi-pickup-guide');if(!guide)return;
+    if(S.guideDismissed||S.delivered>0||S.mode!=='PLAYING'){
+      guide.classList.add('hidden');return;
+    }
+    guide.classList.remove('hidden');
+    let title='',detail='';
+    const nav=currentNavTarget();
+    if(seated().length){
+      title='STEP 4 / 4 · DELIVER TO BRACU';
+      detail='Passenger is aboard! Follow the GREEN route to BRACU and approach the yellow dock ring. Delivery is automatic.';
+    }else if(!nav||nav.kind==='OFFER'){
+      title='STEP 1 / 4 · ACCEPT A PASSENGER';
+      detail=nav?'Press Y (or click ACCEPT at the top right) to accept this rescue request.':'A new rescue request will appear shortly. Press Y to accept it.';
+    }else if(nav.kind==='PICKUP'){
+      const d=Math.round(distance(S.x,S.z,nav.x,nav.z));
+      if(d>125){
+        title='STEP 2 / 4 · FOLLOW THE PICKUP MARKER';
+        detail=`Row with W/A/S/D or arrow keys. Follow the bright GOLD line on the minimap to ${nav.name} (${d} units away).`;
+      }else{
+        title='STEP 3 / 4 · STOP AND AUTO-BOARD';
+        const wait=nav.ride.type==='HOME'?'1.3':'0.65';
+        const pct=S.dockId===nav.ride.id?Math.round(clamp(S.dock/(nav.ride.type==='HOME'?1.3:.65),0,1)*100):0;
+        detail=`Release W/A/S/D inside the glowing pickup ring. Stay still for ${wait} seconds; no pickup key needed.${pct?` Boarding ${pct}%.`:''}`;
+      }
+    }
+    $('majhi-guide-title').textContent=title;
+    $('majhi-guide-detail').textContent=detail;
   }
   function refreshHUD(){if(S.mode==='MENU')return;
     $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(900-(S.time-S.gatePausedTime));$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
@@ -2653,11 +2794,11 @@
     const waiting=S.rides.filter(r=>r.state==='WAITING'),onboard=seated();const nearest=waiting.sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
     if(onboard.length){const soonest=Math.min(...onboard.map(r=>r.timeLeft));$('objective-title').textContent=`${onboard.length} PASSENGER${onboard.length===1?'':'S'} ONBOARD · ${formatTime(soonest)} LEFT`;$('objective-detail').textContent=`Deliver to BRACU · ${Math.round(distance(S.x,S.z,0,1080))} units · Nearest deadline ${formatTime(soonest)}`;}
     else if(nearest){$('objective-title').textContent=`PICK UP ${nearest.name.toUpperCase()} · ${formatTime(nearest.timeLeft)} LEFT`;$('objective-detail').textContent=`${nearest.pickup} · ${Math.round(distance(S.x,S.z,nearest.x,nearest.z))} units`;}
-    else{$('objective-title').textContent='ACCEPT A RESCUE REQUEST';$('objective-detail').textContent='Pick up students and bring them to BRACU';}
+    else{$('objective-title').textContent=S.request?'PRESS Y TO ACCEPT THE REQUEST':'AWAIT NEXT RESCUE REQUEST';$('objective-detail').textContent=S.request?`Then follow the golden map route to ${S.request.pickup}`:'Your next passenger will appear shortly';}
     if(S.current){$('objective-title').textContent+=` · ${S.current}`;}
     const docking=nearest&&S.dockId===nearest.id?S.dock/(nearest.type==='HOME'?1.3:.65):0;$('dock-fill').style.width=`${Math.min(100,docking*100)}%`;
     $('toast').classList.toggle('hidden',S.notificationTime<=0);if(S.notificationTime>0)$('toast').textContent=S.notification;
-    refreshMap();
+    refreshPickupGuide();refreshMap();
   }
   function skyColor(){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);}
   function resize(){const ratio=Math.min(devicePixelRatio||1,1.8),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);weather.width=canvas.width;weather.height=canvas.height;}gl.viewport(0,0,canvas.width,canvas.height);}
@@ -3204,17 +3345,15 @@
       render(sourceMeshes.streets);
       render(sourceMeshes['buildings-'+powerState]);
       render(sourceMeshes.campus);render(sourceMeshes.props);
-      // Reconstructed source-derived animated shopkeeper/customer poses.
-      for(const style of [0,2]){
-        const frame=Math.floor((S.bobTime/2.513)*12)%12;
-        render(sourceMeshes[`shoppeople-${style}-${frame}`]);
-      }
+      // Do not render the baked shoppeople at the street-facing counters: those
+      // old positions hide the stall interiors. Live shopkeepers are placed
+      // behind the counter by drawCityPeople(), customers are to the sides.
       // Omit baked streetlamps: the modern geometry below replaces them.
       render(sourceMeshes.landmarks);render(sourceMeshes.dock);
       // Rebuilt parked vehicles are drawn separately below, allowing CNGs and
       // the colorful rickshaw to REPLACE, not overlap, the baked source cars.
       // Omit the old solid-color traffic beacon; draw a realistic signal below.
-      render(campusLettering);render(shopSigns);render(cityFacadeDetails);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);
+      render(campusLettering);render(teaSignBoard);render(shopSigns);render(cityFacadeDetails);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
@@ -3420,7 +3559,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity17-80-voices-paired-dialogue';
+  window.majhiVersion='fidelity17-80-voices-paired-dialogue-shop-nav-onboarding';
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
