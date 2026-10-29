@@ -25,32 +25,30 @@
   uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
   varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
   void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5&&aKind<1.5){
-  float mainWave=sin(.028*(p.z+.21*p.x)-1.65*uTime);
-  float crossWave=sin(.045*p.x-.018*p.z+1.24*uTime);
-  float chop=sin(.095*p.z+.031*p.x-2.55*uTime);
-  float micro=sin(.14*p.x+.11*p.z-uTime*5.2);
-  float relative=max(.22,.52+6.3*(.5+.5*mainWave)+1.05*crossWave+.75*chop+1.68*pow(max(0.,mainWave),6.));
+  float swellA=sin(dot(p.xz,vec2(.018,.029))-uTime*1.10);
+  float swellB=sin(dot(p.xz,vec2(-.024,.015))+uTime*1.45);
+  float swellC=sin(dot(p.xz,vec2(.011,-.033))-uTime*2.05);
+  float crest=pow(max(0.,sin(dot(p.xz,vec2(.023,.041))-uTime*1.85)),3.0);
   float radius=length(vec2(p.x,p.z-1378.));
   float daylight=clamp((560.-radius)/300.,0.,1.);
   daylight=daylight*daylight*(3.-2.*daylight);
-  p.y=8.30+(relative-.22)*(1.-.70*daylight)+.42*micro*(1.-.55*daylight);
-  // Only the four existing current zones get larger, faster wave crests.
-   // Fade in at their boundaries instead of forming sudden water ridges.
-   float west=smoothstep(-1280.,-1210.,p.x)*(1.-smoothstep(-990.,-920.,p.x))*smoothstep(-470.,-405.,p.z)*(1.-smoothstep(155.,220.,p.z));
-   float center=smoothstep(-170.,-105.,p.x)*(1.-smoothstep(105.,170.,p.x))*smoothstep(-970.,-905.,p.z)*(1.-smoothstep(-395.,-330.,p.z));
-   float east=smoothstep(410.,475.,p.x)*(1.-smoothstep(635.,700.,p.x))*smoothstep(130.,195.,p.z)*(1.-smoothstep(805.,870.,p.z));
-   float north=smoothstep(-720.,-655.,p.x)*(1.-smoothstep(-435.,-370.,p.x))*smoothstep(690.,755.,p.z)*(1.-smoothstep(1105.,1170.,p.z));
-   float rough=clamp(west+center+east+north,0.,1.);
-   p.y+=rough*(5.1*sin(.037*p.x+.023*p.z-uTime*3.8)+3.0*sin(.028*p.z-.032*p.x+uTime*4.5)+1.2*pow(max(0.,sin(.065*p.x-.054*p.z+uTime*5.7)),3.));
+  float relative=.52+.24*swellA+.15*swellB+.08*swellC+.22*crest;
+  p.y=8.18+relative*(1.-.72*daylight);
+  // Only the four existing current zones get stronger, choppier motion.
+  float west=smoothstep(-1280.,-1210.,p.x)*(1.-smoothstep(-990.,-920.,p.x))*smoothstep(-470.,-405.,p.z)*(1.-smoothstep(155.,220.,p.z));
+  float center=smoothstep(-170.,-105.,p.x)*(1.-smoothstep(105.,170.,p.x))*smoothstep(-970.,-905.,p.z)*(1.-smoothstep(-395.,-330.,p.z));
+  float east=smoothstep(410.,475.,p.x)*(1.-smoothstep(635.,700.,p.x))*smoothstep(130.,195.,p.z)*(1.-smoothstep(805.,870.,p.z));
+  float north=smoothstep(-720.,-655.,p.x)*(1.-smoothstep(-435.,-370.,p.x))*smoothstep(690.,755.,p.z)*(1.-smoothstep(1105.,1170.,p.z));
+  float rough=clamp(west+center+east+north,0.,1.);
+  p.y+=rough*(1.8*sin(dot(p.xz,vec2(.046,.019))-uTime*3.4)+1.2*sin(dot(p.xz,vec2(-.027,.038))+uTime*4.1));
   }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
   void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
-    opacity=mix(.58,.14,daylight);
-    c=mix(c,vec3(.20,.30,.31),.52*daylight);
-    float a=sin(vWorld.x*.082+uTime*1.9+sin(vWorld.z*.025))*sin(vWorld.z*.12-uTime*1.4);
-    float b=pow(max(0.,sin(vWorld.x*.042+vWorld.z*.051+uTime*2.5)),14.);
-    float sparkle=pow(max(0.,sin(vWorld.x*.063-vWorld.z*.058+uTime*3.7)),20.);
-    c+=vec3(.020,.060,.084)*a+vec3(.11,.17,.18)*b+vec3(.08,.11,.10)*sparkle*(1.-.65*daylight);
+    opacity=mix(.58,.14,daylight);c=mix(c,vec3(.18,.28,.29),.48*daylight);
+    float flowA=sin(dot(vWorld.xz,vec2(.021,.037))-uTime*1.28);
+    float flowB=sin(dot(vWorld.xz,vec2(-.031,.019))+uTime*1.66);
+    float shimmer=pow(max(0.,sin(dot(vWorld.xz,vec2(.014,.051))-uTime*2.25)),8.0);
+    c+=vec3(.010,.028,.040)*flowA+vec3(.008,.020,.029)*flowB+vec3(.11,.18,.19)*shimmer;
   }else if(vKind>3.5&&vKind<4.5){
     // Warm streetlight halo: its shell is translucent, while its bulb is the
     // original static source geometry and never has to be re-drawn.
@@ -131,13 +129,9 @@
   for(const k of Object.values(attrs))gl.enableVertexAttribArray(k);
   const C={water:[.052,.185,.257],stone:[.46,.53,.54],brick:[.55,.38,.33],sand:[.68,.62,.51],concrete:[.65,.67,.62],window:[.08,.22,.32],reflect:[.24,.44,.53],green:[.20,.46,.38],pale:[.91,.90,.82],gold:[.95,.78,.42],warm:[.85,.60,.36],dark:[.13,.23,.28],teal:[.12,.40,.43],red:[.96,.30,.20]};
   const buildingXs=[-1375,-825,-275,275,825,1375], buildingZs=[-1375,-875,-325,225,775];
-  const buildingStyles=['GLASS','BRICK','CONCRETE','PAINTED'];
   const buildings=[];for(let r=0;r<buildingZs.length;r++)for(let c=0;c<buildingXs.length;c++){
     const x=buildingXs[c],z=buildingZs[r];if(z>=775&&Math.abs(x)<500)continue;
-    const idx=r*6+c;
-    const style=buildingStyles[(r*7+c*3)%buildingStyles.length];
-    const underConstruction=(idx===4||idx===9||idx===17||idx===23);
-    buildings.push({x,z,hw:115+(r+c)%3*12,hd:125+(r*2+c)%3*10,h:160+(r*3+c*2)%5*38,idx,style,underConstruction});
+    buildings.push({x,z,hw:115+(r+c)%3*12,hd:125+(r*2+c)%3*10,h:160+(r*3+c*2)%5*38,idx:r*6+c});
   }
   const cars=[[-1100,-920,90],[-550,-320,90],[0,-720,90],[550,260,90],[1100,-380,90],[-820,500,0],[760,1050,0],[-260,-1150,0]];
   // The Python game offsets alternating lanes by 0.22 * 210 world units.
@@ -272,15 +266,12 @@
   city.box(0,1,-170,205,.8,8,[.96,.80,.39]);
   city.cylinder(145,49,-55,5,102,[.56,.55,.47],8);city.box(145,106,-55,22,52,21,[.23,.29,.28]);
   city.upload();
-  const waterMesh=new Mesh(), SIZE=1700,STEP=32;
+  const waterMesh=new Mesh(), SIZE=1700,STEP=24;
   for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){
-    const deep=.055+(.010*Math.sin(x*.007+z*.023))+.008*Math.cos(z*.011);
-    const mid=.182+(.016*Math.sin(x*.009-z*.013));
-    const bright=.248+(.014*Math.cos(x*.013+z*.017));
-    const c=[deep,mid,bright];
+    const shade=.055+.010*Math.sin(x*.018+z*.011)+.006*Math.sin(x*.043-z*.017);
+    const c=[shade,.176+.010*Math.sin(z*.007),.242+.018*Math.sin((x+z)*.009)];
     waterMesh.quad([x,8,z],[x+STEP,8,z],[x+STEP,8,z+STEP],[x,8,z+STEP],c,1);
-  }
-  waterMesh.upload();
+  }waterMesh.upload();
   // Local meshes drawn with per-instance transforms.
   // OFFLINE EXPORTED SOURCE GEOMETRY. The binary comes from the original
   // renderSingleBuildingGeometry, renderBRACUStaticGeometry, drawCityTree,
@@ -318,138 +309,102 @@
   boatMesh.box(-90,8,0,17,10,48,[.52,.38,.24]);
   boatMesh.box(100,8,0,13,11,29,[.28,.49,.48]);
   boatMesh.upload();
-  const paddleMesh=new Mesh();
-  paddleMesh.cylinder(0,6,0,2.2,82,[.54,.37,.22],8);
-  paddleMesh.cylinder(0,43,0,3.5,11,[.32,.20,.12],8);
-  paddleMesh.box(0,-27,0,9,16,4,[.63,.43,.24]);
-  paddleMesh.box(4,-38,0,18,22,4,[.76,.53,.29]);
-  paddleMesh.box(9,-47,0,10,12,3,[.83,.61,.35]);
-  paddleMesh.upload();
+  const paddleMesh=new Mesh();paddleMesh.cylinder(0,0,0,2.8,95,[.55,.38,.24],8);paddleMesh.box(0,-43,0,15,22,6,[.73,.49,.27]);paddleMesh.upload();
   const carMesh=new Mesh();carMesh.box(0,6,0,88,25,44,[.36,.43,.47]);carMesh.box(3,21,0,49,19,41,[.22,.30,.34]);carMesh.box(-8,34,0,24,3,38,[.40,.49,.50]);carMesh.box(40,9,0,4,12,33,[.78,.35,.23]);carMesh.box(-40,9,0,4,13,33,[.87,.67,.38]);carMesh.upload();
-  function faceDetails(mesh,x,y,z,skin,hair){
-    mesh.sphere(x,y,z,9.4,skin,5,10);
-    mesh.sphere(x-1.8,y+5.0,z,8.7,hair,5,10);
-    mesh.box(x+7.4,y+1.6,z-3.1,2.0,1.7,1.1,[.97,.97,.92]);
-    mesh.box(x+7.4,y+1.6,z+3.1,2.0,1.7,1.1,[.97,.97,.92]);
-    mesh.box(x+8.1,y+1.6,z-3.1,.8,.8,.8,[.12,.14,.16]);
-    mesh.box(x+8.1,y+1.6,z+3.1,.8,.8,.8,[.12,.14,.16]);
-    mesh.box(x+8.4,y-3.6,z,1.0,1.2,4.8,[.33,.18,.16]);
-  }
-  function buildStudentMesh(color,seated=false){
-    const m=new Mesh(),skin=[.78,.56,.39],hair=[.10,.11,.14],pants=[.17,.23,.29],shoe=[.08,.11,.13];
-    if(!seated){
-      m.box(0,24,0,19,22,17,color);
-      m.box(0,34,0,20,4,18,color.map(v=>Math.min(1,v*1.13)));
-      m.box(0,15,0,17,7,14,[.91,.92,.95]);
-      m.box(-5,3,-4,6,16,6,pants); m.box(-5,-6,-4,5.4,10,5.4,pants);
-      m.box(-5,-12,-4,7,3,8,shoe); m.box(-5,-10,-1,8,2,5,shoe);
-      m.box(-5,3,4,6,16,6,pants); m.box(-5,-6,4,5.4,10,5.4,pants);
-      m.box(-5,-12,4,7,3,8,shoe); m.box(-5,-10,1,8,2,5,shoe);
-      m.box(0,41,0,4.6,5,4.6,skin);
-      faceDetails(m,0,53,0,skin,hair);
-      m.box(-1,25,-11,5,16,6,color); m.box(-1,10,-12,4.3,16,4.3,skin); m.box(-1,1,-12,4,2,4,shoe);
-      m.box(-1,25,11,5,16,6,color); m.box(-1,10,12,4.3,16,4.3,skin); m.box(-1,1,12,4,2,4,shoe);
-      m.box(-11,23,0,6,18,14,[.23,.31,.33]); m.box(-13,28,0,1.5,6,9,[.82,.67,.31]);
-    }else{
-      m.box(0,27,0,18,20,17,color);
-      m.box(0,36,0,19,4,18,color.map(v=>Math.min(1,v*1.13)));
-      m.box(0,18,0,16,7,14,[.92,.93,.96]);
-      m.box(0,43,0,4.5,5,4.5,skin);
-      faceDetails(m,0,55,0,skin,hair);
-      m.box(-2,27,-11,5,15,5,color); m.box(1,16,-12,4.3,12,4.3,skin); m.box(8,12,-12,8,4,7,shoe);
-      m.box(-2,27,11,5,15,5,color); m.box(1,16,12,4.3,12,4.3,skin); m.box(8,12,12,8,4,7,shoe);
-      m.box(10,16,-5,13,5,6,pants); m.box(10,16,5,13,5,6,pants);
-      m.box(4,23,-11,4.3,14,4.3,skin); m.box(7,17,-13,5,2.3,3.8,shoe);
-      m.box(4,23,11,4.3,14,4.3,skin); m.box(7,17,13,5,2.3,3.8,shoe);
-      m.box(-10,26,0,5,14,12,[.24,.31,.34]);
-    }
-    return m.upload();
-  }
-  const npcMeshes=studentColors.map(color=>buildStudentMesh(color,false));
-  const seatedPassengerMeshes=studentColors.map(color=>buildStudentMesh(color,true));
-  const captainMesh=(()=>{const m=new Mesh(),skin=[.77,.55,.39],hair=[.05,.07,.09],shirt=[.23,.65,.66],lungi=[.29,.36,.41],shoe=[.08,.09,.11];
-    m.box(0,24,0,20,23,18,shirt); m.box(0,34,0,21,4,19,[.32,.77,.78]); m.box(0,17,0,17,8,14,[.91,.92,.94]);
-    m.box(0,42,0,4.7,5.2,4.7,skin); faceDetails(m,0,54,0,skin,hair);
-    m.box(10,18,-5,12,5,6,lungi); m.box(10,18,5,12,5,6,lungi);
-    m.box(-2,27,-12,5.2,15,5.2,shirt); m.box(1,16,-13,4.4,12,4.4,skin); m.box(8,12,-13,8,4,7,shoe);
-    m.box(-2,27,12,5.2,15,5.2,shirt); m.box(1,16,13,4.4,12,4.4,skin); m.box(8,12,13,8,4,7,shoe);
-    m.box(4,24,-13,4.1,18,4.1,skin); m.box(4,24,13,4.1,18,4.1,skin);
-    return m.upload();})();
-  // Reactive citizens are lightweight procedural meshes, baked once into GPU
-  // buffers instead of regenerated on every frame. They use the original
-  // student's shirt palette, and animate without extra assets or packages.
-  const REACTION_FRAMES=12;
-  const reactionAnimations=['HOME','HOME_URGENT','SOS','SOS_URGENT','CELEBRATE'];
-  const citizenSkin=[.76,.53,.38],citizenHair=[.115,.125,.16];
+  const citizenSkin=[.77,.56,.40],citizenHair=[.10,.12,.15],citizenPants=[.16,.20,.25];
   function citizenLimb(mesh,from,to,radius,color){
     const axis=norm(to.map((v,i)=>v-from[i]));
     const guide=Math.abs(axis[1])<.88?[0,1,0]:[1,0,0];
     const right=norm(cross(axis,guide)),side=cross(axis,right);
     const ring=(p,t)=>p.map((v,i)=>v+radius*(Math.cos(t)*right[i]+Math.sin(t)*side[i]));
-    for(let j=0;j<7;j++){
-      const a=j*TAU/7,b=(j+1)*TAU/7;
+    for(let j=0;j<8;j++){
+      const a=j*TAU/8,b=(j+1)*TAU/8;
       mesh.quad(ring(from,a),ring(from,b),ring(to,b),ring(to,a),color);
     }
   }
+  function addCitizenHead(m,x,y,z,skin=citizenSkin,hair=citizenHair){
+    m.sphere(x,y,z,7.2,skin,6,10);
+    m.sphere(x-1.9,y+4.0,z,6.6,hair,4,10);
+    m.box(x+6.8,y+1.1,z-2.4,1.0,1.1,1.1,[.96,.97,.90]);
+    m.box(x+6.8,y+1.1,z+2.4,1.0,1.1,1.1,[.96,.97,.90]);
+    m.box(x+7.3,y+1.1,z-2.4,.45,.45,.45,[.11,.13,.16]);
+    m.box(x+7.3,y+1.1,z+2.4,.45,.45,.45,[.11,.13,.16]);
+    m.box(x+6.4,y-3.9,z,1.0,.6,4.0,[.35,.18,.18]);
+  }
+  function addCitizenTorso(m,x,y,z,shirt){
+    const hi=shirt.map(v=>Math.min(1,v*1.08)),mid=shirt.map(v=>v*.92),low=shirt.map(v=>v*.80);
+    m.box(x,y+8,z,18,8,17,hi);
+    m.box(x,y,z,15,13,15,mid);
+    m.box(x-1,y-10,z,12,9,13,low);
+    m.box(x+1,y+13,z,8,2.6,10,[.90,.86,.77]);
+  }
+  function makeStaticStudent(color){
+    const m=new Mesh();
+    addCitizenTorso(m,0,22,0,color);
+    addCitizenHead(m,2.2,39,0);
+    for(const side of [-1,1]){
+      citizenLimb(m,[-3,14,side*4],[1,4,side*4.5],2.8,citizenPants);
+      citizenLimb(m,[1,4,side*4.5],[10,1,side*5],2.4,citizenPants);
+      m.box(12,1,side*5.3,4,2,7,[.10,.12,.14]);
+      citizenLimb(m,[2,29,side*10],[7,21,side*11],2.9,color.map(v=>Math.min(1,v*0.95)));
+      citizenLimb(m,[7,21,side*11],[13,13,side*12],2.3,citizenSkin);
+      m.sphere(13,13,side*12,2.4,citizenSkin,3,6);
+    }
+    m.box(-9,19,0,5,15,12,[.22,.31,.34]);
+    m.box(-11,23,0,1.2,4,7,[.86,.66,.30]);
+    return m.upload();
+  }
+  const npcMeshes=studentColors.map(color=>makeStaticStudent(color));
+  // Reactive citizens are lightweight procedural meshes, baked once into GPU
+  // buffers instead of regenerated on every frame. They use the original
+  // student's shirt palette, and animate without extra assets or packages.
+  const REACTION_FRAMES=12;
+  const reactionAnimations=['HOME','HOME_URGENT','SOS','SOS_URGENT','CELEBRATE'];
   function makeCitizenPose(color,kind,index){
     const m=new Mesh(),phase=index*TAU/REACTION_FRAMES;
     const isSOS=kind.startsWith('SOS'),urgent=kind.endsWith('URGENT'),celebrating=kind==='CELEBRATE';
-    const aliveY=isSOS?-9:0; // Keep the SOS student visibly immersed in water.
-    const chestY=aliveY+22,headY=aliveY+37;
-    const skin=citizenSkin,shirt=color;
+    const aliveY=isSOS?-9:0;
+    const torsoY=aliveY+23,headY=aliveY+39;
     const pace=Math.sin(phase),counter=Math.cos(phase);
-    // More human proportions: layered shirt, waist, legs, and clearer faces.
-    m.box(0,chestY,0,16,20,17,shirt);
-    m.box(0,chestY+9.5,0,17,3.3,18,shirt.map(v=>Math.min(1,v*1.14)));
-    m.box(0,chestY-7,0,14,7,14,[.92,.93,.96]);
-    m.cylinder(0,aliveY+15,0,4.0,5,skin,8);
+    addCitizenTorso(m,0,torsoY,0,color);
     if(!isSOS){
       for(const side of [-1,1]){
-        const stride=celebrating?Math.sin(phase)*3.3:Math.sin(phase+side)*1.5;
-        citizenLimb(m,[-3.5,aliveY+9,side*4.8],[-2.2+stride,aliveY-3.2,side*5.5],2.85,[.18,.24,.31]);
-        m.box(4.0+stride,aliveY-6.7,side*6.0,8.4,3.0,5.0,[.10,.13,.16]);
+        const hip=[-3,aliveY+14,side*4.5];
+        const knee=[1+Math.sin(phase+side*.8)*(celebrating?2.2:1.1),aliveY+5,side*5];
+        const foot=[10+(celebrating?Math.sin(phase+side)*4.5:Math.sin(phase+side)*1.8),aliveY+1.3,side*5.5];
+        citizenLimb(m,hip,knee,2.7,citizenPants);
+        citizenLimb(m,knee,foot,2.3,citizenPants);
+        m.box(foot[0]+2,foot[1],foot[2],4.2,2,7,[.10,.12,.14]);
       }
     }
-    // Head, hair, face and eyes point down local +X, toward the player.
-    m.sphere(1,headY,0,9.5,skin,5,10);
-    m.sphere(-1.2,headY+5.2,0,8.9,citizenHair,5,10);
-    m.box(8.2,headY+1.1,-3.2,2.0,1.4,1.0,[.97,.97,.91]);
-    m.box(8.2,headY+1.1,3.2,2.0,1.4,1.0,[.97,.97,.91]);
-    m.box(8.8,headY+1.1,-3.2,.9,.8,.7,[.11,.14,.16]);
-    m.box(8.8,headY+1.1,3.2,.9,.8,.7,[.11,.14,.16]);
-    if(urgent||isSOS)m.box(8.9,headY-4.4,0,1.0,3.6,3.7,[.25,.18,.17]);
-    else m.box(8.6,headY-4.4,0,1.0,1.1,5.3,[.30,.17,.15]);
-    // Arms are actual jointed geometry, not textures or stationary overlays.
-    // Different frame meshes produce overhead waving, water-treading, or cheers.
+    addCitizenHead(m,2.2,headY,0);
     for(const side of [-1,1]){
-      const shoulder=[0,chestY+7,side*10.5];
+      const shoulder=[2,torsoY+7,side*10.2];
       let elbow,hand;
       if(celebrating){
-        elbow=[4,chestY+17+Math.sin(phase+side)*2,side*13];
-        hand=[5+Math.sin(phase+side)*5,chestY+30+6*Math.sin(phase*1.0+side),side*15];
+        elbow=[6,torsoY+17+Math.sin(phase+side)*2.2,side*12.5];
+        hand=[8+Math.sin(phase+side)*5.2,torsoY+29+6.5*Math.sin(phase+side*.6),side*15.0];
       }else if(isSOS){
-        const raised=urgent?12:5;
-        const splashWave= Math.sin(phase+(side===-1?0:Math.PI));
-        elbow=[5,chestY+5+raised*.65+5*splashWave,side*14];
-        hand=[7+3*Math.cos(phase),chestY+13+raised+7*splashWave,side*18];
+        const splash=Math.sin(phase+(side===-1?0:Math.PI));
+        elbow=[6,torsoY+8+7*splash,side*13.0];
+        hand=[10+2.5*Math.cos(phase),torsoY+18+9*splash,side*16.5];
       }else if(urgent){
-        elbow=[6,chestY+16+3*Math.sin(phase+side),side*13];
-        hand=[4+Math.cos(phase+side)*5,chestY+31+7*Math.sin(phase+side),side*17];
+        elbow=[6.5,torsoY+14+3*Math.sin(phase+side),side*12.5];
+        hand=[7+Math.cos(phase+side)*4.5,torsoY+28+6*Math.sin(phase+side),side*15.5];
       }else if(side===1){
-        elbow=[5,chestY+16+3*pace,side*13];
-        hand=[5+Math.cos(phase)*5,chestY+29+5*pace,side*16];
+        elbow=[5.5,torsoY+12+2.2*pace,side*12.2];
+        hand=[8+4.3*Math.cos(phase),torsoY+24+4.3*pace,side*15.5];
       }else{
-        elbow=[0,chestY-5+2*pace,side*12];
-        hand=[3,chestY-12+2*counter,side*11];
+        elbow=[2,torsoY-1+1.4*pace,side*11.5];
+        hand=[7,torsoY-7+1.8*counter,side*11.4];
       }
-      citizenLimb(m,shoulder,elbow,3.7,shirt);
-      citizenLimb(m,elbow,hand,2.7,skin);
-      m.sphere(hand[0],hand[1],hand[2],3.1,skin,3,6);
+      citizenLimb(m,shoulder,elbow,3.2,color.map(v=>Math.min(1,v*.95)));
+      citizenLimb(m,elbow,hand,2.35,citizenSkin);
+      m.sphere(hand[0],hand[1],hand[2],2.4,citizenSkin,3,6);
     }
-    // Stranded home students visibly retain a small school bag.
     if(!isSOS&&!celebrating){
-      m.box(-9,chestY-2,0,5,16,13,[.24,.34,.36]);
-      m.box(-12,chestY+3,0,1.5,4,7,[.85,.67,.36]);
+      m.box(-9,torsoY-3,0,5,15,12,[.22,.31,.34]);
+      m.box(-11,torsoY+1,0,1.2,4,7,[.86,.66,.30]);
     }
     return m.upload();
   }
@@ -458,6 +413,28 @@
     citizenFrames[kind]=studentColors.map(color=>
       Array.from({length:REACTION_FRAMES},(_,frame)=>makeCitizenPose(color,kind,frame)));
   }
+  const MAJHI_FRAMES=16;
+  function makeMajhiFrame(shirt,index){
+    const m=new Mesh(),phase=index*TAU/MAJHI_FRAMES,drive=Math.sin(phase),lift=Math.cos(phase);
+    const torsoX=-6+drive*3.2,torsoY=23-drive*1.2;
+    addCitizenTorso(m,torsoX,torsoY,0,shirt);
+    addCitizenHead(m,torsoX-2.5,40-drive*.8,0,[.76,.54,.39],[.08,.09,.10]);
+    for(const side of [-1,1]){
+      const hip=[torsoX-6,16,side*4.5],knee=[torsoX+1,10.5,side*5.0],foot=[torsoX+13,10.5,side*5.5];
+      citizenLimb(m,hip,knee,2.8,[.19,.23,.28]);
+      citizenLimb(m,knee,foot,2.4,[.19,.23,.28]);
+      m.box(foot[0]+2,10.4,foot[2],4.2,2,7,[.09,.11,.14]);
+      const shoulder=[torsoX+1.0,torsoY+7.5,side*10.5];
+      const elbow=[torsoX+10+drive*2.5,torsoY+5.5-drive*1.4,side*(13.5+drive*1.4)];
+      const hand=[torsoX+18+drive*6.5,torsoY+3.0-drive*1.4,side*(17.5+drive*3.4)];
+      citizenLimb(m,shoulder,elbow,3.2,shirt.map(v=>Math.min(1,v*.95)));
+      citizenLimb(m,elbow,hand,2.4,[.76,.54,.39]);
+      m.sphere(hand[0],hand[1],hand[2],2.5,[.76,.54,.39],3,6);
+    }
+    return m.upload();
+  }
+  const majhiFrames=Array.from({length:MAJHI_FRAMES},(_,frame)=>makeMajhiFrame([.26,.74,.76],frame));
+  const aiMajhiFrames=studentColors.map(color=>Array.from({length:MAJHI_FRAMES},(_,frame)=>makeMajhiFrame(color,frame)));
   const urgencyMarker=new Mesh();
   urgencyMarker.box(0,6,0,3.4,13,3.4,[1,.31,.22]);
   urgencyMarker.box(0,-5,0,4.3,4.5,4.3,[1,.67,.34]);
@@ -771,25 +748,27 @@
     }
   }
 
+  function renderBoatPaddles(x,y,z,angle,phase,scale=.36){
+    const a=angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
+    const drive=Math.sin(phase),sweep=42+drive*12;
+    for(const side of [-1,1]){
+      const px=x+fx*(10+drive*2)+lx*(side*30);
+      const pz=z+fz*(10+drive*2)+lz*(side*30);
+      render(paddleMesh,model(px,y,pz,angle+side*sweep,scale));
+    }
+  }
+
   function drawRescueFleet(){
     if(S.mode==='MENU')return;
     for(const boat of S.aiBoats){
       if(distance(S.x,S.z,boat.x,boat.z)>1050)continue;
-      const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
+      const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a);
       const bob=.9*Math.sin(S.time*4+boat.id);
-      // Small distinct sampans carrying a visible majhi, with paddles and wakes.
+      const phase=S.time*5.2+boat.id*0.8;
+      const frame=(Math.floor((phase/TAU)*MAJHI_FRAMES)%MAJHI_FRAMES+MAJHI_FRAMES)%MAJHI_FRAMES;
       render(sourceMeshes?.boat||boatMesh,model(boat.x,11.5+bob,boat.z,boat.angle,.47));
-      render(citizenFrame('HOME',boat.colorId,S.time*2.7+boat.id),
-        model(boat.x-fx*12,27+bob,boat.z-fz*12,boat.angle,.42));
-      const portStroke=Math.sin(S.time*7.4+boat.id*1.9),starStroke=Math.sin(S.time*7.4+boat.id*1.9+Math.PI*.92);
-      render(paddleMesh,model(boat.x+fx*(4+portStroke*8)+lx*39,21+bob,boat.z+fz*(4+portStroke*8)+lz*39,boat.angle+46+portStroke*23,.30));
-      render(paddleMesh,model(boat.x+fx*(4+starStroke*8)-lx*39,21+bob,boat.z+fz*(4+starStroke*8)-lz*39,boat.angle-46-starStroke*23,.30));
-      for(const side of [-1,1]){
-        const stroke=side<0?portStroke:starStroke;
-        render(waterRipple,model(boat.x+side*lx*58+fx*(8+stroke*12),9.45,boat.z+side*lz*58+fz*(8+stroke*12),0,.20+.10*Math.abs(stroke)));
-      }
-      // The rescued citizen is briefly visible aboard, rather than vanishing
-      // immediately after the pickup animation.
+      render(aiMajhiFrames[boat.colorId%aiMajhiFrames.length][frame],model(boat.x,12.2+bob,boat.z,boat.angle,.52));
+      renderBoatPaddles(boat.x,23.1+bob,boat.z,boat.angle,phase,.29);
       if(S.time-boat.rescuedAt<7.2)
         render(citizenFrame('CELEBRATE',boat.rescuedColor,S.time*1.9),
           model(boat.x+fx*33,25+bob,boat.z+fz*33,boat.angle,.34));
@@ -1412,54 +1391,29 @@
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
   }
   shopSigns.upload();
-  const cityFacadeDetails=new Mesh(),cityFacadeLights=new Mesh(),storeCanopies=new Mesh(),constructionSites=new Mesh();
+  const cityFacadeDetails=new Mesh(),cityFacadeLights=new Mesh(),storeCanopies=new Mesh();
   for(const b of buildings){
-    const faceZ=b.z-b.hd-2.8;
-    const accentMap={GLASS:[.33,.64,.78],BRICK:[.76,.43,.27],CONCRETE:[.61,.64,.68],PAINTED:[.45,.66,.39]};
-    const accent=accentMap[b.style]||[.80,.60,.22],metal=[.22,.28,.30];
+    const faceZ=b.z-b.hd-2.8,accent=[[.77,.43,.27],[.26,.56,.76],[.41,.63,.36],[.80,.60,.22]][b.idx%4],metal=[.22,.28,.30];
     cityFacadeDetails.box(b.x,14,faceZ,30,24,3,[.18,.22,.25]);
-    cityFacadeDetails.box(b.x,33,faceZ-7,74,4,12,accent);
-    for(let k=-1;k<=1;k++)cityFacadeDetails.box(b.x+k*23,31.5,faceZ-1.8,10,2,2,[.95,.89,.71]);
-    if(b.style==='GLASS'){
-      for(const y of [58,94,130]){
-        cityFacadeDetails.box(b.x,y,faceZ-11,b.hw*.78,4.0,4,[.23,.30,.33]);
-        for(let k=-3;k<=3;k++)cityFacadeDetails.box(b.x+k*15.2,y-7,faceZ-10.8,10.4,13,1.2,[.26,.41,.49]);
-      }
-    }else if(b.style==='BRICK'){
-      for(const y of [64,102]){
+    if(b.idx%2===0){
+      cityFacadeDetails.box(b.x,33,faceZ-7,74,4,12,accent);
+      for(let k=-1;k<=1;k++)cityFacadeDetails.box(b.x+k*23,31.5,faceZ-1.8,10,2,2,[.95,.89,.71]);
+    }
+    if(b.idx%3===0){
+      for(const y of [66,104]){
         cityFacadeDetails.box(b.x,y,faceZ-7,70,3.2,12,metal);
         cityFacadeDetails.box(b.x,y-8,faceZ-10,63,14,2,[.18,.23,.25]);
         for(let k=-2;k<=2;k++)cityFacadeDetails.box(b.x+k*13.5,y-8,faceZ-10.9,1.5,14,1.2,[.70,.72,.76]);
       }
-      for(let k=-2;k<=2;k++)cityFacadeDetails.box(b.x+k*18,b.h*.48,faceZ-6.5,4,b.h*.58,2,[.49,.35,.30]);
-    }else if(b.style==='PAINTED'){
-      for(let k=-2;k<=2;k++)cityFacadeDetails.box(b.x+k*18,70,faceZ-7.5,9,86,1.7,k%2?accent:[.86,.84,.80]);
-      cityFacadeDetails.box(b.x,b.h+7,b.z-b.hd*.12,b.hw*.36,14,b.hd*.22,[.18,.23,.28]);
-    }else{
-      for(let y=56;y<Math.min(152,b.h-18);y+=34){
-        cityFacadeDetails.box(b.x,y,faceZ-9,b.hw*.70,2.7,4,[.33,.38,.40]);
-      }
+    }
+    if(b.idx%4===1){
       cityFacadeDetails.cylinder(b.x+b.hw*.28,b.h+14,b.z-b.hd*.16,10,22,[.18,.23,.28],8);
       cityFacadeDetails.box(b.x+b.hw*.28,b.h+31,b.z-b.hd*.16,24,3,24,[.30,.36,.39]);
     }
-    if(b.underConstruction){
-      const frameColor=[.43,.36,.24],tarp=[.82,.63,.19];
-      for(let level=0;level<4;level++){
-        const y=38+level*36;
-        constructionSites.box(b.x,y,faceZ-16,b.hw*1.18,2.4,4,frameColor);
-        for(const side of [-1,1]) constructionSites.box(b.x+side*(b.hw*.84),y-16,faceZ-16,3.2,33,3.2,frameColor);
-        for(let k=-2;k<=2;k++) constructionSites.box(b.x+k*b.hw*.36,y-16,faceZ-16,2.2,31,2.2,[.55,.57,.59]);
-      }
-      constructionSites.box(b.x,b.h+8,b.z-b.hd*.12,b.hw*.72,6,b.hd*.58,[.61,.64,.66]);
-      for(let k=-2;k<=2;k++) constructionSites.box(b.x+k*18,b.h+22,b.z-b.hd*.16,2.0,27,2.0,[.49,.52,.54]);
-      constructionSites.box(b.x,52,faceZ-20,b.hw*.92,9,3,tarp);
-      constructionSites.box(b.x,92,faceZ-20,b.hw*.70,8,3,tarp);
-    }
-    const litOn=b.idx%2===0||b.idx%5===0||b.style==='GLASS';
+    const litOn=b.idx%2===0||b.idx%5===0;
     if(litOn){
       for(let k=-1;k<=1;k++)cityFacadeLights.box(b.x+k*24,57,faceZ-.7,12,18,1.2,[.96,.80,.52]);
-      if(b.style==='GLASS')for(let row=0;row<2;row++)for(let k=-2;k<=2;k++)cityFacadeLights.box(b.x+k*15.2,87+row*36,faceZ-.7,9.0,10,1.1,[.98,.86,.62]);
-      else if(b.style==='BRICK')for(let k=-2;k<=2;k++)cityFacadeLights.box(b.x+k*13.5,95,faceZ-.7,8,12,1.1,[.99,.86,.62]);
+      if(b.idx%3===0)for(let k=-2;k<=2;k++)cityFacadeLights.box(b.x+k*13.5,95,faceZ-.7,8,12,1.1,[.99,.86,.62]);
     }
   }
   for(const [x,z,,] of originalShops){
@@ -1467,7 +1421,7 @@
     storeCanopies.box(x,58,z-61.5,110,6,2,[.93,.78,.31]);
     for(let k=-4;k<=4;k++)storeCanopies.box(x+k*11,53,z-61.4,7,9,1.2,k%2?[.96,.58,.21]:[.98,.89,.64]);
   }
-  cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();constructionSites.upload();
+  cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();
   // Detailed, source-independent flood-damaged electrical cabinets. The legacy
   // baked powerboxes mesh is intentionally not drawn, to avoid overlapping models.
   // Every part is generated once; only light state and tiny spark meshes animate.
@@ -1656,6 +1610,38 @@
       const front=model(x,0,z-55);
       // No added metal door or shutter across the storefront sightline.
       if(!lightOffAt(x,z))render(dhakaStoreLight,front);
+    }
+  }
+
+
+  const roofWaterTank=new Mesh();
+  roofWaterTank.cylinder(0,18,0,11,18,[.18,.25,.29],12);
+  roofWaterTank.box(0,6,0,28,4,28,[.38,.43,.44]);
+  for(const sx of [-9,9])for(const sz of [-9,9])roofWaterTank.box(sx,-5,sz,3,10,3,[.47,.50,.49]);
+  roofWaterTank.upload();
+  const roofLaundry=new Mesh();
+  for(const sx of [-20,20])roofLaundry.box(sx,13,0,2,26,2,[.45,.47,.47]);
+  roofLaundry.box(0,22,0,42,1.4,1.4,[.53,.55,.53]);
+  roofLaundry.quad([-12,18,-.5],[-2,18,-.5],[-2,8,-.5],[-12,8,-.5],[.72,.28,.24]);
+  roofLaundry.quad([1,19,-.5],[11,19,-.5],[11,9,-.5],[1,9,-.5],[.88,.79,.36]);
+  roofLaundry.upload();
+  const constructionScaffold=new Mesh();
+  for(const x of [-26,0,26])for(const z of [-12,12])constructionScaffold.box(x,32,z,3,64,3,[.50,.40,.26]);
+  for(const y of [8,24,40,56])constructionScaffold.box(0,y,0,58,2.1,30,[.63,.49,.28]);
+  constructionScaffold.box(0,66,0,64,4,34,[.36,.38,.40]);
+  constructionScaffold.quad([-28,56,15],[28,56,15],[28,16,15],[-28,16,15],[.28,.33,.38]);
+  constructionScaffold.upload();
+  const rooftopBuildings=buildings.filter((b,i)=>i%3===0||i%5===0);
+  const constructionBuildings=buildings.filter((b,i)=>[2,8,17,23].includes(i));
+  function drawDhakaBuildingDetails(){
+    for(const [i,b] of rooftopBuildings.entries()){
+      if(distance(S.x,S.z,b.x,b.z)>980)continue;
+      if(i%2===0)render(roofWaterTank,model(b.x+b.hw*.10,b.h+18,b.z+b.hd*.06,0,.95));
+      else render(roofLaundry,model(b.x-b.hw*.12,b.h+14,b.z-b.hd*.08,0,1.0));
+    }
+    for(const b of constructionBuildings){
+      if(distance(S.x,S.z,b.x,b.z)>1050)continue;
+      render(constructionScaffold,model(b.x+b.hw*.56,18,b.z-b.hd*.70,0,1.0));
     }
   }
 
@@ -3456,6 +3442,7 @@
     // Both fixtures use stateful geometry, preserving blackout and signal timing.
     drawStreetLamps(eye[0],eye[2]);
     drawDhakaPowerNeighborhood();
+    drawDhakaBuildingDetails();
     drawModernTrafficSignal();
     // All stations are live 3D cabinets instead of the old baked source blocks.
     drawPowerCabinets();
@@ -3583,8 +3570,10 @@
     if(S.mode!=='MENU'){
       if(S.camera3){
         render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
-        render(captainMesh,rockingBoatModel(S.x,boatY-11.8,S.z,S.angle,1,boatPitch,boatRoll));
-        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['rowing-'+f]||sourceMeshes.paddles,rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));}
+        const majhiPhase=S.rowing?(S.strokeTime/0.65)*TAU:0.0;
+        const majhiFrame=(Math.floor(((majhiPhase%(TAU)+TAU)%TAU)/TAU*MAJHI_FRAMES))%MAJHI_FRAMES;
+        render(majhiFrames[majhiFrame],rockingBoatModel(S.x,boatY+1.1,S.z,S.angle,.90,boatPitch,boatRoll));
+        renderBoatPaddles(S.x,boatY+12.2,S.z,S.angle,majhiPhase,.42);
       }else{
         // Like the desktop edition, the actual boat is drawn in first person.
         render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
@@ -3607,7 +3596,7 @@
         const eased=settle*settle*(3-2*settle),localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;
         const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;
         const scale=S.camera3?.62:.51,seatY=S.camera3?boatY+15:boatY+15;
-        render(seatedPassengerMeshes[r.colorId]||npcMeshes[r.colorId],
+        render(npcMeshes[r.colorId],
           model(sx,seatY+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),scale));
       });
       // Original BRACU drop-off: students leave their seats and walk to the dock.
@@ -3628,7 +3617,7 @@
             const angle=S.time*2.1+k*TAU/3+e.colorId;
             render(happySparkle,model(x+22*Math.cos(angle),y+26+5*Math.sin(S.time*4+k),z+22*Math.sin(angle),angle/RAD,.45));
           }
-        }else render(sourceMeshes?.['student-'+e.colorId]||npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
+        }else render(npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
       }
       for(const effect of S.missedEffects){
         const age=S.time-effect.at;
@@ -3636,12 +3625,12 @@
           const f=Math.min(1,age/.80),p=f*f*(3-2*f),elevation=effect.y*(1-p)+7*p+5*Math.sin(Math.PI*p);
           const x=effect.fromX+(effect.x-effect.fromX)*p,z=effect.fromZ+(effect.z-effect.fromZ)*p;
           if(S.camera3||distance(eye[0],eye[2],x,z)>52)
-            render(sourceMeshes?.['student-'+effect.colorId]||npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
+            render(npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
         }else if(age<3.85){
           const sink=age>2.85?36*clamp((age-2.85)/1,0,1):0;
           const frame=Math.floor(((age*7.2)%TAU)/TAU*24)%24;
           if(S.camera3||distance(eye[0],eye[2],effect.x,effect.z)>52)
-            render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,-sink,effect.z,0,.85));
+            render(citizenFrame('SOS',effect.colorId,S.time*3.5+frame),model(effect.x,-sink,effect.z,0,.85));
           render(waterRipple,model(effect.x,9.5,effect.z,0,.9+age*.12));
         }else if(age<4.35){
           render(waterRipple,model(effect.x,9.5,effect.z,0,1+age*.22));
