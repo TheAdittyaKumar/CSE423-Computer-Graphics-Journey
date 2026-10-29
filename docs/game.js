@@ -1576,13 +1576,59 @@
   // else's recording. Unrecorded students get subtitles instead of miscast audio.
   // Additional voices can be added to this roster when their recordings exist.
   const PASSENGER_VOICE_CAST=Object.freeze({
-    Adittya:Object.freeze({waiting:'student_adittya_03',onboard:'student_adittya_02',dropoff:'student_adittya_01',idProtest:'student_adittya_03'}),
-    Nafisa:Object.freeze({waiting:'student_nafisa_01',onboard:'student_nafisa_02',dropoff:'student_nafisa_03',idProtest:'student_nafisa_01'}),
-    Shamim:Object.freeze({waiting:'civilian_shamim_01',onboard:'civilian_shamim_03',dropoff:'civilian_shamim_03',idProtest:null}),
-    Mitu:Object.freeze({waiting:'civilian_mitu_01',onboard:'civilian_mitu_03',dropoff:'civilian_mitu_03',idProtest:null})
+    Adittya:Object.freeze({
+      waiting:['student_adittya_solo_01','student_adittya_01','student_adittya_03'],
+      boarding:['student_adittya_03','student_adittya_solo_02','student_adittya_01'],
+      onboard:['student_adittya_solo_02','student_adittya_01','student_adittya_03'],
+      withCompany:['student_adittya_02','student_adittya_chat_01','student_adittya_chat_02'],
+      urgent:['student_adittya_03'],
+      // Only use an existing line in the missing-ID scene if it actually
+      // concerns the flood and university; never borrow another person's voice.
+      gateReaction:'student_adittya_03'
+    }),
+    Nafisa:Object.freeze({
+      waiting:['student_nafisa_solo_01','student_nafisa_01','student_nafisa_02'],
+      boarding:['student_nafisa_01','student_nafisa_solo_02','student_nafisa_02'],
+      onboard:['student_nafisa_solo_02','student_nafisa_02','student_nafisa_01'],
+      withCompany:['student_nafisa_03','student_nafisa_chat_01','student_nafisa_chat_02'],
+      urgent:['student_nafisa_01'],
+      gateReaction:'student_nafisa_01'
+    }),
+    Shamim:Object.freeze({waiting:['civilian_shamim_01'],boarding:['civilian_shamim_03'],
+      onboard:['civilian_shamim_03'],urgent:['civilian_shamim_02']}),
+    Mitu:Object.freeze({waiting:['civilian_mitu_01'],boarding:['civilian_mitu_03'],
+      onboard:['civilian_mitu_03'],urgent:['civilian_mitu_02']})
   });
   const passengerCast=name=>Object.prototype.hasOwnProperty.call(PASSENGER_VOICE_CAST,name)?name:null;
-  const passengerClip=(person,event)=>PASSENGER_VOICE_CAST[person?.voiceCharacter]?.[event]||null;
+  // A question addressed to a fellow student is never performed when the
+  // speaker is the only passenger. Recordings are consumed at most once per
+  // rescue; when all appropriate lines are used, the character stays quiet.
+  function passengerDialogueCandidates(person,event,party=0){
+    const profile=PASSENGER_VOICE_CAST[person?.voiceCharacter];
+    if(!profile)return [];
+    if(event==='waiting')return person.timeLeft<22&&profile.urgent?
+      [...profile.urgent,...(profile.waiting||[])]:[...(profile.waiting||[])];
+    if(event==='boarding')return [...(profile.boarding||[])];
+    if(event==='onboard'){
+      const out=person.timeLeft<22&&profile.urgent?[...profile.urgent]:[];
+      if(party>=2)out.push(...(profile.withCompany||[]));
+      out.push(...(profile.onboard||[]));
+      return out;
+    }
+    return [];
+  }
+  function passengerClip(person,event,party=0,available=()=>true){
+    if(!person)return null;
+    const candidates=[...new Set(passengerDialogueCandidates(person,event,party))];
+    const history=person.voicePlayed||{};
+    return candidates.find(clip=>!history[clip]&&available(clip))||null;
+  }
+  const markPassengerClip=(person,clip)=>{
+    if(!person||!clip)return;
+    if(!person.voicePlayed)person.voicePlayed={};
+    person.voicePlayed[clip]=true;
+    person.voiceLastSpokenAt=S.time;
+  };
   // DHAKA AUDIO V2 — natural user-recorded voices, seven selected memes,
   // menu song and flashlight scare, backed by the existing nonverbal SFX.
   // All paths below exist in the supplied docs/audio/ package.
@@ -1621,6 +1667,26 @@
       shopkeeper_kuddus_01:['KUDDUS CHACHA','চা খাবেন? দোকান ডুইবা গেছে, কিন্তু কেটলি এখনো গরম!'],
       shopkeeper_kuddus_02:['KUDDUS CHACHA','রাস্তা নদী হইয়া গেছে, কিন্তু বাকির খাতা শুকনা আছে!'],
       shopkeeper_kuddus_03:['KUDDUS CHACHA','ওই রিকশাওয়ালা! আমার দোকানের সামনে রেস লাগাইছেন কেন?'],
+      // OPTIONAL conversational expansion. Solo lines address the player/the
+      // city; chat lines require another student aboard, never an empty seat.
+      student_adittya_solo_01:['ADITTYA','ভাই, ডেডলাইন আজ রাত বারোটা! এই বৃষ্টির মধ্যেও অ্যাসাইনমেন্ট জমা দিতে হবে!'],
+      student_adittya_solo_02:['ADITTYA','মোবাইলের নেটওয়ার্ক গেল! এখন কোড পুশ করব কীভাবে?'],
+      student_adittya_chat_01:['ADITTYA','এই, তুই কোন সেমিস্টারে? আমার তো শেষই হচ্ছে না!'],
+      student_adittya_chat_02:['ADITTYA','কুইজের জন্য পড়ছিস? নাকি নৌকায় বসে রিভিশন দিচ্ছিস?'],
+      student_nafisa_solo_01:['NAFISA','এই বৃষ্টিতে স্লাইড বানাব কীভাবে? আগে ল্যাপটপটা বাঁচাই!'],
+      student_nafisa_solo_02:['NAFISA','রিকশা পেলাম না, এখন ক্লাসে যেতে নৌকা ধরতে হচ্ছে!'],
+      student_nafisa_chat_01:['NAFISA','তোর প্রেজেন্টেশনের স্লাইড রেডি? আমারটা এখনো শেষ হয়নি!'],
+      student_nafisa_chat_02:['NAFISA','তুই রেজিস্ট্রারকে মেইল দিছিস? আমার তো এখনো রিপ্লাই আসেনি!'],
+      // OPTIONAL: Add these extra recordings later with the same Adittya / Nafisa
+      // voice used above. Until then, the security exchange shows timed captions.
+      student_adittya_id_01:['ADITTYA','আঙ্কেল, আইডিটা বাসায় রয়ে গেছে! এত পানি পার হয়ে আসছি, আজকে একটু ঢুকতে দেন!'],
+      student_adittya_id_02:['ADITTYA','প্লিজ আঙ্কেল! আজকে অ্যাটেনডেন্স মিস করলে শেষ! একটু ছাড় দেন না!'],
+      student_adittya_id_03:['ADITTYA','পুরা ঢাকা ডুইবা গেছে, আমি নৌকায় আসছি! আর আপনি আইডি কার্ড নিয়া বসে আছেন?!'],
+      student_nafisa_id_01:['NAFISA','আঙ্কেল, আইডি কার্ডটা আজকে আনতে ভুলে গেছি! প্লিজ একবার ঢুকতে দেন!'],
+      student_nafisa_id_02:['NAFISA','আঙ্কেল, আজকে আমার প্রেজেন্টেশন! অ্যাটেনডেন্সও মিস হবে, একটু বুঝেন!'],
+      student_nafisa_id_03:['NAFISA','এত পানি পেরিয়ে আসলাম, তারপরেও আইডির জন্য ঢুকতে দিবেন না?!'],
+      student_adittya_gate_pass:['ADITTYA','ধন্যবাদ আঙ্কেল! তাহলে তাড়াতাড়ি ক্লাসে যাই!'],
+      student_nafisa_gate_pass:['NAFISA','থ্যাংক ইউ আঙ্কেল! প্রেজেন্টেশনে দেরি হয়ে যাবে!'],
       menu_majhi_call:['SALAM','মামা! ব্র্যাকু যাবেন? ক্লাস কিন্তু বন্ধ নাই!']
     };
     const voicesByPerson={rickshaw_salam:['rickshaw_salam_01','rickshaw_salam_02','rickshaw_salam_03'],
@@ -1633,6 +1699,15 @@
       'meme_record_scratch','meme_sad_trombone','meme_vine_boom'];
     const exitNames=['exit_horror_riser','exit_flashlight_click','exit_impact'];
     const paths={};
+    const optionalVoiceFiles=new Set([
+      'student_adittya_id_01','student_adittya_id_02','student_adittya_id_03',
+      'student_nafisa_id_01','student_nafisa_id_02','student_nafisa_id_03',
+      'student_adittya_gate_pass','student_nafisa_gate_pass',
+      'student_adittya_solo_01','student_adittya_solo_02',
+      'student_adittya_chat_01','student_adittya_chat_02',
+      'student_nafisa_solo_01','student_nafisa_solo_02',
+      'student_nafisa_chat_01','student_nafisa_chat_02'
+    ]);
     for(const n of Object.keys(voiceText))paths[n]=`./audio/voices/${n}.wav`;
     for(const n of [...ambientNames,...legacySfx])paths[n]=`./audio/${n}.mp3`;
     for(const n of memes)paths[n]=`./audio/meme/${n}.mp3`;
@@ -1696,12 +1771,12 @@
         const jobs=Object.entries(paths).map(async([name,path])=>{
           try{const response=await fetch(path);if(!response.ok)throw Error(response.status);
             buffers[name]=await ctx.decodeAudioData(await response.arrayBuffer());
-          }catch(error){console.warn('Audio missing:',path,error.message);}
+          }catch(error){if(!optionalVoiceFiles.has(name))console.warn('Audio missing:',path,error.message);}
         });
         await Promise.all(jobs);
         ready=Object.keys(buffers).length>0;
         if(ready){for(const n of [...ambientNames,'menu_music'])startLoop(n);updateMix();}
-        status(`${Object.keys(buffers).length}/${Object.keys(paths).length} audio clips ready`);
+        status(`${Object.keys(buffers).filter(n=>!optionalVoiceFiles.has(n)).length}/${Object.keys(paths).filter(n=>!optionalVoiceFiles.has(n)).length} audio clips ready`);
         return ready;
       })();
       return loading;
@@ -1786,60 +1861,67 @@
       voiceBusyUntil=ctx.currentTime+node.duration+.08;
       showSubtitle(actual,node.duration);updateMix();return true;
     }
-    // Sequence items may be real recordings or caption-only dialogue beats.
-    // A subtitle-only beat is never voiced by a different student actor.
+    // A gate line is queued by character identity. Missing recordings become
+    // timed subtitle beats; we never substitute another student's voice.
     function talkSequence(entries,options={}){
-      if(!ctx||ctx.state!=='running'||!on||!speech){options.done?.();return;}
+      if(!ctx||ctx.state!=='running'||!on){options.done?.();return;}
       const playNext=(index)=>{
         if(options.cancel?.()){options.done?.();return;}
         if(index>=entries.length){options.done?.();return;}
         const entry=typeof entries[index]==='string'?{clip:entries[index]}:entries[index];
         options.turn?.(index,entry);
         const id=entry.clip;
-        if(!id){
-          const duration=Math.max(1.15,Math.min(4.0,entry.duration||2.8));
-          // WebAudio clock (not a JS timer) also pauses caption-only lines
-          // correctly if the player pauses the game.
+        const playSilence=()=>{
+          const duration=Math.max(1.7,Math.min(5.6,entry.duration||3.1));
           const silent=ctx.createBufferSource();
           silent.buffer=ctx.createBuffer(1,Math.max(1,Math.round(duration*ctx.sampleRate)),ctx.sampleRate);
           silent.onended=()=>playNext(index+1);
-          silent.start();return;
-        }
+          silent.start();
+        };
+        if(!id||!buffers[id]||!speech){playSilence();return;}
         const node=emit(id,{x:options.x??S.x,z:options.z??S.z,
           ignoreDistance:options.ignoreDistance??true,volume:1.0,key:`seq-${options.key}-${index}`,cooldown:0});
-        if(!node){playNext(index+1);return;}
+        if(!node){playSilence();return;}
         activeVoice=node.src;activeVoicePriority=5;voiceBusyUntil=ctx.currentTime+node.duration+.08;
         showSubtitle(id,node.duration);node.src.onended=()=>playNext(index+1);
       };
       playNext(0);
     }
     function makeGateScript(scene){
-      const profile=PASSENGER_VOICE_CAST[scene.voiceCharacter];
-      const recordedProtest=profile?.idProtest||null;
-      const recordedArrival=profile?.dropoff||null;
+      const character=scene.voiceCharacter;
+      const profile=PASSENGER_VOICE_CAST[character];
       const t=(clip,fallback)=>voiceText[clip]?.[1]||fallback;
+      const optional=(tag)=>character&&(character==='Nafisa'||character==='Adittya')?
+        `student_${character.toLowerCase()}_${tag}`:null;
+      const chosen=(clip,caption,duration=3.4)=>({clip:clip||null,speaker:'student',text:clip&&buffers[clip]?t(clip,caption):caption,duration});
       if(!scene.forgotId)return [
         {clip:'guard_rahman_01',speaker:'guard',text:t('guard_rahman_01','আইডি ঠিক আছে, ভেতরে যান!')},
-        {clip:recordedArrival,speaker:'student',text:t(recordedArrival,'ধন্যবাদ আঙ্কেল! ক্লাসে যাই!'),duration:2.1}
+        chosen(optional('gate_pass'),'ধন্যবাদ আঙ্কেল! ক্লাসে যাই!',2.6)
       ];
+      // Five distinct turns. Named passengers keep their own voice. The one
+      // existing relevant clip per student can fill the middle response until
+      // their dedicated ID argument recordings are supplied.
+      const reaction=profile?.gateReaction||null;
       return [
         {clip:'guard_rahman_02',speaker:'guard',text:t('guard_rahman_02','আইডি কার্ড কোথায়?')},
-        {clip:null,speaker:'student',text:'আঙ্কেল, আইডি কার্ডটা বাসায় রয়ে গেছে! এত পানি পার হয়ে আসছি!',duration:2.9},
-        {clip:recordedProtest,speaker:'student',
-          text:t(recordedProtest,'আঙ্কেল প্লিজ! আজকে একবার ঢুকতে দেন, অ্যাটেনডেন্স মিস হবে!'),duration:3.0},
+        chosen(optional('id_01'),'আঙ্কেল, আইডি কার্ডটা বাসায় রয়ে গেছে! এত পানি পার হয়ে আসছি!',3.6),
+        chosen(optional('id_02')&&buffers[optional('id_02')]?optional('id_02'):reaction,
+          'আঙ্কেল প্লিজ! আজকে একবার ঢুকতে দেন! অ্যাটেনডেন্স মিস হবে!',4.2),
         {clip:'guard_rahman_03',speaker:'guard',text:t('guard_rahman_03','পুরা ঢাকা ডুবলেও নিয়ম তো নিয়ম!')},
-        {clip:null,speaker:'student',text:'আঙ্কেল! পুরা ঢাকা পানির নিচে, তারপরেও ঢুকতে দিবেন না?!',duration:2.8}
+        chosen(optional('id_03'),'আঙ্কেল! পুরা ঢাকা পানির নিচে, তারপরেও ঢুকতে দিবেন না?!',3.8)
       ];
     }
     function startGate(scene){
       if(scene.audioStarted)return;
       scene.audioStarted=true;scene.audioComplete=false;scene.dialogueTurn=0;
       scene.dialogue=makeGateScript(scene);
-      if(!speech||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
+      if(!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
       init().then(ok=>{
-        if(!ok||S.campusGateScene!==scene||!speech||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
+        if(!ok||S.campusGateScene!==scene||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
         try{activeVoice?.stop();}catch(_e){}
         voiceBusyUntil=0;
+        // Rebuild now that the optional voice clips have been decoded.
+        scene.dialogue=makeGateScript(scene);
         if(scene.forgotId)play('meme_vine_boom',{ignoreDistance:true,volume:.67,key:`id-${scene.index}`,cooldown:0});
         talkSequence(scene.dialogue,{key:`gate-${scene.index}`,ignoreDistance:true,cancel:()=>S.campusGateScene!==scene,
           turn:i=>{scene.dialogueTurn=i;},
@@ -1851,12 +1933,13 @@
     }
     function speakPassenger(person,event,options={}){
       if(!person)return false;
-      const clip=passengerClip(person,event);
-      // Never substitute an unrelated singer/actor based on rescue type or color.
+      const clip=passengerClip(person,event,options.party??seated().length,name=>!!buffers[name]);
       if(!clip)return false;
-      return voice(clip,options.x??S.x,options.z??S.z,options.level??1,
+      const ok=voice(clip,options.x??S.x,options.z??S.z,options.level??1,
         {priority:options.priority??1,force:options.force??false,
          ignoreDistance:options.ignoreDistance??false,range:options.range,key:options.key});
+      if(ok)markPassengerClip(person,clip);
+      return ok;
     }
     function beginQuarrel(r,incident){
       const key=`${incident.id}:${incident.at}`;if(quarrelsSeen.has(key))return;
@@ -1969,31 +2052,35 @@
       }
       for(const incident of S.rickshawQuarrels){const r=S.aiRickshaws.find(x=>x.id===incident.id);if(r)beginQuarrel(r,incident);}
       if(S.time>peopleAt&&!S.campusGateScene&&ctx.currentTime>voiceBusyUntil+.2){
-        const choices=[];
-        for(const r of S.rides){const x=r.personX??r.x,z=r.personZ??r.z;
+        const choices=[],party=seated().length;
+        for(const r of S.rides){
+          const x=r.personX??r.x,z=r.personZ??r.z;
           if(r.state==='WAITING'&&distance(x,z,S.x,S.z)<510){
-            const clip=passengerClip(r,'waiting');
-            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>24)
-              choices.push({x,z,clip,ride:r,priority:r.type==='DROWNING'?2:1});
+            const clip=passengerClip(r,'waiting',party,name=>!!buffers[name]);
+            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>14)
+              choices.push({x,z,clip,ride:r,priority:r.type==='DROWNING'?3:2});
           }else if(r.state==='ONBOARD'){
-            const clip=passengerClip(r,'onboard');
-            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>24)
-              choices.push({x:S.x,z:S.z,clip,ride:r,priority:1});
+            const clip=passengerClip(r,'onboard',party,name=>!!buffers[name]);
+            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>14)
+              choices.push({x:S.x,z:S.z,clip,ride:r,priority:2});
           }
         }
         for(const p of S.cityPeople){if(distance(p.x,p.z,S.x,S.z)>410)continue;
-          // Background swimmers/waders have a persistent *role* voice profile;
-          // don't switch from a male to a female actor mid-conversation.
           const clip=p.role==='SWIM'||p.role==='WADE'?
             ((p.uid%2===0)?'civilian_shamim_01':'civilian_mitu_01'):
             p.role==='SHOP'?'shopkeeper_kuddus_01':null;
-          if(clip)choices.push({x:p.x,z:p.z,clip,priority:p.role==='SWIM'?2:0});
+          if(clip)choices.push({x:p.x,z:p.z,clip,priority:p.role==='SWIM'?1:0});
         }
         for(const r of S.aiRickshaws){if(distance(r.x,r.z,S.x,S.z)<430&&r.incidentCar===null)
           choices.push({x:r.x,z:r.z,clip:voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][0],priority:0});}
         choices.sort((a,b)=>b.priority-a.priority||distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z));
-        if(choices.length){const c=choices[Math.floor(Math.random()*Math.min(3,choices.length))];if(voice(c.clip,c.x,c.z,1,{priority:c.priority})&&c.ride)c.ride.voiceLastSpokenAt=S.time;}
-        peopleAt=S.time+9+Math.random()*7;
+        // A passenger should usually take priority over background chatter.
+        const preferred=choices.filter(c=>c.priority===choices[0]?.priority).slice(0,3);
+        if(preferred.length){
+          const c=preferred[Math.floor(Math.random()*preferred.length)];
+          if(voice(c.clip,c.x,c.z,1,{priority:c.priority})&&c.ride)markPassengerClip(c.ride,c.clip);
+        }
+        peopleAt=S.time+6+Math.random()*5;
       }
       if(S.time>thunderAt){if(campusRainWeight(S.x,S.z)>.3)play('thunder',{ignoreDistance:true,volume:.65});thunderAt=S.time+31+Math.random()*23;}
     }
@@ -2356,7 +2443,7 @@
         const returnDistance=distance(S.x,S.z,0,1080);
         nearby.timeLeft=Math.min(nearby.timeLeft,Math.round(clamp(28+returnDistance/105,34,62)));
         nearby.warning=false;
-        S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;gameAudio.play('pickup',{ignoreDistance:true,volume:.73});if(gameAudio.speakPassenger(nearby,'onboard',{x:S.x,z:S.z,level:1.07,priority:2,force:true,ignoreDistance:true}))nearby.voiceLastSpokenAt=S.time;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
+        S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;gameAudio.play('pickup',{ignoreDistance:true,volume:.73});if(gameAudio.speakPassenger(nearby,'boarding',{x:S.x,z:S.z,level:1.07,priority:2,force:false,ignoreDistance:true,party:seated().length}))nearby.voiceLastSpokenAt=S.time;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
     if(S.delivered>=6){if(S.campusQueue.length===0&&!S.campusGateScene&&!S.deliveryEffects.length&&S.time>=(S.rewardUntil||0)){S.mode='WON';keys.clear();nextModal('WON');}}else if(S.time-S.gatePausedTime>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time-S.gatePausedTime>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
@@ -3194,7 +3281,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity15-persistent-passenger-voices';
+  window.majhiVersion='fidelity16-contextual-passenger-dialogue';
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
