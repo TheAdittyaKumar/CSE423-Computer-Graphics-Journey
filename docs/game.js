@@ -1571,6 +1571,194 @@
     }
   }
   const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0};
+
+  // DHAKA SOUNDSCAPE — packaged original sound design and original Bengali
+  // synthetic voice clips. All assets are local to GitHub Pages under docs/audio.
+  // Voice recordings can later replace the MP3s without modifying game logic.
+  const gameAudio=(()=>{
+    const assets=['rain','rain_heavy','water','current','city','paddle_1','paddle_2','paddle_3',
+      'impact_1','impact_2','bell_1','bell_2','cng_horn_1','cng_horn_2','car_horn',
+      'electric','power_restore','thunder','pickup','delivery','warning',
+      'rickshaw_0','rickshaw_1','rickshaw_2','rickshaw_3','rickshaw_sassy_1',
+      'rickshaw_sassy_2','rickshaw_pickup','passenger_help','passenger_board',
+      'passenger_laptop','passenger_thanks','shopkeeper','cng_driver','power_cheer',
+      'guard_denied','guard_rule','student_no_id','guard_pass','current_warn'];
+    const voiceNames=new Set(assets.filter(x=>/^(rickshaw_|passenger_|shopkeeper|cng_driver|power_cheer|guard_|student_no_id|current_warn)/.test(x)));
+    let ctx=null, master=null, ambient=null, effects=null, voices=null, ready=false, started=false, loading=null;
+    const buffers={},loops={};
+    let on=true,speech=true,volume=.65,ambientVolume=.54,voicesVolume=.82;
+    let clock=.0, hornAt=9,bellAt=5,thunderAt=38,peopleAt=17,paddleAt=0;
+    let impactVariant=0,paddleVariant=0,bellVariant=0,hornVariant=0,voiceBusyUntil=0,redLightTauntAt=-40;
+    let lastZone='',lastGateKey='',lastPowerFault=false,lastAiRescues=0;
+    const quarrelTurn=new Map(),cooldowns=new Map();
+    let ui=null;
+    function status(message){if(ui)ui.querySelector('[data-audio-status]').textContent=message;}
+    async function init(){
+      if(loading)return loading;
+      const Audio=window.AudioContext||window.webkitAudioContext;
+      if(!Audio){status('Audio not supported');return Promise.resolve(false);}
+      try{
+        ctx=new Audio();master=ctx.createGain();ambient=ctx.createGain();effects=ctx.createGain();voices=ctx.createGain();
+        ambient.connect(master);effects.connect(master);voices.connect(master);master.connect(ctx.destination);
+        master.gain.value=volume;ambient.gain.value=ambientVolume;effects.gain.value=.83;voices.gain.value=voicesVolume;
+        // The player's Start Rescue click unlocks Web Audio autoplay.
+        await ctx.resume();
+      }catch(e){console.warn('Sound setup failed:',e);status('Audio unavailable');return false;}
+      status('Loading Dhaka sounds…');
+      loading=(async()=>{
+        const outcomes=await Promise.allSettled(assets.map(async name=>{
+          const res=await fetch('./audio/'+name+'.mp3');
+          if(!res.ok)throw new Error(name+' '+res.status);
+          const data=await res.arrayBuffer();
+          buffers[name]=await ctx.decodeAudioData(data);
+        }));
+        const failed=outcomes.filter(x=>x.status==='rejected');
+        if(failed.length)console.warn('Majhi sounds missing:',failed.length,'of',assets.length,'— ensure you upload the docs/audio folder.');
+        ready=Object.keys(buffers).length>0;
+        if(ready){
+          for(const key of ['rain','rain_heavy','water','current','city'])startLoop(key);
+          applyMix(.0);
+          status(failed.length?'Some audio files missing':'Dhaka soundscape ready');
+        }else status('Upload docs/audio to enable sound');
+        return ready;
+      })();return loading;
+    }
+    function startLoop(key){
+      if(!ctx||!buffers[key]||loops[key])return;
+      const source=ctx.createBufferSource(),gain=ctx.createGain();
+      source.buffer=buffers[key];source.loop=true;gain.gain.value=0;
+      source.connect(gain);gain.connect(ambient);source.start(0,Math.random()*Math.max(.01,source.buffer.duration-.5));
+      loops[key]={source,gain};
+    }
+    function applyMix(dt){
+      if(!ctx||!master)return;
+      const active=started&&on&&S.mode==='PLAYING',campus=campusRainWeight(S.x,S.z);
+      const music={rain:active?.32*campus:0,rain_heavy:active?(S.current?.07:.05)*campus:0,
+        water:active?.21:0,current:active?.47*(S.waveStrength||0):0,city:active?.36*campus:0};
+      for(const [key,amount] of Object.entries(music))if(loops[key]){
+        loops[key].gain.gain.setTargetAtTime(amount,ctx.currentTime,.45);
+      }
+      master.gain.setTargetAtTime(on?volume:0,ctx.currentTime,.12);
+      ambient.gain.setTargetAtTime(ambientVolume,ctx.currentTime,.12);
+      voices.gain.setTargetAtTime(speech?voicesVolume:0,ctx.currentTime,.12);
+    }
+    function play(name,options={}){
+      if(!started||!on||!ctx||ctx.state==='closed'||!buffers[name])return false;
+      if(voiceNames.has(name)&&!speech)return false;
+      const category=voiceNames.has(name)?'voice':'effect';
+      const now=ctx.currentTime,lock=name+':'+(options.key||'default');
+      if(now<(cooldowns.get(lock)||0))return false;
+      cooldowns.set(lock,now+(options.cooldown??(category==='voice'?1.4:.12)));
+      if(cooldowns.size>130)cooldowns.clear();
+      const src=ctx.createBufferSource(),gain=ctx.createGain();src.buffer=buffers[name];
+      const x=options.x??S.x,z=options.z??S.z;
+      const dist=distance(S.x,S.z,x,z);
+      const max=options.range??(category==='voice'?520:700);
+      const proximity=options.ignoreDistance?1:Math.pow(Math.max(0,1-dist/max),1.2);
+      if(proximity<=.01)return false;
+      let amount=(options.volume??1)*proximity;
+      src.playbackRate.value=options.rate??1;
+      gain.gain.value=0;gain.gain.setValueAtTime(0,now);
+      gain.gain.linearRampToValueAtTime(amount,now+.018);
+      const fade=(src.buffer.duration/src.playbackRate.value);
+      gain.gain.setTargetAtTime(0,now+Math.max(.06,fade-.20),.075);
+      src.connect(gain);
+      const dest=category==='voice'?voices:effects;
+      if(ctx.createStereoPanner&& !options.ignoreDistance){
+        const pan=ctx.createStereoPanner(),direction=Math.atan2(z-S.z,x-S.x)-S.angle*RAD;
+        pan.pan.value=clamp(Math.sin(direction)*.78,-.8,.8);
+        gain.connect(pan);pan.connect(dest);
+      }else gain.connect(dest);
+      src.start();src.stop(now+fade+.3);
+      return true;
+    }
+    function voice(name,x,z,volume=1){
+      if(!ctx||ctx.currentTime<voiceBusyUntil)return false;
+      const ok=play(name,{x,z,volume,cooldown:1.8});
+      if(ok)voiceBusyUntil=ctx.currentTime+Math.min(3.15,(buffers[name]?.duration||2)*.88);
+      return ok;
+    }
+    function initUI(){
+      if(ui)return;
+      ui=document.createElement('div');ui.id='majhi-dhaka-audio';
+      ui.innerHTML=`<button type="button" data-audio-toggle aria-label="Mute or unmute game sound" aria-pressed="true">🔊 DHAKA AUDIO</button>
+        <button type="button" data-audio-voices aria-label="Toggle Bengali spoken voices" aria-pressed="true">🎤 VOICES ON</button>
+        <label aria-label="Sound volume">VOL <input data-audio-volume type="range" min="0" max="100" step="5" value="65"></label>
+        <span data-audio-status role="status">Audio starts with rescue</span>`;
+      ui.style.cssText='position:fixed;top:7px;left:50%;transform:translateX(-50%);z-index:12500;display:flex;align-items:center;gap:7px;max-width:min(96vw,610px);padding:7px 11px;border:1px solid #617987;border-radius:13px;background:rgba(7,25,34,.88);box-shadow:0 4px 22px rgba(0,0,0,.35);color:#d2e8df;font:700 10px system-ui,sans-serif;pointer-events:auto;backdrop-filter:blur(8px)';
+      const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:7px 9px;font:800 10px system-ui;white-space:nowrap;cursor:pointer}#majhi-dhaka-audio button:focus-visible{outline:2px solid #ffc974}#majhi-dhaka-audio label{display:flex;align-items:center;gap:5px;white-space:nowrap}#majhi-dhaka-audio input{width:76px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{color:#a8d2c2;max-width:125px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}@media(max-width:740px){#majhi-dhaka-audio{top:auto!important;bottom:10px;left:50%;max-width:94vw;padding:5px;gap:3px}#majhi-dhaka-audio button{font-size:9px;padding:6px}#majhi-dhaka-audio input{width:45px}#majhi-dhaka-audio [data-audio-status]{display:none}}`;
+      document.head.appendChild(style);document.body.appendChild(ui);
+      const toggle=ui.querySelector('[data-audio-toggle]'),talk=ui.querySelector('[data-audio-voices]');
+      toggle.addEventListener('click',()=>{on=!on;toggle.textContent=on?'🔊 DHAKA AUDIO':'🔇 SOUND OFF';toggle.setAttribute('aria-pressed',String(on));if(on&&started){ctx?.resume();init();}applyMix(0);});
+      talk.addEventListener('click',()=>{speech=!speech;talk.textContent=speech?'🎤 VOICES ON':'🎤 VOICES OFF';talk.setAttribute('aria-pressed',String(speech));applyMix(0);});
+      ui.querySelector('[data-audio-volume]').addEventListener('input',e=>{volume=Number(e.target.value)/100;applyMix(0);});
+    }
+    function begin(){started=true;initUI();if(on){init().then(()=>ctx?.resume());}clock=0;hornAt=8;bellAt=5;thunderAt=36;peopleAt=15;paddleAt=0;lastZone='';lastGateKey='';lastAiRescues=0;voiceBusyUntil=0;redLightTauntAt=-40;quarrelTurn.clear();}
+    function update(dt){
+      if(!started||!ctx||!ready)return;
+      clock+=dt;if(clock<.11)return;dt=clock;clock=0;
+      applyMix(dt);
+      if(S.mode!=='PLAYING'||!on)return;
+      if(S.rowing&&S.time-paddleAt>(S.boostOn?.42:.57)){
+        paddleAt=S.time;play('paddle_'+(1+(paddleVariant++%3)),{ignoreDistance:true,volume:S.boostOn?.92:.68,cooldown:0});
+      }
+      if(S.current&&!lastZone){play('warning',{ignoreDistance:true,volume:.30});voice('current_warn',S.x,S.z,.58);}
+      lastZone=S.current;
+      if(S.aiRescueCount>lastAiRescues){
+        const r=S.aiRickshaws.find(x=>S.time-x.rescuedAt<.15&&distance(x.x,x.z,S.x,S.z)<300);
+        if(r){play('bell_1',{x:r.x,z:r.z,volume:.60,cooldown:.7});voice('rickshaw_pickup',r.x,r.z,.53);}
+        lastAiRescues=S.aiRescueCount;
+      }
+      // Red light is sometimes treated like a suggestion by these cheeky NPCs.
+      // The player still receives the normal red-light penalties; the rickshaws
+      // simply make a little joke if they cross the existing intersection.
+      if(S.traffic==='RED'&&S.time-redLightTauntAt>34){
+        const cheeky=S.aiRickshaws.find(r=>distance(r.x,r.z,0,-55)<165&&distance(r.x,r.z,S.x,S.z)<480&&r.quarrelUntil<=S.time);
+        if(cheeky){redLightTauntAt=S.time;play('bell_2',{x:cheeky.x,z:cheeky.z,volume:.75});voice('rickshaw_sassy_1',cheeky.x,cheeky.z,.70);}
+      }
+      if(S.time>bellAt){
+        const near=[...S.aiRickshaws].sort((a,b)=>distance(a.x,a.z,S.x,S.z)-distance(b.x,b.z,S.x,S.z))[0];
+        if(near&&distance(near.x,near.z,S.x,S.z)<530)play('bell_'+(1+(bellVariant++%2)),{x:near.x,z:near.z,volume:.62});
+        bellAt=S.time+9+Math.random()*9;
+      }
+      if(S.time>hornAt){
+        const p=parkedCars.filter((_,i)=>dhakaVehicleType(i)==='cng').sort((a,b)=>distance(a.x,a.z,S.x,S.z)-distance(b.x,b.z,S.x,S.z))[0];
+        if(p&&distance(p.x,p.z,S.x,S.z)<570){play('cng_horn_'+(1+(hornVariant++%2)),{x:p.x,z:p.z,volume:.74});if(Math.random()<.27)voice('cng_driver',p.x,p.z,.42);}
+        else if(S.movingCars?.length){const car=S.movingCars[0];play('car_horn',{x:car.x,z:car.z,volume:.50});}
+        hornAt=S.time+11+Math.random()*13;
+      }
+      for(const incident of S.rickshawQuarrels){
+        const r=S.aiRickshaws.find(x=>x.id===incident.id);if(!r)continue;
+        const turn=Math.max(0,Math.min(3,Math.floor((S.time-incident.at)/1.25)));
+        const key=incident.id+':'+incident.at,was=quarrelTurn.get(key)??-1;
+        if(turn>was){
+          quarrelTurn.set(key,turn);
+          if(turn===0){play('impact_1',{x:r.x,z:r.z,volume:.65});play('car_horn',{x:r.x,z:r.z,volume:.46});}
+          voice('rickshaw_'+turn,r.x,r.z,.93);
+        }
+      }
+      if(quarrelTurn.size>20)quarrelTurn.clear();
+      const scene=S.campusGateScene;
+      if(scene){
+        const age=S.time-scene.start,turn=scene.forgotId?Math.min(3,Math.floor(age/1.525)):0;
+        const key=scene.index+':'+scene.start+':'+turn;
+        if(key!==lastGateKey){lastGateKey=key;
+          voice(scene.forgotId?(turn%2?'guard_rule':turn===0?'student_no_id':'guard_denied'):'guard_pass',S.x,S.z,.75);
+        }
+      }
+      if(S.time>peopleAt){
+        const pool=S.cityPeople.filter(p=>distance(p.x,p.z,S.x,S.z)<315&&(p.role==='SHOP'||p.role==='SWIM'||p.role==='WADE'));
+        const p=pool[Math.floor(Math.random()*pool.length)];
+        if(p){const name=p.role==='SHOP'?'shopkeeper':p.role==='SWIM'?'passenger_help':'passenger_board';voice(name,p.x,p.z,.30);}
+        else if(Math.random()<.22){const r=S.aiRickshaws[Math.floor(Math.random()*S.aiRickshaws.length)];if(r&&distance(r.x,r.z,S.x,S.z)<420)voice('rickshaw_sassy_'+(1+Math.floor(Math.random()*2)),r.x,r.z,.47);}
+        peopleAt=S.time+13+Math.random()*13;
+      }
+      if(S.time>thunderAt){if(campusRainWeight(S.x,S.z)>.4)play('thunder',{ignoreDistance:true,volume:.62});thunderAt=S.time+34+Math.random()*31;}
+    }
+    return {initUI,begin,update,play,voice,repair(){play('power_restore',{ignoreDistance:true,volume:.98});voice('power_cheer',S.x,S.z,.7);},
+      impact(power){play('impact_'+(1+(impactVariant++%2)),{ignoreDistance:true,volume:.88*power});},
+      getState(){return {started,ready,on,voices:speech,loaded:Object.keys(buffers).length,expected:assets.length};}};
+  })();
   // Collision impact: a strong jolt that quickly settles, in both camera modes.
   const IMPACT_SHAKE_DURATION = 0.58;
   const impactShake = {time: IMPACT_SHAKE_DURATION, power: 0, blocked: false, cooldown: 0, anchorX:0, anchorZ:0};
@@ -1583,6 +1771,7 @@
     dirX/=length;dirZ/=length;
     strength=clamp(strength,.45,1.5);
     triggerImpactShake(strength);
+    gameAudio.impact(strength);
     boatImpact.cooldown=.30;
     const a=S.angle*RAD,front=dirX*Math.cos(a)+dirZ*Math.sin(a);
     const side=dirX*(-Math.sin(a))+dirZ*Math.cos(a);
@@ -1664,16 +1853,16 @@
     const dpos=[[-1120,-220],[-535,-660],[40,-360],[595,-980],[1125,-50],[-1060,720],[-510,880],[0,270],[550,870],[1100,1000]];
     S.debris=dpos.map(([x,z],i)=>({x,z,x0:x,z0:z,phase:i*.67}));
     $('menu').classList.add('hidden');$('modal').classList.add('hidden');$('photo-info')?.classList.add('hidden');$('hud').classList.remove('hidden');
-    resolvePickupMoorings();offerRide();notify('Take students to BRAC University before their timers expire!',5);refreshHUD();}
+    resolvePickupMoorings();offerRide();gameAudio.begin();notify('Take students to BRAC University before their timers expire!',5);refreshHUD();}
   function offerRide(){if(S.request||S.rides.length>=5)return;
     const id=S.requestId++,type=id%2===0?'HOME':'DROWNING',places=(type==='HOME'?homes:rescues).filter(p=>!S.rides.some(r=>r.locationId===p.id));if(!places.length)return;
     const place=id<2?places[0]:places[Math.floor(Math.random()*places.length)];
     const dist=Math.abs(S.x-place.x)+Math.abs(S.z-place.z)+Math.abs(place.x)+Math.abs(place.z-1080);
     const deadline=clamp(Math.round(43+dist/130+(type==='HOME'?7:0)+rnd(-4,6)),66,118);
-    S.request={id,type,name:students[id%students.length],locationId:place.id,x:place.x,z:place.z,pickup:place.name,personX:place.personX,personZ:place.personZ,doorX:place.doorX,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',relocated:place.relocated,colorId:id%studentColors.length,warning:false};S.requestLeft=22;}
+    S.request={id,type,name:students[id%students.length],locationId:place.id,x:place.x,z:place.z,pickup:place.name,personX:place.personX,personZ:place.personZ,doorX:place.doorX,doorZ:place.doorZ,facadeZ:place.facadeZ,frontDir:place.frontDir,timeLeft:deadline,state:'OFFERED',relocated:place.relocated,colorId:id%studentColors.length,warning:false};S.requestLeft=22;gameAudio.play('warning',{ignoreDistance:true,volume:.32,cooldown:3});}
   function accept(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming ride request.');return;}
     if(S.rides.length>=5){notify('Your rescue queue is full (5 active requests).');return;}
-    S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;refreshHUD();}
+    S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;gameAudio.play('pickup',{ignoreDistance:true,volume:.35});refreshHUD();}
   function reject(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming request to reject.');return;}
     notify(`Ride rejected: ${S.request.name}`,2);S.request=null;S.spawnClock=0;refreshHUD();}
   function boost(){if(S.mode!=='PLAYING')return;if(S.boostOn){S.boostOn=false;notify('Boost stopped. Meter recharging.',2);}else if(S.boost>=25){S.boostOn=true;notify('PADDLE BOOST! Press Space again to turn it off.',2);}else notify('Recharge boost to at least 25%.',2);}
@@ -1684,7 +1873,7 @@
     S.photo=true;S.flash=.25;S.score+=70;S.photoTime=8;notify('Shaheed Minar photographed! +70 points',4);const info=$('photo-info');if(info){info.classList.remove('hidden');}}
   function repair(){if(S.mode!=='PLAYING')return;if(!S.powerOff){notify('No power outage currently.');return;}
     const p=power[S.powerIndex];if(distance(S.x,S.z,p.x,p.z)>130){notify(`Move closer to the ${p.name} power repair box.`);return;}
-    S.score+=100;S.powerOff=false;S.powerClock=0;
+    S.score+=100;S.powerOff=false;S.powerClock=0;gameAudio.repair();
     powerVisual.repairedIndex=S.powerIndex;powerVisual.repairedAt=S.time;
     S.powerIndex=(S.powerIndex+1)%power.length;notify(`${p.name} power restored! Lights coming back street by street! +100`,4);}
   function nextModal(type){S.mode=type==='HELP'&&S.mode==='MENU'?'MENU':S.mode;
@@ -1891,15 +2080,15 @@
     const inTraffic=S.x>=-115&&S.x<=115&&S.z>=-165&&S.z<=70;
     if(!inTraffic)S.trafficSafe=[S.x,S.z];
     if(inTraffic&&!S.wasTraffic&&S.traffic==='RED'){[S.x,S.z]=S.trafficSafe;S.score=Math.max(0,S.score-35);S.violations++;notify('RED LIGHT! Returned to the stop line. -35 points',3);S.wasTraffic=false;}else S.wasTraffic=inTraffic;
-    if(!S.powerOff){S.powerClock+=dt;if(S.powerClock>=15){S.powerOff=true;S.powerClock=0;notify(`${power[S.powerIndex].name} district power outage!`,2.6);}}
+    if(!S.powerOff){S.powerClock+=dt;if(S.powerClock>=15){S.powerOff=true;S.powerClock=0;notify(`${power[S.powerIndex].name} district power outage!`,2.6);gameAudio.play('electric',{ignoreDistance:true,volume:.48});}}
     if(S.request){S.requestLeft-=dt;if(S.requestLeft<=0){S.request=null;S.spawnClock=0;}}
     else {S.spawnClock+=dt;if(S.spawnClock>=9.5){S.spawnClock=0;offerRide();}}
-    for(const r of S.rides){r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);const wasOnboard=r.state==='ONBOARD';r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(wasOnboard?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);}}
+    for(const r of S.rides){r.timeLeft=Math.max(0,r.timeLeft-dt);if(r.timeLeft<=0){recordMissedPassenger(r);const wasOnboard=r.state==='ONBOARD';r.state='FAILED';S.failed++;S.score=Math.max(0,S.score-75);notify(wasOnboard?`${r.name} ran out of time — left the boat! -75 points`:(r.type==='DROWNING'?`${r.name} could not be rescued! -75 points`:`${r.name} missed the class deadline! -75 points`),3.5);}else if(r.state==='ONBOARD'&&r.timeLeft<=25&&!r.warning){r.warning=true;notify(`HURRY! ${r.name} has 25 seconds left!`,3);gameAudio.play('warning',{ignoreDistance:true,volume:.40});}}
     S.rides=S.rides.filter(r=>r.state!=='FAILED');S.missedEffects=S.missedEffects.filter(e=>S.time-e.at<4.35);
     updateCampusGateSequence();
     if(distance(S.x,S.z,0,1080)<=122){const arrived=seated();if(arrived.length){let gained=0;
       for(const r of arrived){r.state='DELIVERED';const points=200+Math.floor(r.timeLeft*.4);S.score+=points;gained+=points;S.delivered++;}
-      queueCampusArrivals(arrived,S.x,S.z,S.angle);
+      queueCampusArrivals(arrived,S.x,S.z,S.angle);gameAudio.play('delivery',{ignoreDistance:true,volume:.88});gameAudio.voice('passenger_thanks',S.x,S.z,.73);
       S.rides=S.rides.filter(r=>r.state!=='DELIVERED');
       S.deliveryBanner={at:S.time,count:arrived.length,points:gained};
       notify(`Delivered ${arrived.length} student(s) to BRACU! Gate check চলছে! +${gained} points`,4.4);
@@ -1922,7 +2111,7 @@
         const returnDistance=distance(S.x,S.z,0,1080);
         nearby.timeLeft=Math.min(nearby.timeLeft,Math.round(clamp(28+returnDistance/105,34,62)));
         nearby.warning=false;
-        S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
+        S.pickupEffects.push({x:nearby.personX??nearby.x,z:nearby.personZ??nearby.z,at:S.time,type:nearby.type});nearby.boardedAt=S.time;nearby.boardSide=nearby.id%2?1:-1;gameAudio.play('pickup',{ignoreDistance:true,volume:.73});gameAudio.voice(nearby.type==='DROWNING'?'passenger_help':(nearby.id%4===0?'passenger_laptop':'passenger_board'),S.x,S.z,.70);S.dock=0;S.dockId=-1;if(nearby.type==='HOME'){S.score+=35;notify(`${nearby.name} boarded! ${seated().length}/3 seats. +35 points`,3);}else{S.score+=90;S.rescued++;notify(`RESCUED ${nearby.name}! Deliver to BRACU. +90 points`,3);}}}
     if(S.delivered>=6&&S.campusQueue.length===0&&!S.campusGateScene&&!S.deliveryEffects.length){S.mode='WON';keys.clear();nextModal('WON');}else if(S.time>=900||(S.failed>=6&&S.missedEffects.length===0)){S.mode='LOST';S.gameOverReason=S.time>=900?'Fifteen minutes passed before everyone arrived.':'Six passengers missed their ride deadlines.';keys.clear();nextModal('LOST');}
   }
   const map=$('minimap'),ctx=map.getContext('2d');
@@ -2756,7 +2945,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity14-centered-bracu-id-gate';
+  window.majhiVersion='fidelity15-dhaka-soundscape-voices';
+  window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
@@ -2769,6 +2959,7 @@
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else {S.bobTime+=dt*.5;if(S.mode==='WON')S.postWinClock=(S.postWinClock||0)+dt;}
+    gameAudio.update(dt);
     const frameStart=performance.now();try{draw();renderRain(dt);updateCampusGateOverlay();}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
     S.frameMS=performance.now()-frameStart;S.frameWorst=Math.max(S.frameWorst*.999,S.frameMS);hudClock+=dt;if(hudClock>.11){hudClock=0;if(S.mode!=='MENU')refreshHUD();}
   }
@@ -2809,6 +3000,7 @@
     },true);
   }
   installExitFlashlightGlare();
+  gameAudio.initUI();
   $('play-button').onclick=reset;
   $('help-button').onclick=()=>nextModal('HELP');
   $('camera-button').onclick=()=>action('c');$('pause-button').onclick=togglePause;

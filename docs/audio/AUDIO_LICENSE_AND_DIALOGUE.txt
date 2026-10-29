@@ -1,0 +1,28 @@
+Majhi Jaben?! Dhaka Soundscape
+
+All audio in this folder was created for this update:
+- Ambient/effects: original procedural synthesis by the project assistant, 2026.
+- Bengali dialogue: original fictional lines rendered with the locally available eSpeak Bengali speech-synthesis engine, 2026. These are synthetic computer voices, not human actor recordings and do not copy audio from any show or film.
+
+Included source names:
+"rickshaw_0" — মামা, সামনে দেখেন না?
+"rickshaw_1" — আপনিও তো রাস্তার মাঝে!
+"rickshaw_2" — গাড়িটা দেখেন কী অবস্থা!
+"rickshaw_3" — রাস্তা তো নদী, ভাই!
+"rickshaw_sassy_1" — আমারে আগে যেতে দেন!
+"rickshaw_sassy_2" — নিয়ম মানলে কি আর রিকশা চালানো যায়?
+"rickshaw_pickup" — উঠেন, নিরাপদে পৌঁছে দিই!
+"passenger_help" — ভাই, আমাকে বাঁচান!
+"passenger_board" — ভাই, তাড়াতাড়ি করেন, ক্লাস মিস হবে!
+"passenger_laptop" — ল্যাপটপটা আগে বাঁচান!
+"passenger_thanks" — ধন্যবাদ, মাঝি ভাই!
+"shopkeeper" — দোকানের মাল উপরে তুলেন!
+"cng_driver" — রাস্তায় পানি, সিএনজি যাবে না ভাই!
+"power_cheer" — আলো এসেছে, বিদ্যুৎ এসেছে!
+"guard_denied" — আইডি কার্ড ছাড়া ঢোকা যাবে না।
+"guard_rule" — নিয়ম তো নিয়ম, ভাই!
+"student_no_id" — স্যার, বন্যায় এসেছি, কার্ড আনতে ভুলেছি!
+"guard_pass" — আইডি ঠিক আছে। ক্লাস চলছে, ভেতরে যান!
+"current_warn" — ওই দিকে স্রোত বেশি, সাবধানে!
+
+If you replace these with human voice recordings, use recordings you made or have permission to redistribute.
