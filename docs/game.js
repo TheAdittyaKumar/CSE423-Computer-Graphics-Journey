@@ -25,30 +25,28 @@
   uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
   varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
   void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5&&aKind<1.5){
-  float swellA=sin(dot(p.xz,vec2(.018,.029))-uTime*1.10);
-  float swellB=sin(dot(p.xz,vec2(-.024,.015))+uTime*1.45);
-  float swellC=sin(dot(p.xz,vec2(.011,-.033))-uTime*2.05);
-  float crest=pow(max(0.,sin(dot(p.xz,vec2(.023,.041))-uTime*1.85)),3.0);
+  float mainWave=sin(.032*(p.z+.18*p.x)-1.80*uTime);
+  float crossWave=sin(.047*p.x-.014*p.z+1.13*uTime);
+  float chop=sin(.085*p.z+.029*p.x-2.25*uTime);
+  float relative=max(.22,.58+6.9*(.5+.5*mainWave)+1.25*crossWave+.60*chop+1.55*pow(max(0.,mainWave),6.));
   float radius=length(vec2(p.x,p.z-1378.));
   float daylight=clamp((560.-radius)/300.,0.,1.);
   daylight=daylight*daylight*(3.-2.*daylight);
-  float relative=.52+.24*swellA+.15*swellB+.08*swellC+.22*crest;
-  p.y=8.18+relative*(1.-.72*daylight);
-  // Only the four existing current zones get stronger, choppier motion.
-  float west=smoothstep(-1280.,-1210.,p.x)*(1.-smoothstep(-990.,-920.,p.x))*smoothstep(-470.,-405.,p.z)*(1.-smoothstep(155.,220.,p.z));
-  float center=smoothstep(-170.,-105.,p.x)*(1.-smoothstep(105.,170.,p.x))*smoothstep(-970.,-905.,p.z)*(1.-smoothstep(-395.,-330.,p.z));
-  float east=smoothstep(410.,475.,p.x)*(1.-smoothstep(635.,700.,p.x))*smoothstep(130.,195.,p.z)*(1.-smoothstep(805.,870.,p.z));
-  float north=smoothstep(-720.,-655.,p.x)*(1.-smoothstep(-435.,-370.,p.x))*smoothstep(690.,755.,p.z)*(1.-smoothstep(1105.,1170.,p.z));
-  float rough=clamp(west+center+east+north,0.,1.);
-  p.y+=rough*(1.8*sin(dot(p.xz,vec2(.046,.019))-uTime*3.4)+1.2*sin(dot(p.xz,vec2(-.027,.038))+uTime*4.1));
+  p.y=8.22+(relative-.22)*(1.-.70*daylight);
+  // Only the four existing current zones get larger, faster wave crests.
+   // Fade in at their boundaries instead of forming sudden water ridges.
+   float west=smoothstep(-1280.,-1210.,p.x)*(1.-smoothstep(-990.,-920.,p.x))*smoothstep(-470.,-405.,p.z)*(1.-smoothstep(155.,220.,p.z));
+   float center=smoothstep(-170.,-105.,p.x)*(1.-smoothstep(105.,170.,p.x))*smoothstep(-970.,-905.,p.z)*(1.-smoothstep(-395.,-330.,p.z));
+   float east=smoothstep(410.,475.,p.x)*(1.-smoothstep(635.,700.,p.x))*smoothstep(130.,195.,p.z)*(1.-smoothstep(805.,870.,p.z));
+   float north=smoothstep(-720.,-655.,p.x)*(1.-smoothstep(-435.,-370.,p.x))*smoothstep(690.,755.,p.z)*(1.-smoothstep(1105.,1170.,p.z));
+   float rough=clamp(west+center+east+north,0.,1.);
+   p.y+=rough*(4.5*sin(.037*p.x+.023*p.z-uTime*3.8)+2.7*sin(.028*p.z-.032*p.x+uTime*4.5));
   }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
   void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
-    opacity=mix(.58,.14,daylight);c=mix(c,vec3(.18,.28,.29),.48*daylight);
-    float flowA=sin(dot(vWorld.xz,vec2(.021,.037))-uTime*1.28);
-    float flowB=sin(dot(vWorld.xz,vec2(-.031,.019))+uTime*1.66);
-    float shimmer=pow(max(0.,sin(dot(vWorld.xz,vec2(.014,.051))-uTime*2.25)),8.0);
-    c+=vec3(.010,.028,.040)*flowA+vec3(.008,.020,.029)*flowB+vec3(.11,.18,.19)*shimmer;
+    opacity=mix(.53,.12,daylight);c=mix(c,vec3(.24,.31,.30),.55*daylight);float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
+    float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
+    c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
   }else if(vKind>3.5&&vKind<4.5){
     // Warm streetlight halo: its shell is translucent, while its bulb is the
     // original static source geometry and never has to be re-drawn.
@@ -266,12 +264,8 @@
   city.box(0,1,-170,205,.8,8,[.96,.80,.39]);
   city.cylinder(145,49,-55,5,102,[.56,.55,.47],8);city.box(145,106,-55,22,52,21,[.23,.29,.28]);
   city.upload();
-  const waterMesh=new Mesh(), SIZE=1700,STEP=24;
-  for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){
-    const shade=.055+.010*Math.sin(x*.018+z*.011)+.006*Math.sin(x*.043-z*.017);
-    const c=[shade,.176+.010*Math.sin(z*.007),.242+.018*Math.sin((x+z)*.009)];
-    waterMesh.quad([x,8,z],[x+STEP,8,z],[x+STEP,8,z+STEP],[x,8,z+STEP],c,1);
-  }waterMesh.upload();
+  const waterMesh=new Mesh(), SIZE=1700,STEP=48;
+  for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){const c=[.061+(.008*Math.sin(x*.01+z*.03)),.187,.252];waterMesh.quad([x,8,z],[x+STEP,8,z],[x+STEP,8,z+STEP],[x,8,z+STEP],c,1);}waterMesh.upload();
   // Local meshes drawn with per-instance transforms.
   // OFFLINE EXPORTED SOURCE GEOMETRY. The binary comes from the original
   // renderSingleBuildingGeometry, renderBRACUStaticGeometry, drawCityTree,
@@ -311,100 +305,81 @@
   boatMesh.upload();
   const paddleMesh=new Mesh();paddleMesh.cylinder(0,0,0,2.8,95,[.55,.38,.24],8);paddleMesh.box(0,-43,0,15,22,6,[.73,.49,.27]);paddleMesh.upload();
   const carMesh=new Mesh();carMesh.box(0,6,0,88,25,44,[.36,.43,.47]);carMesh.box(3,21,0,49,19,41,[.22,.30,.34]);carMesh.box(-8,34,0,24,3,38,[.40,.49,.50]);carMesh.box(40,9,0,4,12,33,[.78,.35,.23]);carMesh.box(-40,9,0,4,13,33,[.87,.67,.38]);carMesh.upload();
-  const citizenSkin=[.77,.56,.40],citizenHair=[.10,.12,.15],citizenPants=[.16,.20,.25];
-  function citizenLimb(mesh,from,to,radius,color){
-    const axis=norm(to.map((v,i)=>v-from[i]));
-    const guide=Math.abs(axis[1])<.88?[0,1,0]:[1,0,0];
-    const right=norm(cross(axis,guide)),side=cross(axis,right);
-    const ring=(p,t)=>p.map((v,i)=>v+radius*(Math.cos(t)*right[i]+Math.sin(t)*side[i]));
-    for(let j=0;j<8;j++){
-      const a=j*TAU/8,b=(j+1)*TAU/8;
-      mesh.quad(ring(from,a),ring(from,b),ring(to,b),ring(to,a),color);
-    }
-  }
-  function addCitizenHead(m,x,y,z,skin=citizenSkin,hair=citizenHair){
-    m.sphere(x,y,z,7.2,skin,6,10);
-    m.sphere(x-1.9,y+4.0,z,6.6,hair,4,10);
-    m.box(x+6.8,y+1.1,z-2.4,1.0,1.1,1.1,[.96,.97,.90]);
-    m.box(x+6.8,y+1.1,z+2.4,1.0,1.1,1.1,[.96,.97,.90]);
-    m.box(x+7.3,y+1.1,z-2.4,.45,.45,.45,[.11,.13,.16]);
-    m.box(x+7.3,y+1.1,z+2.4,.45,.45,.45,[.11,.13,.16]);
-    m.box(x+6.4,y-3.9,z,1.0,.6,4.0,[.35,.18,.18]);
-  }
-  function addCitizenTorso(m,x,y,z,shirt){
-    const hi=shirt.map(v=>Math.min(1,v*1.08)),mid=shirt.map(v=>v*.92),low=shirt.map(v=>v*.80);
-    m.box(x,y+8,z,18,8,17,hi);
-    m.box(x,y,z,15,13,15,mid);
-    m.box(x-1,y-10,z,12,9,13,low);
-    m.box(x+1,y+13,z,8,2.6,10,[.90,.86,.77]);
-  }
-  function makeStaticStudent(color){
-    const m=new Mesh();
-    addCitizenTorso(m,0,22,0,color);
-    addCitizenHead(m,2.2,39,0);
-    for(const side of [-1,1]){
-      citizenLimb(m,[-3,14,side*4],[1,4,side*4.5],2.8,citizenPants);
-      citizenLimb(m,[1,4,side*4.5],[10,1,side*5],2.4,citizenPants);
-      m.box(12,1,side*5.3,4,2,7,[.10,.12,.14]);
-      citizenLimb(m,[2,29,side*10],[7,21,side*11],2.9,color.map(v=>Math.min(1,v*0.95)));
-      citizenLimb(m,[7,21,side*11],[13,13,side*12],2.3,citizenSkin);
-      m.sphere(13,13,side*12,2.4,citizenSkin,3,6);
-    }
-    m.box(-9,19,0,5,15,12,[.22,.31,.34]);
-    m.box(-11,23,0,1.2,4,7,[.86,.66,.30]);
-    return m.upload();
-  }
-  const npcMeshes=studentColors.map(color=>makeStaticStudent(color));
+  const npcMeshes=studentColors.map(color=>{const m=new Mesh();m.cylinder(0,14,0,7,24,color,8);m.sphere(0,32,0,9,[.78,.55,.38],4,8);m.cylinder(-9,16,0,3,22,[.77,.55,.40],6);m.cylinder(9,18,0,3,28,[.77,.55,.40],6);m.cylinder(-4,2,0,2.4,10,[.20,.29,.37],6);m.cylinder(4,2,0,2.4,10,[.20,.29,.37],6);return m.upload();});
   // Reactive citizens are lightweight procedural meshes, baked once into GPU
   // buffers instead of regenerated on every frame. They use the original
   // student's shirt palette, and animate without extra assets or packages.
   const REACTION_FRAMES=12;
   const reactionAnimations=['HOME','HOME_URGENT','SOS','SOS_URGENT','CELEBRATE'];
+  const citizenSkin=[.76,.53,.38],citizenHair=[.115,.125,.16];
+  function citizenLimb(mesh,from,to,radius,color){
+    const axis=norm(to.map((v,i)=>v-from[i]));
+    const guide=Math.abs(axis[1])<.88?[0,1,0]:[1,0,0];
+    const right=norm(cross(axis,guide)),side=cross(axis,right);
+    const ring=(p,t)=>p.map((v,i)=>v+radius*(Math.cos(t)*right[i]+Math.sin(t)*side[i]));
+    for(let j=0;j<7;j++){
+      const a=j*TAU/7,b=(j+1)*TAU/7;
+      mesh.quad(ring(from,a),ring(from,b),ring(to,b),ring(to,a),color);
+    }
+  }
   function makeCitizenPose(color,kind,index){
     const m=new Mesh(),phase=index*TAU/REACTION_FRAMES;
     const isSOS=kind.startsWith('SOS'),urgent=kind.endsWith('URGENT'),celebrating=kind==='CELEBRATE';
-    const aliveY=isSOS?-9:0;
-    const torsoY=aliveY+23,headY=aliveY+39;
+    const aliveY=isSOS?-9:0; // Keep the SOS student visibly immersed in water.
+    const chestY=aliveY+22,headY=aliveY+37;
+    const skin=citizenSkin,shirt=color;
     const pace=Math.sin(phase),counter=Math.cos(phase);
-    addCitizenTorso(m,0,torsoY,0,color);
+    // Compact character proportions match the size of the existing students.
+    m.box(0,chestY,0,15,23,17,shirt);
+    m.box(0,chestY+10,0,15,3,17,shirt.map(v=>Math.min(1,v*1.15)));
+    m.cylinder(0,aliveY+13,0,4.4,5,skin,8);
     if(!isSOS){
       for(const side of [-1,1]){
-        const hip=[-3,aliveY+14,side*4.5];
-        const knee=[1+Math.sin(phase+side*.8)*(celebrating?2.2:1.1),aliveY+5,side*5];
-        const foot=[10+(celebrating?Math.sin(phase+side)*4.5:Math.sin(phase+side)*1.8),aliveY+1.3,side*5.5];
-        citizenLimb(m,hip,knee,2.7,citizenPants);
-        citizenLimb(m,knee,foot,2.3,citizenPants);
-        m.box(foot[0]+2,foot[1],foot[2],4.2,2,7,[.10,.12,.14]);
+        const stride=celebrating?Math.sin(phase)*3.2:Math.sin(phase+side)*1.2;
+        citizenLimb(m,[-1,aliveY+12,side*5],[-1+stride,aliveY+1,side*5.5],3.1,[.17,.24,.30]);
+        m.box(3+stride,aliveY+2,side*6,9,4,5,[.11,.16,.19]);
       }
     }
-    addCitizenHead(m,2.2,headY,0);
+    // Head, hair, face and eyes point down local +X, toward the player.
+    m.sphere(1,headY,0,9,skin,5,9);
+    m.sphere(-1.5,headY+5,0,8.8,citizenHair,4,9);
+    m.sphere(8.9,headY+1,-3.2,1.25,[.95,.96,.87],3,6);
+    m.sphere(8.9,headY+1,3.2,1.25,[.95,.96,.87],3,6);
+    m.sphere(9.9,headY+1,-3.2,.65,[.10,.14,.17],3,5);
+    m.sphere(9.9,headY+1,3.2,.65,[.10,.14,.17],3,5);
+    if(urgent||isSOS)m.box(10,headY-5,0,1,3.8,3.5,[.25,.18,.17]);
+    else m.box(9.7,headY-5,0,1,1.1,5.5,[.28,.16,.15]);
+    // Arms are actual jointed geometry, not textures or stationary overlays.
+    // Different frame meshes produce overhead waving, water-treading, or cheers.
     for(const side of [-1,1]){
-      const shoulder=[2,torsoY+7,side*10.2];
+      const shoulder=[0,chestY+7,side*10.5];
       let elbow,hand;
       if(celebrating){
-        elbow=[6,torsoY+17+Math.sin(phase+side)*2.2,side*12.5];
-        hand=[8+Math.sin(phase+side)*5.2,torsoY+29+6.5*Math.sin(phase+side*.6),side*15.0];
+        elbow=[4,chestY+17+Math.sin(phase+side)*2,side*13];
+        hand=[5+Math.sin(phase+side)*5,chestY+30+6*Math.sin(phase*1.0+side),side*15];
       }else if(isSOS){
-        const splash=Math.sin(phase+(side===-1?0:Math.PI));
-        elbow=[6,torsoY+8+7*splash,side*13.0];
-        hand=[10+2.5*Math.cos(phase),torsoY+18+9*splash,side*16.5];
+        const raised=urgent?12:5;
+        const splashWave= Math.sin(phase+(side===-1?0:Math.PI));
+        elbow=[5,chestY+5+raised*.65+5*splashWave,side*14];
+        hand=[7+3*Math.cos(phase),chestY+13+raised+7*splashWave,side*18];
       }else if(urgent){
-        elbow=[6.5,torsoY+14+3*Math.sin(phase+side),side*12.5];
-        hand=[7+Math.cos(phase+side)*4.5,torsoY+28+6*Math.sin(phase+side),side*15.5];
+        elbow=[6,chestY+16+3*Math.sin(phase+side),side*13];
+        hand=[4+Math.cos(phase+side)*5,chestY+31+7*Math.sin(phase+side),side*17];
       }else if(side===1){
-        elbow=[5.5,torsoY+12+2.2*pace,side*12.2];
-        hand=[8+4.3*Math.cos(phase),torsoY+24+4.3*pace,side*15.5];
+        elbow=[5,chestY+16+3*pace,side*13];
+        hand=[5+Math.cos(phase)*5,chestY+29+5*pace,side*16];
       }else{
-        elbow=[2,torsoY-1+1.4*pace,side*11.5];
-        hand=[7,torsoY-7+1.8*counter,side*11.4];
+        elbow=[0,chestY-5+2*pace,side*12];
+        hand=[3,chestY-12+2*counter,side*11];
       }
-      citizenLimb(m,shoulder,elbow,3.2,color.map(v=>Math.min(1,v*.95)));
-      citizenLimb(m,elbow,hand,2.35,citizenSkin);
-      m.sphere(hand[0],hand[1],hand[2],2.4,citizenSkin,3,6);
+      citizenLimb(m,shoulder,elbow,3.7,shirt);
+      citizenLimb(m,elbow,hand,2.7,skin);
+      m.sphere(hand[0],hand[1],hand[2],3.1,skin,3,6);
     }
+    // Stranded home students visibly retain a small school bag.
     if(!isSOS&&!celebrating){
-      m.box(-9,torsoY-3,0,5,15,12,[.22,.31,.34]);
-      m.box(-11,torsoY+1,0,1.2,4,7,[.86,.66,.30]);
+      m.box(-9,chestY-2,0,5,16,13,[.24,.34,.36]);
+      m.box(-12,chestY+3,0,1.5,4,7,[.85,.67,.36]);
     }
     return m.upload();
   }
@@ -413,28 +388,6 @@
     citizenFrames[kind]=studentColors.map(color=>
       Array.from({length:REACTION_FRAMES},(_,frame)=>makeCitizenPose(color,kind,frame)));
   }
-  const MAJHI_FRAMES=16;
-  function makeMajhiFrame(shirt,index){
-    const m=new Mesh(),phase=index*TAU/MAJHI_FRAMES,drive=Math.sin(phase),lift=Math.cos(phase);
-    const torsoX=-6+drive*3.2,torsoY=23-drive*1.2;
-    addCitizenTorso(m,torsoX,torsoY,0,shirt);
-    addCitizenHead(m,torsoX-2.5,40-drive*.8,0,[.76,.54,.39],[.08,.09,.10]);
-    for(const side of [-1,1]){
-      const hip=[torsoX-6,16,side*4.5],knee=[torsoX+1,10.5,side*5.0],foot=[torsoX+13,10.5,side*5.5];
-      citizenLimb(m,hip,knee,2.8,[.19,.23,.28]);
-      citizenLimb(m,knee,foot,2.4,[.19,.23,.28]);
-      m.box(foot[0]+2,10.4,foot[2],4.2,2,7,[.09,.11,.14]);
-      const shoulder=[torsoX+1.0,torsoY+7.5,side*10.5];
-      const elbow=[torsoX+10+drive*2.5,torsoY+5.5-drive*1.4,side*(13.5+drive*1.4)];
-      const hand=[torsoX+18+drive*6.5,torsoY+3.0-drive*1.4,side*(17.5+drive*3.4)];
-      citizenLimb(m,shoulder,elbow,3.2,shirt.map(v=>Math.min(1,v*.95)));
-      citizenLimb(m,elbow,hand,2.4,[.76,.54,.39]);
-      m.sphere(hand[0],hand[1],hand[2],2.5,[.76,.54,.39],3,6);
-    }
-    return m.upload();
-  }
-  const majhiFrames=Array.from({length:MAJHI_FRAMES},(_,frame)=>makeMajhiFrame([.26,.74,.76],frame));
-  const aiMajhiFrames=studentColors.map(color=>Array.from({length:MAJHI_FRAMES},(_,frame)=>makeMajhiFrame(color,frame)));
   const urgencyMarker=new Mesh();
   urgencyMarker.box(0,6,0,3.4,13,3.4,[1,.31,.22]);
   urgencyMarker.box(0,-5,0,4.3,4.5,4.3,[1,.67,.34]);
@@ -748,27 +701,21 @@
     }
   }
 
-  function renderBoatPaddles(x,y,z,angle,phase,scale=.36){
-    const a=angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
-    const drive=Math.sin(phase),sweep=42+drive*12;
-    for(const side of [-1,1]){
-      const px=x+fx*(10+drive*2)+lx*(side*30);
-      const pz=z+fz*(10+drive*2)+lz*(side*30);
-      render(paddleMesh,model(px,y,pz,angle+side*sweep,scale));
-    }
-  }
-
   function drawRescueFleet(){
     if(S.mode==='MENU')return;
     for(const boat of S.aiBoats){
       if(distance(S.x,S.z,boat.x,boat.z)>1050)continue;
-      const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a);
+      const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
       const bob=.9*Math.sin(S.time*4+boat.id);
-      const phase=S.time*5.2+boat.id*0.8;
-      const frame=(Math.floor((phase/TAU)*MAJHI_FRAMES)%MAJHI_FRAMES+MAJHI_FRAMES)%MAJHI_FRAMES;
+      // Small distinct sampans carrying a visible majhi, with paddles and wakes.
       render(sourceMeshes?.boat||boatMesh,model(boat.x,11.5+bob,boat.z,boat.angle,.47));
-      render(aiMajhiFrames[boat.colorId%aiMajhiFrames.length][frame],model(boat.x,12.2+bob,boat.z,boat.angle,.52));
-      renderBoatPaddles(boat.x,23.1+bob,boat.z,boat.angle,phase,.29);
+      render(citizenFrame('HOME',boat.colorId,S.time*2.7+boat.id),
+        model(boat.x-fx*12,27+bob,boat.z-fz*12,boat.angle,.42));
+      const stroke=Math.sin(S.time*10+boat.id*2);
+      render(paddleMesh,model(boat.x+fx*9+lx*34,22+bob,boat.z+fz*9+lz*34,boat.angle+22+stroke*17,.30));
+      render(paddleMesh,model(boat.x+fx*9-lx*34,22+bob,boat.z+fz*9-lz*34,boat.angle-22-stroke*17,.30));
+      // The rescued citizen is briefly visible aboard, rather than vanishing
+      // immediately after the pickup animation.
       if(S.time-boat.rescuedAt<7.2)
         render(citizenFrame('CELEBRATE',boat.rescuedColor,S.time*1.9),
           model(boat.x+fx*33,25+bob,boat.z+fz*33,boat.angle,.34));
@@ -1613,38 +1560,6 @@
     }
   }
 
-
-  const roofWaterTank=new Mesh();
-  roofWaterTank.cylinder(0,18,0,11,18,[.18,.25,.29],12);
-  roofWaterTank.box(0,6,0,28,4,28,[.38,.43,.44]);
-  for(const sx of [-9,9])for(const sz of [-9,9])roofWaterTank.box(sx,-5,sz,3,10,3,[.47,.50,.49]);
-  roofWaterTank.upload();
-  const roofLaundry=new Mesh();
-  for(const sx of [-20,20])roofLaundry.box(sx,13,0,2,26,2,[.45,.47,.47]);
-  roofLaundry.box(0,22,0,42,1.4,1.4,[.53,.55,.53]);
-  roofLaundry.quad([-12,18,-.5],[-2,18,-.5],[-2,8,-.5],[-12,8,-.5],[.72,.28,.24]);
-  roofLaundry.quad([1,19,-.5],[11,19,-.5],[11,9,-.5],[1,9,-.5],[.88,.79,.36]);
-  roofLaundry.upload();
-  const constructionScaffold=new Mesh();
-  for(const x of [-26,0,26])for(const z of [-12,12])constructionScaffold.box(x,32,z,3,64,3,[.50,.40,.26]);
-  for(const y of [8,24,40,56])constructionScaffold.box(0,y,0,58,2.1,30,[.63,.49,.28]);
-  constructionScaffold.box(0,66,0,64,4,34,[.36,.38,.40]);
-  constructionScaffold.quad([-28,56,15],[28,56,15],[28,16,15],[-28,16,15],[.28,.33,.38]);
-  constructionScaffold.upload();
-  const rooftopBuildings=buildings.filter((b,i)=>i%3===0||i%5===0);
-  const constructionBuildings=buildings.filter((b,i)=>[2,8,17,23].includes(i));
-  function drawDhakaBuildingDetails(){
-    for(const [i,b] of rooftopBuildings.entries()){
-      if(distance(S.x,S.z,b.x,b.z)>980)continue;
-      if(i%2===0)render(roofWaterTank,model(b.x+b.hw*.10,b.h+18,b.z+b.hd*.06,0,.95));
-      else render(roofLaundry,model(b.x-b.hw*.12,b.h+14,b.z-b.hd*.08,0,1.0));
-    }
-    for(const b of constructionBuildings){
-      if(distance(S.x,S.z,b.x,b.z)>1050)continue;
-      render(constructionScaffold,model(b.x+b.hw*.56,18,b.z-b.hd*.70,0,1.0));
-    }
-  }
-
   function drawPowerCabinets(){
     for(let i=0;i<power.length;i++){
       const p=power[i],mat=model(p.x,0,p.z),d=distance(S.x,S.z,p.x,p.z);
@@ -1758,7 +1673,7 @@
     person.voicePlayed[clip]=true;
     person.voiceLastSpokenAt=S.time;
   };
-  // DHAKA AUDIO V2 — natural user-recorded voices, seven selected memes,
+  // DHAKA AUDIO V3 — contextual non-passenger reactions, natural voices, seven memes,
   // menu song and flashlight scare, backed by the existing nonverbal SFX.
   // All paths below exist in the supplied docs/audio/ package.
   const gameAudio=(()=>{
@@ -1769,6 +1684,8 @@
       rickshaw_masud_01:['MASUD','এই মামা, সাইড দেন! মাসুদ ভাই আসতেছে! এই রাস্তায় আমারে আটকায় কে?'],
       rickshaw_masud_02:['MASUD','দোষ আমার? আমার রিকশার সামনে গাড়ি রাখছেন কেন? চোখে দেখেন না?'],
       rickshaw_masud_03:['MASUD','পুরা ঢাকা ডুইবা গেলেও মাসুদ ভাইয়ের রিকশা থামবে না!'],
+      rickshaw_masud_04:['MASUD','এই মামা! আমি ধাক্কা দেই নাই! পানির স্রোত আমার রিকশা ঠেইলা দিছে! দোষ থাকলে নদীর!'],
+      rickshaw_masud_05:['MASUD','উঠেন মামা, উঠেন! গুগল ম্যাপ বাদ দেন! এই রাস্তায় মাসুদ ম্যাপ চলে! শর্টকাট আমার মুখস্থ!'],
       rickshaw_liton_01:['LITON','মামা, হর্ন দিয়া লাভ নাই! এই পানিতে আমার রিকশাই স্পিডবোট!'],
       rickshaw_liton_02:['LITON','আরে ভাই, একটু ঘষা লাগছে! এত নাটক করার কী আছে?'],
       rickshaw_liton_03:['LITON','উঠেন, উঠেন! লিটন থাকতে কাউরে পানিতে থাকতে হবে না!'],
@@ -1787,15 +1704,19 @@
       civilian_shamim_01:['SHAMIM','এই যে ভাই! এদিকে! আমি পানিতে আটকা পড়ছি!'],
       civilian_shamim_02:['SHAMIM','তাড়াতাড়ি করেন! স্রোত অনেক বেশি! আমি আর ধরে রাখতে পারতেছি না!'],
       civilian_shamim_03:['SHAMIM','ভাই, আপনি না আসলে আজকে কী যে হইতো! অনেক ধন্যবাদ!'],
+      civilian_shamim_04:['SHAMIM','আরে বাপরে! ঢেউয়ের ধাক্কায় আবার ঘুরে গেলাম! এইটা রাস্তা, না ওয়াটার পার্ক?!'],
       civilian_mitu_01:['MITU','নৌকাটা এদিকে আনেন! রাস্তা খুঁজতে আইসা দেখি নদী!'],
       civilian_mitu_02:['MITU','স্রোত আমারে টানতেছে! ঢাকার রাস্তা চলে না, কিন্তু পানির স্পিড দেখছেন?!'],
       civilian_mitu_03:['MITU','অবশেষে বাঁচলাম! এখন নৌকার জন্যও অপেক্ষা করতে হয়! ধন্যবাদ ভাই!'],
+      civilian_mitu_04:['MITU','বাহ! রাস্তায় এত গর্ত ছিল, এখন সব সুইমিং পুল! সাঁতার কেটে অফিস যাই নাকি?!'],
       cng_jashim_01:['JASHIM','মামা, সিএনজি লাগবে? এই পানিতে ভাড়া একটু বেশি!'],
       cng_jashim_02:['JASHIM','এই রিকশাওয়ালা মামা! পুরা রাস্তা আপনার বাপের নাকি?'],
       cng_jashim_03:['JASHIM','সিএনজি আর চলে না! এখন আমাকেই নৌকা ভাড়া করতে হবে!'],
       shopkeeper_kuddus_01:['KUDDUS CHACHA','চা খাবেন? দোকান ডুইবা গেছে, কিন্তু কেটলি এখনো গরম!'],
       shopkeeper_kuddus_02:['KUDDUS CHACHA','রাস্তা নদী হইয়া গেছে, কিন্তু বাকির খাতা শুকনা আছে!'],
       shopkeeper_kuddus_03:['KUDDUS CHACHA','ওই রিকশাওয়ালা! আমার দোকানের সামনে রেস লাগাইছেন কেন?'],
+      shopkeeper_kuddus_04:['KUDDUS CHACHA','আরে ধুর! আবার কারেন্ট গেল! এই বন্যায় চা বেচবো নাকি মোমবাতি বেচবো, বুঝতেছি না!'],
+      shopkeeper_kuddus_05:['KUDDUS CHACHA','আহা! কারেন্ট আইছে! মামা, চায়ের সাথে মোবাইলও চার্জ দেন! তবে চার্জ দিতে পাঁচ টাকা আলাদা!'],
       // Transcripts for all 46 additional user-recorded student lines.
       student_adittya_solo_01:["ADITTYA","ল্যাপটপটা ঠিকঠাক আছে তো? এই পানিতে নষ্ট হইলে আমার পুরা সেমিস্টার শেষ!"],
       student_adittya_solo_02:["ADITTYA","আজকে রিকশার বদলে নৌকা! কালকে কি ক্যাম্পাসে যাইতে সাবমেরিন লাগবে?"],
@@ -1863,6 +1784,8 @@
     for(const n of memes)paths[n]=`./audio/meme/${n}.mp3`;
     for(const n of exitNames)paths[n]=`./audio/sfx/${n}.mp3`;
     paths.menu_music='./audio/ambience/menu_music.mp3';
+    // Original short paddle-and-water surge, triggered only when boost is enabled.
+    paths.boost_start='./audio/sfx/boost_start.wav';
     const alias={
       swimmer_help_1:'civilian_shamim_01',swimmer_help_2:'civilian_mitu_01',swimmer_help_3:'civilian_shamim_01',
       swimmer_current:'civilian_shamim_02',current_warn:'civilian_shamim_02',swimmer_rescued:'civilian_shamim_03',
@@ -1900,6 +1823,21 @@
     let clock=0,peopleAt=10,bellAt=8,hornAt=9,thunderAt=25,paddleAt=0;
     let subtitle=null,ui=null,subtitleUntil=0;
     let lastCampusHeaven=false,rewardShownUntil=0,lastHtmlExit=0;
+    // Kuddus is at this existing physical shop; his reactive remarks are heard
+    // locally, NOT from the distant electrical repair cabinet.
+    const KUDDUS_STALL={x:-367,z:868,district:districtForX(-367)};
+    let kuddusDistrictRepaired=false;
+    const kuddusEventSpoken=new Set();
+    const backgroundCivilianSpokenAt=new Map();
+    let lastBackgroundCivilianVoiceAt=-999;
+    const isKuddus=p=>p.role==='SHOP'&&distance(p.x,p.z,KUDDUS_STALL.x,KUDDUS_STALL.z)<4;
+    function kuddusEventClip(){
+      if(S.powerOff&&S.powerIndex===KUDDUS_STALL.district&&!kuddusEventSpoken.has('outage'))
+        return 'shopkeeper_kuddus_04';
+      if(kuddusDistrictRepaired&&!lightOffAt(KUDDUS_STALL.x,KUDDUS_STALL.z)&&
+         !kuddusEventSpoken.has('restored'))return 'shopkeeper_kuddus_05';
+      return null;
+    }
     const pick=a=>a[Math.floor(Math.random()*a.length)];
     const sayMeta=n=>voiceText[alias[n]||n];
     const speakerLine=(clip,person)=>clip?voiceText[clip]?.[1]:null;
@@ -2150,7 +2088,10 @@
       const crashMeme=r.id===1&&Math.random()<.5?'meme_record_scratch':'meme_metal_pipe';
       play(crashMeme,{x:r.x,z:r.z,volume:.55,cooldown:0,key});
       play('car_horn',{x:r.x,z:r.z,volume:.52,key});
-      const driver=['rickshaw_salam_02','rickshaw_masud_02','rickshaw_liton_02'][r.id];
+      // Masud occasionally blames the river for a real rickshaw collision.
+      const driver=r.id===1&&buffers.rickshaw_masud_04&&Math.random()<.72
+        ?'rickshaw_masud_04'
+        :['rickshaw_salam_02','rickshaw_masud_02','rickshaw_liton_02'][r.id];
       const car=parkedCars[incident.carIndex],withCng=car&&dhakaVehicleType(incident.carIndex)==='cng';
       if(distance(S.x,S.z,r.x,r.z)>660)return;
       talkSequence(withCng?[driver,'cng_jashim_02']:[driver],
@@ -2218,6 +2159,8 @@
       clock=0;peopleAt=8;bellAt=7;hornAt=6;thunderAt=26;paddleAt=0;
       lastZone='';lastAiRescues=0;lastCampusHeaven=false;quarrelsSeen.clear();
       cancelSequence();lastConversationAt=-999;conversationCursor=0;
+      kuddusDistrictRepaired=false;kuddusEventSpoken.clear();
+      backgroundCivilianSpokenAt.clear();lastBackgroundCivilianVoiceAt=-999;
       subtitle?.classList.remove('mj-voice-show');activeVoicePriority=-1;voiceBusyUntil=0;
       updateMix();}
     function update(dt){
@@ -2243,7 +2186,13 @@
       lastZone=S.current;
       if(S.aiRescueCount>lastAiRescues){
         const r=S.aiRickshaws.find(x=>S.time-x.rescuedAt<.28&&distance(x.x,x.z,S.x,S.z)<520);
-        if(r){play('bell_1',{x:r.x,z:r.z,volume:.72});voice(voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][2],r.x,r.z,1,{priority:1});}
+        if(r){
+          play('bell_1',{x:r.x,z:r.z,volume:.72});
+          // 'Masud Maps' belongs to his actual rescue pickup, not random traffic chatter.
+          const pickupVoice=r.id===1&&buffers.rickshaw_masud_05&&Math.random()<.75
+            ?'rickshaw_masud_05':voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][2];
+          voice(pickupVoice,r.x,r.z,1,{priority:1});
+        }
         else {const b=S.aiBoats.find(x=>S.time-x.rescuedAt<.28&&distance(x.x,x.z,S.x,S.z)<500);
           if(b)voice('civilian_shamim_03',b.x,b.z,.92,{priority:2});}
         lastAiRescues=S.aiRescueCount;
@@ -2273,11 +2222,23 @@
               choices.push({x:S.x,z:S.z,clip,ride:r,priority:2});
           }
         }
-        for(const p of S.cityPeople){if(distance(p.x,p.z,S.x,S.z)>410)continue;
-          const clip=p.role==='SWIM'||p.role==='WADE'?
-            ((p.uid%2===0)?'civilian_shamim_01':'civilian_mitu_01'):
-            p.role==='SHOP'?'shopkeeper_kuddus_01':null;
-          if(clip)choices.push({x:p.x,z:p.z,clip,priority:p.role==='SWIM'?1:0});
+        for(const p of S.cityPeople){
+          if(distance(p.x,p.z,S.x,S.z)>410)continue;
+          if(p.role==='SWIM'||p.role==='WADE'){
+            // These are AMBIENT civilians rescued by the AI fleet, not the
+            // player's mission targets. Never make them call for player pickup.
+            const clip=p.uid%2===0?'civilian_shamim_04':'civilian_mitu_04';
+            if(buffers[clip]&&S.time-lastBackgroundCivilianVoiceAt>24&&
+                S.time-(backgroundCivilianSpokenAt.get(p.uid)??-999)>80)
+              choices.push({x:p.x,z:p.z,clip,backgroundCivilian:p.uid,priority:1});
+          }else if(p.role==='SHOP'){
+            // Electricity jokes only come from Kuddus's own shop, when the
+            // local district's power state actually makes the line relevant.
+            const eventClip=isKuddus(p)?kuddusEventClip():null;
+            const clip=eventClip&&buffers[eventClip]?eventClip:'shopkeeper_kuddus_01';
+            if(buffers[clip])choices.push({x:p.x,z:p.z,clip,
+              kuddusEvent:eventClip===clip?eventClip:null,priority:eventClip===clip?1.5:0});
+          }
         }
         for(const r of S.aiRickshaws){if(distance(r.x,r.z,S.x,S.z)<430&&r.incidentCar===null)
           choices.push({x:r.x,z:r.z,clip:voicesByPerson[['rickshaw_salam','rickshaw_masud','rickshaw_liton'][r.id]][0],priority:0});}
@@ -2286,7 +2247,15 @@
         const preferred=choices.filter(c=>c.priority===choices[0]?.priority).slice(0,3);
         if(preferred.length){
           const c=preferred[Math.floor(Math.random()*preferred.length)];
-          if(voice(c.clip,c.x,c.z,1,{priority:c.priority})&&c.ride)markPassengerClip(c.ride,c.clip);
+          if(voice(c.clip,c.x,c.z,1,{priority:c.priority})){
+            if(c.ride)markPassengerClip(c.ride,c.clip);
+            if(c.backgroundCivilian!==undefined){
+              backgroundCivilianSpokenAt.set(c.backgroundCivilian,S.time);
+              lastBackgroundCivilianVoiceAt=S.time;
+              if(backgroundCivilianSpokenAt.size>140)backgroundCivilianSpokenAt.clear();
+            }
+            if(c.kuddusEvent)kuddusEventSpoken.add(c.kuddusEvent==='shopkeeper_kuddus_04'?'outage':'restored');
+          }
         }
         }
         peopleAt=S.time+(conversationStarted?18:6+Math.random()*5);
@@ -2295,7 +2264,11 @@
     }
     return {initUI,menuBegin,begin,update,play,voice,speakPassenger,startGate,showReward,exitScare,
       prepare:()=>init(),unlock:()=>ctx?.resume().catch(()=>{}),
-      repair(){play('power_restore',{ignoreDistance:true,volume:.8});},
+      repair(){
+        // The powerIndex is still the district just repaired when this runs.
+        if(S.powerIndex===KUDDUS_STALL.district)kuddusDistrictRepaired=true;
+        play('power_restore',{ignoreDistance:true,volume:.8});
+      },
       impact(power){play('impact_'+(1+(Math.floor(S.time*3)%2)),{ignoreDistance:true,volume:.75*power});},
       getState(){return {started,ready,on,voices:speech,captions:captionsOn,
         loaded:Object.keys(buffers).length,expected:Object.keys(paths).length,
@@ -2408,7 +2381,7 @@
     S.request.state='WAITING';S.rides.push(S.request);notify(`Accepted ${S.request.name} — ${S.request.type==='HOME'?'HOME PICKUP':'SOS / FLOODED STREET'}`,3);S.request=null;S.spawnClock=0;gameAudio.play('pickup',{ignoreDistance:true,volume:.35});refreshHUD();}
   function reject(){if(S.mode!=='PLAYING')return;if(!S.request){notify('No incoming request to reject.');return;}
     notify(`Ride rejected: ${S.request.name}`,2);S.request=null;S.spawnClock=0;refreshHUD();}
-  function boost(){if(S.mode!=='PLAYING')return;if(S.boostOn){S.boostOn=false;notify('Boost stopped. Meter recharging.',2);}else if(S.boost>=25){S.boostOn=true;notify('PADDLE BOOST! Press Space again to turn it off.',2);}else notify('Recharge boost to at least 25%.',2);}
+  function boost(){if(S.mode!=='PLAYING')return;if(S.boostOn){S.boostOn=false;notify('Boost stopped. Meter recharging.',2);}else if(S.boost>=25){S.boostOn=true;gameAudio.play('boost_start',{ignoreDistance:true,volume:.80,key:'boost-on',cooldown:.30});notify('PADDLE BOOST! Press Space again to turn it off.',2);}else notify('Recharge boost to at least 25%.',2);}
   function photo(){if(S.mode!=='PLAYING')return;if(S.photo){notify('You already photographed Shaheed Minar.');return;}
     if(distance(S.x,S.z,825,1080)>125){notify('Move onto the orange landmark photo ring first.');return;}
     const target=Math.atan2(1350-S.z,825-S.x)/RAD,delta=Math.abs(((S.angle-target+540)%360)-180);
@@ -3442,7 +3415,6 @@
     // Both fixtures use stateful geometry, preserving blackout and signal timing.
     drawStreetLamps(eye[0],eye[2]);
     drawDhakaPowerNeighborhood();
-    drawDhakaBuildingDetails();
     drawModernTrafficSignal();
     // All stations are live 3D cabinets instead of the old baked source blocks.
     drawPowerCabinets();
@@ -3570,10 +3542,8 @@
     if(S.mode!=='MENU'){
       if(S.camera3){
         render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
-        const majhiPhase=S.rowing?(S.strokeTime/0.65)*TAU:0.0;
-        const majhiFrame=(Math.floor(((majhiPhase%(TAU)+TAU)%TAU)/TAU*MAJHI_FRAMES))%MAJHI_FRAMES;
-        render(majhiFrames[majhiFrame],rockingBoatModel(S.x,boatY+1.1,S.z,S.angle,.90,boatPitch,boatRoll));
-        renderBoatPaddles(S.x,boatY+12.2,S.z,S.angle,majhiPhase,.42);
+        if(sourceMeshes?.captain)render(sourceMeshes.captain,rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));
+        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['rowing-'+f]||sourceMeshes.paddles,rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));}
       }else{
         // Like the desktop edition, the actual boat is drawn in first person.
         render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
@@ -3596,7 +3566,7 @@
         const eased=settle*settle*(3-2*settle),localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;
         const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;
         const scale=S.camera3?.62:.51,seatY=S.camera3?boatY+15:boatY+15;
-        render(npcMeshes[r.colorId],
+        render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],
           model(sx,seatY+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),scale));
       });
       // Original BRACU drop-off: students leave their seats and walk to the dock.
@@ -3617,7 +3587,7 @@
             const angle=S.time*2.1+k*TAU/3+e.colorId;
             render(happySparkle,model(x+22*Math.cos(angle),y+26+5*Math.sin(S.time*4+k),z+22*Math.sin(angle),angle/RAD,.45));
           }
-        }else render(npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
+        }else render(sourceMeshes?.['student-'+e.colorId]||npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
       }
       for(const effect of S.missedEffects){
         const age=S.time-effect.at;
@@ -3625,12 +3595,12 @@
           const f=Math.min(1,age/.80),p=f*f*(3-2*f),elevation=effect.y*(1-p)+7*p+5*Math.sin(Math.PI*p);
           const x=effect.fromX+(effect.x-effect.fromX)*p,z=effect.fromZ+(effect.z-effect.fromZ)*p;
           if(S.camera3||distance(eye[0],eye[2],x,z)>52)
-            render(npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
+            render(sourceMeshes?.['student-'+effect.colorId]||npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
         }else if(age<3.85){
           const sink=age>2.85?36*clamp((age-2.85)/1,0,1):0;
           const frame=Math.floor(((age*7.2)%TAU)/TAU*24)%24;
           if(S.camera3||distance(eye[0],eye[2],effect.x,effect.z)>52)
-            render(citizenFrame('SOS',effect.colorId,S.time*3.5+frame),model(effect.x,-sink,effect.z,0,.85));
+            render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,-sink,effect.z,0,.85));
           render(waterRipple,model(effect.x,9.5,effect.z,0,.9+age*.12));
         }else if(age<4.35){
           render(waterRipple,model(effect.x,9.5,effect.z,0,1+age*.22));
