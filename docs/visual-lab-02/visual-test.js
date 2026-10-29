@@ -53,7 +53,7 @@
 
   uniform mat4 uModel, uView, uProjection;
   uniform float uTime;
-  uniform int uType;
+  uniform highp int uType;
 
   out vec3 vNormal, vWorld;
   out float vDistance;
@@ -86,7 +86,7 @@
 
   uniform vec3 uTint;
   uniform float uTime;
-  uniform int uType;
+  uniform highp int uType;
   uniform int uLighting;
 
   out vec4 fragColor;
