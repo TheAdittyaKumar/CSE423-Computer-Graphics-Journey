@@ -1495,17 +1495,64 @@
   powerRepairPulse.ring(0,0,0,29,4,[.32,1,.57],32);powerRepairPulse.upload();
   const powerVisual={repairedIndex:-1,repairedAt:-999};
 
-  // Warm windows/stalls that visibly respond to neighborhood power. Their
-  // light-up order follows the same cascading district-power calculation.
+  // OPEN STOREFRONTS: In the earlier version the metal shutter was translated
+  // up by only 27 units. Its lower slats remained directly in the window, and
+  // an opaque amber "light" panel hid the interior as well. Keep the shutter
+  // fully rolled up above the opening, and use small fixtures for lighting.
+  // Power failure now changes the shop lighting, not whether we can see inside.
   const dhakaShopFronts=[[-367,885],[178,885],[320,715]];
   const dhakaStoreLight=new Mesh(),dhakaShutter=new Mesh();
-  dhakaStoreLight.box(0,25,0,78,29,1,[.93,.66,.31]);
-  dhakaStoreLight.box(-21,28,-1,6,16,2,[.95,.86,.56]);
-  dhakaStoreLight.box(20,28,-1,6,16,2,[.95,.86,.56]);
-  dhakaStoreLight.upload();
-  for(let k=0;k<7;k++)dhakaShutter.box(0,16+k*3.25,-2,83,2.6,2,[.42-k*.01,.46-k*.01,.47-k*.01]);
-  dhakaShutter.box(0,39.5,-2,89,4,4,[.15,.20,.23]);
+  // Narrow rolled-up corrugated shutter housing, entirely above display space.
+  dhakaShutter.box(0,69,0,94,7,5,[.20,.26,.28]);
+  for(let k=0;k<3;k++)dhakaShutter.box(0,64.5+k*2, -2.9,88,1.3,2,
+    [.42-k*.025,.47-k*.025,.48-k*.025]);
+  // Thin storefront guides, not a full-height metal door.
+  for(const side of [-1,1])dhakaShutter.box(side*48,36,-1,2.3,48,3,[.30,.37,.38]);
   dhakaShutter.upload();
+  for(const x of [-28,0,28]){
+    dhakaStoreLight.box(x,59,-3,13,2,4,[1,.87,.58]);
+    dhakaStoreLight.box(x,57.7,-3,7,1.5,4,[1,.96,.73]);
+  }
+  dhakaStoreLight.upload();
+
+  // Readable shop displays behind the existing counters and shopkeepers.
+  // This is decorative geometry only; it has no collision or mission effects.
+  function makeVisibleShopInterior(kind){
+    const m=new Mesh(),wood=[.37,.25,.18],steel=[.24,.31,.34];
+    // Recessed shelves sit behind the original street-facing counter.
+    for(const h of [25,36,47])m.box(0,h,8,87,2.4,10,wood);
+    for(const side of [-1,1])m.box(side*43,37,8,3,38,10,steel);
+    m.box(0,56,8,89,3.5,9,[.24,.30,.31]);
+    const palettes=kind==='stationery'
+      ? [[.88,.32,.26],[.22,.49,.78],[.90,.72,.29],[.26,.68,.52],[.70,.45,.75]]
+      : kind==='food'
+        ? [[.92,.52,.17],[.73,.19,.16],[.97,.76,.31],[.25,.60,.35],[.79,.38,.18]]
+        : [[.36,.65,.70],[.85,.52,.26],[.41,.69,.39],[.86,.42,.46],[.93,.75,.38]];
+    for(let row=0;row<3;row++)for(let col=0;col<9;col++){
+      const x=-36+col*9, y=28+row*11;
+      const color=palettes[(row*2+col)%palettes.length];
+      if(kind==='stationery'){
+        // Upright exercise books, print paper, and notebooks.
+        m.box(x-2,y+2.8,2.1,3.1,8.2,3.3,color);
+        m.box(x+2,y+2.3,2.6,3.3,7.1,3.0,palettes[(row+col+2)%palettes.length]);
+        m.box(x,y-2.2,0.8,7.4,1.0,4,[.85,.86,.75]);
+      }else if(kind==='food'){
+        // Snack bags and small boxed food cartons.
+        m.box(x,y+2.6,2,6.8,7.2,4.5,color);
+        m.box(x,y+5.6,-.6,5.3,1.3,1.1,[.94,.86,.62]);
+        m.box(x,y+.5,-.6,4.5,1.0,1.1,[.23,.29,.25]);
+      }else{
+        m.box(x,y+2.1,2,6,7,4.5,color);
+        m.box(x,y+4.8,-.7,4,1.4,1.1,[.89,.87,.74]);
+      }
+    }
+    return m.upload();
+  }
+  const dhakaShopInteriors=[
+    makeVisibleShopInterior('stationery'),
+    makeVisibleShopInterior('general'),
+    makeVisibleShopInterior('food')
+  ];
   const powerWindowPairs=buildings.map(b=>{
     const m=new Mesh();
     for(let k=0;k<3;k++){
@@ -1520,16 +1567,13 @@
       if(distance(S.x,S.z,w.x,w.z)>980||lightOffAt(w.x,w.z))continue;
       render(w.mesh);
     }
-    for(const [x,z] of dhakaShopFronts){
+    for(let i=0;i<dhakaShopFronts.length;i++){
+      const [x,z]=dhakaShopFronts[i];
       if(distance(S.x,S.z,x,z)>800)continue;
-      const lit=!lightOffAt(x,z);
-      if(lit)render(dhakaStoreLight,model(x,0,z-55));
-      // A rising metal shutter reveals warm interiors after electricity returns.
-      const age=S.time-powerVisual.repairedAt;
-      const justRepaired=powerVisual.repairedIndex===districtForX(x)&&age>=0&&age<3.6;
-      const open=lit?justRepaired?clamp((age-distance(x,z,power[powerVisual.repairedIndex].x,
-        power[powerVisual.repairedIndex].z)/530)*.85,0,1):1:0;
-      render(dhakaShutter,model(x,27*open,z-53));
+      const front=model(x,0,z-55);
+      render(dhakaShopInteriors[i],front);
+      render(dhakaShutter,front); // Always retracted: no obstruction.
+      if(!lightOffAt(x,z))render(dhakaStoreLight,front);
     }
   }
 
