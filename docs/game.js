@@ -434,9 +434,9 @@
     // Each seller stands immediately BEHIND the countertop, elevated just
     // enough for their head and shirt to show over the source-geometry counter.
     // The shutter is fully retracted and the centre of the stall remains empty.
-    {role:'SHOP',x:-367,z:839,colorId:0,phase:.5,personality:'SHOPKEEPER'},
-    {role:'SHOP',x:178,z:839,colorId:2,phase:1.2,personality:'SHOPKEEPER'},
-    {role:'SHOP',x:320,z:669,colorId:5,phase:1.8,personality:'SHOPKEEPER'},
+    {role:'SHOP',x:-367,z:868,y:12,colorId:0,phase:.5,personality:'SHOPKEEPER'},
+    {role:'SHOP',x:178,z:867,y:12,colorId:2,phase:1.2,personality:'SHOPKEEPER'},
+    {role:'SHOP',x:320,z:696,y:12,colorId:5,phase:1.8,personality:'SHOPKEEPER'},
     {role:'ROPE',building:10,colorId:2,phase:2.1,personality:'HELPER'},
   ].map(p=>{
     if(p.building===undefined)return p;
@@ -765,12 +765,11 @@
           if(S.quality==='HIGH')render(waterRipple,model(x,9.7,z-30,0,.42));
         }
       }else if(person.role==='SHOP'){
-        // Source counters are tall opaque cuboids. Place the upper half of the
-        // shopkeeper ABOVE their top, still within the stall, for an obvious
-        // face and apron without the NPC appearing out on the street.
-        const cheer=residentCelebrating(person);
-        render(citizenFrame(cheer?'CELEBRATE':'HOME',person.colorId,
-          clock*(cheer?2.2:.55)+person.phase),model(x,34,z,-90,.86));
+        // Keep the seller grounded at floor height, well BEHIND the solid
+        // counter. Rendering the source depth-tested geometry naturally hides
+        // their lower body, unlike the previous y=34 floating character.
+        render(citizenFrame('HOME',person.colorId,clock*.45+person.phase),
+          model(x,person.y,z,-90,1.16));
       }else{
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.8)+person.phase),
           model(x,16+bob*.6,z,facing,.66));
@@ -1832,7 +1831,9 @@
           limiter=ctx.createDynamicsCompressor();limiter.threshold.value=-14;limiter.knee.value=14;
           limiter.ratio.value=4;limiter.attack.value=.005;limiter.release.value=.18;
           ambient.connect(master);effects.connect(master);voices.connect(master);master.connect(limiter);limiter.connect(ctx.destination);
-          await ctx.resume();
+          // Browser autoplay policies can leave this context suspended until a click.
+          // Don't await resume: preload the clips even when autoplay is blocked.
+          ctx.resume().catch(()=>{});
         }catch(error){console.warn('Majhi audio unavailable:',error);status('Audio unavailable');return false;}
         status('Loading Dhaka audio…');
         const jobs=Object.entries(paths).map(async([name,path])=>{
@@ -2108,7 +2109,7 @@
         <button data-audio-voices type="button">🎤 VOICES ON</button>
         <label>MASTER <input data-audio-volume type="range" min="0" max="100" value="78"></label>
         <label>VOICE <input data-voice-volume type="range" min="0" max="100" value="100"></label>
-        <button data-audio-caption type="button">CC ON</button><span data-audio-status>Click to enable sound</span>`;
+        <button data-audio-caption type="button">CC ON</button><span data-audio-status>Audio ON · loading…</span>`;
       ui.style.cssText='position:fixed;top:7px;left:50%;transform:translateX(-50%);z-index:12500;display:flex;align-items:center;gap:6px;max-width:96vw;padding:7px 10px;border:1px solid #607e8b;border-radius:12px;background:rgba(7,25,34,.92);color:#d2e8df;font:700 10px system-ui;pointer-events:auto';
       const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:6px 8px;font:800 10px system-ui;cursor:pointer}#majhi-dhaka-audio label{display:flex;align-items:center;gap:5px}#majhi-dhaka-audio input{width:66px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{max-width:130px;overflow:hidden;white-space:nowrap;color:#b2d9ce}#majhi-dhaka-subtitle{position:fixed;z-index:12495;bottom:8%;left:50%;transform:translateX(-50%);width:min(620px,78vw);pointer-events:none;background:rgba(5,21,29,.89);border:1px solid #e9c476;border-radius:13px;padding:8px 16px;text-align:center;font:700 15px 'Nirmala UI',system-ui,sans-serif;color:#f8f3da;opacity:0;transition:opacity .18s}#majhi-dhaka-subtitle.mj-voice-show{opacity:1}#majhi-dhaka-subtitle [data-voice-who]{font:800 10px system-ui;color:#efce79;letter-spacing:.09em;margin-bottom:4px}@media(max-width:950px){#majhi-dhaka-audio{top:auto!important;bottom:8px;padding:5px 6px;font-size:8px}#majhi-dhaka-audio button{font-size:9px;padding:5px}#majhi-dhaka-audio input{width:43px}#majhi-dhaka-audio [data-audio-status]{display:none}#majhi-dhaka-subtitle{bottom:16%;font-size:12px}}`;
       document.head.appendChild(style);document.body.appendChild(ui);
@@ -2120,6 +2121,7 @@
       ui.querySelector('[data-voice-volume]').oninput=e=>{voiceUserVolume=Number(e.target.value)/100;updateMix();};
     }
     function menuBegin(){
+      ctx?.resume().catch(()=>{});
       if(S.mode!=='MENU'||started)return;
       started=true;init().then(ok=>{
         if(!ok||S.mode!=='MENU')return;
@@ -2127,7 +2129,7 @@
         if(!menuCalled){menuCalled=true;window.setTimeout(()=>{if(S.mode==='MENU')voice('menu_majhi_call',S.x,S.z,.82,{ignoreDistance:true,priority:2,force:true});},5200);}
       });
     }
-    function begin(){started=true;initUI();init().then(()=>ctx?.resume());
+    function begin(){started=true;initUI();init();ctx?.resume().catch(()=>{});
       clock=0;peopleAt=8;bellAt=7;hornAt=6;thunderAt=26;paddleAt=0;
       lastZone='';lastAiRescues=0;lastCampusHeaven=false;quarrelsSeen.clear();
       cancelSequence();lastConversationAt=-999;conversationCursor=0;
@@ -2207,6 +2209,7 @@
       if(S.time>thunderAt){if(campusRainWeight(S.x,S.z)>.3)play('thunder',{ignoreDistance:true,volume:.65});thunderAt=S.time+31+Math.random()*23;}
     }
     return {initUI,menuBegin,begin,update,play,voice,speakPassenger,startGate,showReward,exitScare,
+      prepare:()=>init(),unlock:()=>ctx?.resume().catch(()=>{}),
       repair(){play('power_restore',{ignoreDistance:true,volume:.8});},
       impact(power){play('impact_'+(1+(Math.floor(S.time*3)%2)),{ignoreDistance:true,volume:.75*power});},
       getState(){return {started,ready,on,voices:speech,captions:captionsOn,
@@ -2573,36 +2576,36 @@
   let mapView='ALL'; // Always show all accepted passengers by default.
   // A player-and-destination zoom. The old map squeezed 3300 world units into
   // 240 pixels, making the pickup pin almost impossible to distinguish.
-  function currentNavTarget(){
-    if(seated().length)return {x:0,z:1080,kind:'BRACU',name:'BRACU DOCK'};
+  function nextWaitingPickup(){
     const waiting=S.rides.filter(r=>r.state==='WAITING');
     waiting.sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z));
     if(waiting.length){const r=waiting[0];return {x:r.x,z:r.z,kind:'PICKUP',name:r.name,ride:r};}
     if(S.request)return {x:S.request.x,z:S.request.z,kind:'OFFER',name:S.request.name};
     return null;
   }
+  function currentNavTarget(){
+    // Keep BRACU as the tutorial's delivery objective, but the minimap now
+    // ALSO draws the pickup route in gold when someone is already on board.
+    if(seated().length)return {x:0,z:1080,kind:'BRACU',name:'BRACU DOCK'};
+    return nextWaitingPickup();
+  }
   function refreshMap(){
-    const w=map.width,h=map.height,nav=currentNavTarget();
-    const waiting=S.rides.filter(r=>r.state==='WAITING').slice()
-      .sort((a,b)=>a.timeLeft-b.timeLeft);
+    const w=map.width,h=map.height,hasOnboard=seated().length>0;
+    const pickup=nextWaitingPickup();
+    const drop=hasOnboard?{x:0,z:1080,kind:'BRACU',name:'BRACU DOCK'}:null;
+    const waiting=S.rides.filter(r=>r.state==='WAITING').slice().sort((a,b)=>a.timeLeft-b.timeLeft);
     const locations=[{x:S.x,z:S.z}];
-    if(nav)locations.push(nav);
-    // ALL mode frames every accepted passenger (and the next offered ride),
-    // even when the closest active pickup is much nearer than the rest.
+    if(pickup)locations.push(pickup);
+    if(drop)locations.push(drop);
+    // Overview shows EVERY accepted waiting passenger, even with riders aboard.
     if(mapView==='ALL'){
       locations.push(...waiting);
       if(S.request)locations.push(S.request);
-      // BRACU is retained as the constant landmark if it fits without making
-      // the route markers illegible. Once a passenger boards, it is the target.
-      if(seated().length || waiting.length===0)locations.push({x:0,z:1080});
+      if(!drop && waiting.length===0)locations.push({x:0,z:1080});
     }
     let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
-    for(const p of locations){
-      minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);
-      minZ=Math.min(minZ,p.z);maxZ=Math.max(maxZ,p.z);
-    }
-    const extra=mapView==='ALL' && waiting.length>1?1.27:1.37;
-    const span=clamp(Math.max(maxX-minX,maxZ-minZ)*extra+100,mapView==='ALL'?950:570,4800);
+    for(const p of locations){minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minZ=Math.min(minZ,p.z);maxZ=Math.max(maxZ,p.z);}
+    const span=clamp(Math.max(maxX-minX,maxZ-minZ)*(mapView==='ALL'&&waiting.length>1?1.28:1.36)+125,mapView==='ALL'?950:570,4800);
     const cx=(maxX+minX)*.5,cz=(maxZ+minZ)*.5;
     const scale=(Math.min(w,h)-34)/span;
     const px=x=>w*.5+(x-cx)*scale,py=z=>h*.5-(z-cz)*scale;
@@ -2610,65 +2613,58 @@
     ctx.fillStyle='#0a2633';ctx.fillRect(0,0,w,h);
     ctx.save();ctx.beginPath();ctx.rect(1,1,w-2,h-2);ctx.clip();
     ctx.strokeStyle='#335362';ctx.lineWidth=Math.max(1.5,9*scale);
-    for(const x of [-1100,-550,0,550,1100]){
-      ctx.beginPath();ctx.moveTo(px(x),-10);ctx.lineTo(px(x),h+10);ctx.stroke();
-    }
-    for(const z of [-1150,-600,-50,500,1050]){
-      ctx.beginPath();ctx.moveTo(-10,py(z));ctx.lineTo(w+10,py(z));ctx.stroke();
-    }
+    for(const x of [-1100,-550,0,550,1100]){ctx.beginPath();ctx.moveTo(px(x),-10);ctx.lineTo(px(x),h+10);ctx.stroke();}
+    for(const z of [-1150,-600,-50,500,1050]){ctx.beginPath();ctx.moveTo(-10,py(z));ctx.lineTo(w+10,py(z));ctx.stroke();}
     ctx.fillStyle='#50616b';
-    for(const b of buildings){
-      const x=px(b.x-b.hw),y=py(b.z+b.hd),bw=2*b.hw*scale,bh=2*b.hd*scale;
-      if(x+bw>=0&&x<=w&&y+bh>=0&&y<=h)ctx.fillRect(x,y,bw,bh);
-    }
+    for(const b of buildings){const x=px(b.x-b.hw),y=py(b.z+b.hd),bw=2*b.hw*scale,bh=2*b.hd*scale;
+      if(x+bw>=0&&x<=w&&y+bh>=0&&y<=h)ctx.fillRect(x,y,bw,bh);}
     ctx.fillStyle='#4a815c';ctx.fillRect(px(-220),py(1620),490*scale,390*scale);
-    // GOLD route leads to the selected pickup; GREEN means BRACU drop-off.
-    if(nav){
-      const fromX=px(S.x),fromY=py(S.z),toX=px(nav.x),toY=py(nav.z);
-      ctx.beginPath();ctx.moveTo(fromX,fromY);ctx.lineTo(toX,toY);
-      ctx.strokeStyle='rgba(1,13,18,.88)';ctx.lineWidth=8;ctx.stroke();
+    // Draw the GREEN drop-off first, then the GOLD pickup above it, so both
+    // are simultaneously visible even when somebody is already onboard.
+    function route(target,color){
+      if(!target)return;
+      const a=px(S.x),b=py(S.z),c=px(target.x),d=py(target.z);
+      ctx.beginPath();ctx.moveTo(a,b);ctx.lineTo(c,d);
+      ctx.strokeStyle='#051a20';ctx.lineWidth=8;ctx.stroke();
       ctx.setLineDash([7,5]);ctx.lineDashOffset=-(S.time*12)%12;
-      ctx.strokeStyle=nav.kind==='BRACU'?'#96f5ac':'#ffca65';ctx.lineWidth=4.7;ctx.stroke();
+      ctx.strokeStyle=color;ctx.lineWidth=4.6;ctx.stroke();
       ctx.setLineDash([]);ctx.lineDashOffset=0;
     }
+    route(drop,'#8cf5ab');
+    route(pickup,pickup?.kind==='OFFER'?'#d6a8f8':'#ffca65');
     function pin(x,z,color,label,size=7){
       const X=px(x),Y=py(z);
       if(X<-16||X>w+16||Y<-16||Y>h+16)return;
       ctx.beginPath();ctx.arc(X,Y,size+2,0,TAU);ctx.fillStyle='#06212a';ctx.fill();
       ctx.beginPath();ctx.arc(X,Y,size,0,TAU);ctx.fillStyle=color;ctx.fill();
       ctx.strokeStyle='#ffffff';ctx.lineWidth=1.4;ctx.stroke();
-      if(label){ctx.font='900 11px system-ui,sans-serif';ctx.textAlign='center';
-        ctx.textBaseline='middle';ctx.fillStyle='#061b25';ctx.fillText(label,X,Y+.5);}
+      if(label){ctx.font='900 11px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#061b25';ctx.fillText(label,X,Y+.5);}
     }
-    // Every accepted waiting passenger gets a numbered CYAN marker (ordered
-    // by deadline). The bright gold ring/label only marks the current route.
+    // Numbered cyan dots identify all unselected passengers in overview.
     for(let i=0;i<waiting.length;i++){
-      const r=waiting[i];if(r===nav?.ride)continue;
+      const r=waiting[i];if(r===pickup?.ride)continue;
       pin(r.x,r.z,'#64ddeb',String(i+1),7.7);
     }
-    // Request not yet accepted is visible as a tentative purple marker.
-    if(S.request && nav?.kind!=='OFFER')pin(S.request.x,S.request.z,'#d6a8f8','?',7.7);
+    if(S.request&&pickup?.kind!=='OFFER')pin(S.request.x,S.request.z,'#d6a8f8','?',7.7);
     if(S.powerOff&&Math.abs(px(power[S.powerIndex].x))<w&&Math.abs(py(power[S.powerIndex].z))<h)
       pin(power[S.powerIndex].x,power[S.powerIndex].z,'#d6b87b','+',5.2);
-    if(nav?.kind!=='BRACU'&&px(0)>=0&&px(0)<=w&&py(1080)>=0&&py(1080)<=h)
-      pin(0,1080,'#96e7a6','B',5.5);
-    if(!S.photo&&px(825)>=0&&px(825)<=w&&py(1080)>=0&&py(1080)<=h)
-      pin(825,1080,'#c9b0f6','★',5.0);
-    if(nav){
-      const X=px(nav.x),Y=py(nav.z),pulse=15+2*Math.sin(S.time*5);
-      ctx.beginPath();ctx.arc(X,Y,pulse,0,TAU);ctx.strokeStyle=nav.kind==='BRACU'?'#a5f7ad':'#ffcd6d';ctx.lineWidth=2.7;ctx.stroke();
-      const activeNumber=nav.ride?String(waiting.indexOf(nav.ride)+1):nav.kind==='BRACU'?'B':'!';
-      pin(nav.x,nav.z,nav.kind==='BRACU'?'#8ef4a9':'#ff9c52',activeNumber,10.5);
-      const label=nav.kind==='BRACU'?'BRACU DROP-OFF':nav.kind==='OFFER'?'PRESS Y TO ACCEPT':'PICKUP HERE';
-      ctx.font='800 11px system-ui,sans-serif';ctx.textAlign='center';
-      const badgeW=Math.min(w-8,ctx.measureText(label).width+20);
-      const labelX=clamp(X,4+badgeW/2,w-4-badgeW/2),labelY=Y>45?Y-30:Y+32;
-      ctx.fillStyle='rgba(1,22,30,.96)';ctx.beginPath();
-      ctx.roundRect(labelX-badgeW/2,labelY-10,badgeW,21,5);ctx.fill();
-      ctx.strokeStyle=nav.kind==='BRACU'?'#8df0a6':'#ffcc66';ctx.lineWidth=1.1;ctx.stroke();
+    if(!drop&&px(0)>=0&&px(0)<=w&&py(1080)>=0&&py(1080)<=h)pin(0,1080,'#96e7a6','B',5.5);
+    if(!S.photo&&px(825)>=0&&px(825)<=w&&py(1080)>=0&&py(1080)<=h)pin(825,1080,'#c9b0f6','★',5.0);
+    function highlight(target,color,label,char,offsetY){
+      if(!target)return;
+      const X=px(target.x),Y=py(target.z),pulse=15+2*Math.sin(S.time*5);
+      ctx.beginPath();ctx.arc(X,Y,pulse,0,TAU);ctx.strokeStyle=color;ctx.lineWidth=2.7;ctx.stroke();
+      pin(target.x,target.z,color,char,10.5);
+      ctx.font='800 10px system-ui,sans-serif';ctx.textAlign='center';
+      const badgeW=Math.min(w-8,ctx.measureText(label).width+17);
+      const labelX=clamp(X,4+badgeW/2,w-4-badgeW/2);
+      const labelY=clamp(Y+offsetY,12,h-12);
+      ctx.fillStyle='rgba(1,22,30,.95)';ctx.beginPath();ctx.roundRect(labelX-badgeW/2,labelY-10,badgeW,20,5);ctx.fill();
+      ctx.strokeStyle=color;ctx.lineWidth=1.1;ctx.stroke();
       ctx.fillStyle='#fff7e1';ctx.textBaseline='middle';ctx.fillText(label,labelX,labelY+.5);
     }
-    // Player remains high-contrast, including when the map is fully zoomed out.
+    if(drop)highlight(drop,'#8cf4a8','BRACU DROP-OFF','B',py(drop.z)>h*.4?28:-28);
+    if(pickup)highlight(pickup,pickup.kind==='OFFER'?'#d6a8f8':'#ffca65',pickup.kind==='OFFER'?'PRESS Y TO ACCEPT':'NEXT PICKUP',pickup.ride?String(waiting.indexOf(pickup.ride)+1):'!',py(pickup.z)>h*.4?-30:30);
     const a=S.angle*RAD;
     ctx.save();ctx.translate(px(S.x),py(S.z));ctx.rotate(-a+Math.PI/2);
     ctx.beginPath();ctx.moveTo(0,-15);ctx.lineTo(-10,11);ctx.lineTo(0,6);ctx.lineTo(10,11);ctx.closePath();
@@ -2676,21 +2672,22 @@
     ctx.restore();ctx.restore();
     ctx.font='bold 10px system-ui,sans-serif';ctx.textAlign='left';ctx.textBaseline='top';
     ctx.fillStyle='rgba(6,25,34,.9)';ctx.fillRect(5,5,100,20);
-    ctx.fillStyle='#dcf5e6';ctx.fillText(mapView==='ALL'?`ALL PICKUPS · ${waiting.length}`:'FOCUS ROUTE',10,10);
+    ctx.fillStyle='#dcf5e6';ctx.fillText(mapView==='ALL'?`ALL PICKUPS · ${waiting.length}`:'FOCUS ROUTES',10,10);
     ctx.fillStyle='rgba(6,25,34,.9)';ctx.fillRect(w-32,5,27,21);
     ctx.fillStyle='#e8f7ef';ctx.textAlign='center';ctx.fillText('N ↑',w-18,10);
     const info=$('majhi-map-target');
     if(info){
-      if(nav){
-        const dist=Math.round(distance(S.x,S.z,nav.x,nav.z));
-        const dx=nav.x-S.x,dz=nav.z-S.z;
-        const cardinal=Math.abs(dx)>Math.abs(dz)?(dx>0?'EAST':'WEST'):(dz>0?'NORTH':'SOUTH');
-        info.textContent=`${nav.kind==='BRACU'?'🏫 BRACU':nav.kind==='OFFER'?'⌨ ACCEPT FIRST':'🟠 NEXT PICKUP'} · ${dist} units · ${cardinal}`;
-        info.style.color=nav.kind==='BRACU'?'#b6f7c3':'#ffd891';
-      }else{info.textContent='Waiting for another rescue request…';info.style.color='#b5d2d4';}
+      const d=target=>Math.round(distance(S.x,S.z,target.x,target.z));
+      if(drop&&pickup){
+        info.textContent=`🟡 PICKUP ${d(pickup)} · 🟢 BRACU ${d(drop)} units`;
+        info.style.color='#f9e2ac';
+      }else if(drop){info.textContent=`🟢 BRACU DROP-OFF · ${d(drop)} units`;info.style.color='#b6f7c3';}
+      else if(pickup){info.textContent=`${pickup.kind==='OFFER'?'⌨ ACCEPT FIRST':'🟡 NEXT PICKUP'} · ${d(pickup)} units`;info.style.color='#ffd891';}
+      else {info.textContent='Waiting for another rescue request…';info.style.color='#b5d2d4';}
     }
     const count=$('majhi-map-count');if(count){
-      count.textContent=waiting.length?`${waiting.length} waiting passenger${waiting.length!==1?'s':''} • numbered by urgency`:'Gold line: next objective • Cyan: other passengers';
+      const waitingCount=`${waiting.length} waiting · numbered by urgency`;
+      count.textContent=drop?'🟢 Green = BRACU · 🟡 Gold = next pickup · '+waitingCount:waitingCount;
     }
   }
 
@@ -2738,7 +2735,7 @@
     const nav=currentNavTarget();
     if(seated().length){
       title='STEP 4 / 4 · DELIVER TO BRACU';
-      detail='Passenger is aboard! Follow the GREEN route to BRACU and approach the yellow dock ring. Delivery is automatic.';
+      detail=nextWaitingPickup()?'Passenger aboard: GREEN line = BRACU drop-off; GOLD line = next passenger. Both stay visible. Deliver before the countdown ends.':'Passenger aboard! Follow the GREEN route to the BRACU dock. Delivery is automatic.';
     }else if(!nav||nav.kind==='OFFER'){
       title='STEP 1 / 4 · ACCEPT A PASSENGER';
       detail=nav?'Press Y (or click ACCEPT at the top right) to accept this rescue request.':'A new rescue request will appear shortly. Press Y to accept it.';
@@ -2792,7 +2789,7 @@
     $('request-panel').classList.toggle('hidden',!S.request);
     if(S.request){$('request-name').textContent=S.request.name;$('request-location').textContent=`${S.request.type==='HOME'?'🏠 Home pickup':'🛟 SOS rescue'} · ${S.request.pickup}`;$('request-remaining').textContent=`${Math.ceil(S.requestLeft)}s`;}
     const waiting=S.rides.filter(r=>r.state==='WAITING'),onboard=seated();const nearest=waiting.sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
-    if(onboard.length){const soonest=Math.min(...onboard.map(r=>r.timeLeft));$('objective-title').textContent=`${onboard.length} PASSENGER${onboard.length===1?'':'S'} ONBOARD · ${formatTime(soonest)} LEFT`;$('objective-detail').textContent=`Deliver to BRACU · ${Math.round(distance(S.x,S.z,0,1080))} units · Nearest deadline ${formatTime(soonest)}`;}
+    if(onboard.length){const soonest=Math.min(...onboard.map(r=>r.timeLeft));$('objective-title').textContent=`${onboard.length} PASSENGER${onboard.length===1?'':'S'} ONBOARD · ${formatTime(soonest)} LEFT`;$('objective-detail').textContent=`GREEN: BRACU ${Math.round(distance(S.x,S.z,0,1080))}u · ${nearest?'GOLD: '+nearest.name+' '+Math.round(distance(S.x,S.z,nearest.x,nearest.z))+'u · ':''}Deadline ${formatTime(soonest)}`;}
     else if(nearest){$('objective-title').textContent=`PICK UP ${nearest.name.toUpperCase()} · ${formatTime(nearest.timeLeft)} LEFT`;$('objective-detail').textContent=`${nearest.pickup} · ${Math.round(distance(S.x,S.z,nearest.x,nearest.z))} units`;}
     else{$('objective-title').textContent=S.request?'PRESS Y TO ACCEPT THE REQUEST':'AWAIT NEXT RESCUE REQUEST';$('objective-detail').textContent=S.request?`Then follow the golden map route to ${S.request.pickup}`:'Your next passenger will appear shortly';}
     if(S.current){$('objective-title').textContent+=` · ${S.current}`;}
@@ -3559,7 +3556,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity17-80-voices-paired-dialogue-shop-people-multimap-v3';
+  window.majhiVersion='fidelity18-grounded-shopkeepers-dual-route-map-audio-ready-v4';
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
@@ -3567,7 +3564,7 @@
     rickshawQuarrels:(S.rickshawQuarrels||[]).length,
     dhakaCatVertices:dhakaCat.length,dhakaLaptopVertices:dhakaLaptop.length,dhakaRickshawVertices:parkedDhakaModels.rickshaw.length,dhakaCNGVertices:parkedDhakaModels.cng.length,
     balconyCitizens:S.cityPeople.filter(p=>p.role==='BALCONY').length,
-    shopCitizens:S.cityPeople.filter(p=>p.role==='SHOP').length,
+    shopCitizens:S.cityPeople.filter(p=>p.role==='SHOP').length,shopkeepers:S.cityPeople.filter(p=>p.role==='SHOP').map(p=>({x:p.x,y:p.y,z:p.z})),
     ropeCitizens:S.cityPeople.filter(p=>p.role==='ROPE').length,
     poweredWindowGroups:powerWindowPairs.length,swimmers:S.cityPeople.filter(p=>p.role==='SWIM').length,aiRescueBoats:S.aiBoats.map(b=>({name:b.name,x:b.x,z:b.z,targetId:b.targetId,deliveries:b.deliveries})),aiRescued:S.aiRescueCount,respawnPending:S.aiRespawnQueue.length,updatedStreetLamps:streetlights.length,trafficSignalHousingVertices:modernTrafficBody.length,exitGlareInstalled:!!document.getElementById('majhi-exit-flashlight-glare'),impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
@@ -3616,10 +3613,13 @@
   }
   installExitFlashlightGlare();
   gameAudio.initUI();
-  // Browser audio is unlocked by a real gesture; no autoplay bypass.
-  const enableMenuAudio=()=>{if(S.mode==='MENU')gameAudio.menuBegin();};
-  document.addEventListener('pointerdown',enableMenuAudio,{passive:true});
-  document.addEventListener('keydown',enableMenuAudio);
+  // Preload audio without requiring a separate sound toggle. All sound and
+  // voices default ON. Browsers may require the first genuine click/keypress
+  // before audible playback; Start Rescue itself counts as that gesture.
+  gameAudio.prepare();
+  const enableMenuAudio=()=>{gameAudio.unlock();if(S.mode==='MENU')gameAudio.menuBegin();};
+  document.addEventListener('pointerdown',enableMenuAudio,{passive:true,capture:true});
+  document.addEventListener('keydown',enableMenuAudio,{capture:true});
   $('play-button').onclick=reset;
   $('help-button').onclick=()=>nextModal('HELP');
   $('camera-button').onclick=()=>action('c');$('pause-button').onclick=togglePause;
