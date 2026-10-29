@@ -1572,56 +1572,73 @@
   }
   const S={cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0};
 
-  // Identity-first passenger casting. A named passenger NEVER borrows someone
-  // else's recording. Unrecorded students get subtitles instead of miscast audio.
-  // Additional voices can be added to this roster when their recordings exist.
+  // Each named student owns one voice identity from request -> boarding -> boat -> campus gate.
+  // Never put "chat_*" in random chatter: chat clips are only used as fully
+  // paired, sequential exchanges with their actual partner aboard.
   const PASSENGER_VOICE_CAST=Object.freeze({
     Adittya:Object.freeze({
-      waiting:['student_adittya_solo_01','student_adittya_01','student_adittya_03'],
-      boarding:['student_adittya_03','student_adittya_solo_02','student_adittya_01'],
-      onboard:['student_adittya_solo_02','student_adittya_01','student_adittya_03'],
-      withCompany:['student_adittya_02','student_adittya_chat_01','student_adittya_chat_02'],
-      urgent:['student_adittya_03'],
-      // Only use an existing line in the missing-ID scene if it actually
-      // concerns the flood and university; never borrow another person's voice.
-      gateReaction:'student_adittya_03'
+      waiting:['student_adittya_01','student_adittya_03'],
+      boarding:['student_adittya_solo_02','student_adittya_03'],
+      onboard:['student_adittya_solo_01','student_adittya_solo_02','student_adittya_01','student_adittya_03'],
+      chatterWeight:1
+    }),
+    Usaeed:Object.freeze({
+      waiting:['student_usaeed_solo_01','student_usaeed_solo_02'],
+      boarding:['student_usaeed_solo_01'],
+      onboard:['student_usaeed_solo_02','student_usaeed_solo_01'],
+      chatterWeight:.95
     }),
     Nafisa:Object.freeze({
-      waiting:['student_nafisa_solo_01','student_nafisa_01','student_nafisa_02'],
-      boarding:['student_nafisa_01','student_nafisa_solo_02','student_nafisa_02'],
-      onboard:['student_nafisa_solo_02','student_nafisa_02','student_nafisa_01'],
-      withCompany:['student_nafisa_03','student_nafisa_chat_01','student_nafisa_chat_02'],
-      urgent:['student_nafisa_01'],
-      gateReaction:'student_nafisa_01'
+      waiting:['student_nafisa_01'],boarding:['student_nafisa_02'],
+      onboard:['student_nafisa_01','student_nafisa_02'],
+      chatterWeight:.32
+    }),
+    Sujail:Object.freeze({
+      waiting:[],boarding:['student_sujail_solo_01'],
+      onboard:['student_sujail_solo_02','student_sujail_solo_01'],
+      chatterWeight:.78
+    }),
+    Kazmi:Object.freeze({
+      waiting:[],boarding:['student_kazmi_solo_01'],
+      onboard:['student_kazmi_solo_02','student_kazmi_solo_01'],
+      chatterWeight:1
+    }),
+    Safin:Object.freeze({
+      waiting:['student_safin_solo_02'],boarding:['student_safin_solo_01'],
+      onboard:['student_safin_solo_02','student_safin_solo_01'],
+      chatterWeight:.9
     }),
     Shamim:Object.freeze({waiting:['civilian_shamim_01'],boarding:['civilian_shamim_03'],
-      onboard:['civilian_shamim_03'],urgent:['civilian_shamim_02']}),
+      onboard:[],urgent:['civilian_shamim_02'],chatterWeight:.9}),
     Mitu:Object.freeze({waiting:['civilian_mitu_01'],boarding:['civilian_mitu_03'],
-      onboard:['civilian_mitu_03'],urgent:['civilian_mitu_02']})
+      onboard:[],urgent:['civilian_mitu_02'],chatterWeight:.9})
   });
+  // Questions have a corresponding recorded answer. These clips must be kept
+  // together, played in order, and used only when both people are ONBOARD.
+  const PASSENGER_CONVERSATIONS=Object.freeze([
+    {id:'connect',speakers:['Adittya','Nafisa'],clips:['student_adittya_chat_01','student_nafisa_chat_01']},
+    {id:'assignment',speakers:['Adittya','Nafisa'],clips:['student_adittya_chat_02','student_nafisa_chat_02']},
+    {id:'deadline',speakers:['Usaeed','Sujail'],clips:['student_usaeed_chat_01','student_sujail_chat_01']},
+    {id:'wake-up',speakers:['Sujail','Kazmi'],clips:['student_sujail_chat_02','student_kazmi_chat_01']},
+    {id:'travel-math',speakers:['Usaeed','Safin'],clips:['student_usaeed_chat_02','student_safin_chat_01']},
+    {id:'quiz-math',speakers:['Kazmi','Safin'],clips:['student_kazmi_chat_02','student_safin_chat_02']}
+  ]);
   const passengerCast=name=>Object.prototype.hasOwnProperty.call(PASSENGER_VOICE_CAST,name)?name:null;
-  // A question addressed to a fellow student is never performed when the
-  // speaker is the only passenger. Recordings are consumed at most once per
-  // rescue; when all appropriate lines are used, the character stays quiet.
-  function passengerDialogueCandidates(person,event,party=0){
+  function passengerDialogueCandidates(person,event){
     const profile=PASSENGER_VOICE_CAST[person?.voiceCharacter];
     if(!profile)return [];
     if(event==='waiting')return person.timeLeft<22&&profile.urgent?
       [...profile.urgent,...(profile.waiting||[])]:[...(profile.waiting||[])];
     if(event==='boarding')return [...(profile.boarding||[])];
-    if(event==='onboard'){
-      const out=person.timeLeft<22&&profile.urgent?[...profile.urgent]:[];
-      if(party>=2)out.push(...(profile.withCompany||[]));
-      out.push(...(profile.onboard||[]));
-      return out;
-    }
+    if(event==='onboard')return [...(profile.onboard||[])];
     return [];
   }
   function passengerClip(person,event,party=0,available=()=>true){
     if(!person)return null;
-    const candidates=[...new Set(passengerDialogueCandidates(person,event,party))];
-    const history=person.voicePlayed||{};
-    return candidates.find(clip=>!history[clip]&&available(clip))||null;
+    const candidates=[...new Set(passengerDialogueCandidates(person,event))]
+      .filter(clip=>!person.voicePlayed?.[clip]&&available(clip));
+    // Variety without repetition: a line can only be used once for a passenger.
+    return candidates.length?candidates[Math.floor(Math.random()*candidates.length)]:null;
   }
   const markPassengerClip=(person,clip)=>{
     if(!person||!clip)return;
@@ -1667,26 +1684,53 @@
       shopkeeper_kuddus_01:['KUDDUS CHACHA','চা খাবেন? দোকান ডুইবা গেছে, কিন্তু কেটলি এখনো গরম!'],
       shopkeeper_kuddus_02:['KUDDUS CHACHA','রাস্তা নদী হইয়া গেছে, কিন্তু বাকির খাতা শুকনা আছে!'],
       shopkeeper_kuddus_03:['KUDDUS CHACHA','ওই রিকশাওয়ালা! আমার দোকানের সামনে রেস লাগাইছেন কেন?'],
-      // OPTIONAL conversational expansion. Solo lines address the player/the
-      // city; chat lines require another student aboard, never an empty seat.
-      student_adittya_solo_01:['ADITTYA','ভাই, ডেডলাইন আজ রাত বারোটা! এই বৃষ্টির মধ্যেও অ্যাসাইনমেন্ট জমা দিতে হবে!'],
-      student_adittya_solo_02:['ADITTYA','মোবাইলের নেটওয়ার্ক গেল! এখন কোড পুশ করব কীভাবে?'],
-      student_adittya_chat_01:['ADITTYA','এই, তুই কোন সেমিস্টারে? আমার তো শেষই হচ্ছে না!'],
-      student_adittya_chat_02:['ADITTYA','কুইজের জন্য পড়ছিস? নাকি নৌকায় বসে রিভিশন দিচ্ছিস?'],
-      student_nafisa_solo_01:['NAFISA','এই বৃষ্টিতে স্লাইড বানাব কীভাবে? আগে ল্যাপটপটা বাঁচাই!'],
-      student_nafisa_solo_02:['NAFISA','রিকশা পেলাম না, এখন ক্লাসে যেতে নৌকা ধরতে হচ্ছে!'],
-      student_nafisa_chat_01:['NAFISA','তোর প্রেজেন্টেশনের স্লাইড রেডি? আমারটা এখনো শেষ হয়নি!'],
-      student_nafisa_chat_02:['NAFISA','তুই রেজিস্ট্রারকে মেইল দিছিস? আমার তো এখনো রিপ্লাই আসেনি!'],
-      // OPTIONAL: Add these extra recordings later with the same Adittya / Nafisa
-      // voice used above. Until then, the security exchange shows timed captions.
-      student_adittya_id_01:['ADITTYA','আঙ্কেল, আইডিটা বাসায় রয়ে গেছে! এত পানি পার হয়ে আসছি, আজকে একটু ঢুকতে দেন!'],
-      student_adittya_id_02:['ADITTYA','প্লিজ আঙ্কেল! আজকে অ্যাটেনডেন্স মিস করলে শেষ! একটু ছাড় দেন না!'],
-      student_adittya_id_03:['ADITTYA','পুরা ঢাকা ডুইবা গেছে, আমি নৌকায় আসছি! আর আপনি আইডি কার্ড নিয়া বসে আছেন?!'],
-      student_nafisa_id_01:['NAFISA','আঙ্কেল, আইডি কার্ডটা আজকে আনতে ভুলে গেছি! প্লিজ একবার ঢুকতে দেন!'],
-      student_nafisa_id_02:['NAFISA','আঙ্কেল, আজকে আমার প্রেজেন্টেশন! অ্যাটেনডেন্সও মিস হবে, একটু বুঝেন!'],
-      student_nafisa_id_03:['NAFISA','এত পানি পেরিয়ে আসলাম, তারপরেও আইডির জন্য ঢুকতে দিবেন না?!'],
-      student_adittya_gate_pass:['ADITTYA','ধন্যবাদ আঙ্কেল! তাহলে তাড়াতাড়ি ক্লাসে যাই!'],
-      student_nafisa_gate_pass:['NAFISA','থ্যাংক ইউ আঙ্কেল! প্রেজেন্টেশনে দেরি হয়ে যাবে!'],
+      // Transcripts for all 46 additional user-recorded student lines.
+      student_adittya_solo_01:["ADITTYA","ল্যাপটপটা ঠিকঠাক আছে তো? এই পানিতে নষ্ট হইলে আমার পুরা সেমিস্টার শেষ!"],
+      student_adittya_solo_02:["ADITTYA","আজকে রিকশার বদলে নৌকা! কালকে কি ক্যাম্পাসে যাইতে সাবমেরিন লাগবে?"],
+      student_adittya_chat_01:["ADITTYA","তোর আজকে কোন সেকশনে ক্লাস? কানেক্টে রুটিন দেখলাম, কিন্তু নৌকা কোন রুটে যাবে সেটা তো লেখা নাই!"],
+      student_adittya_chat_02:["ADITTYA","তুই অ্যাসাইনমেন্ট সাবমিট করছিস তো? এই বন্যার মধ্যেও ডেডলাইন কিন্তু ঠিকই আছে!"],
+      student_adittya_id_01:["ADITTYA","আঙ্কেল, এক মিনিট... আইডি কার্ডটা তো ব্যাগে নাই! বাসায় রেখে আসছি!"],
+      student_adittya_id_02:["ADITTYA","আঙ্কেল, ফোনে আমার আইডি কার্ডের ছবি আছে! একবার দেখেন না, প্লিজ! আজকের ক্লাসটা মিস হয়ে যাবে!"],
+      student_adittya_id_03:["ADITTYA","আঙ্কেল, পুরা ঢাকা ডুইবা গেছে! আমি নৌকায় কইরা আসছি! আর একটা কার্ডের জন্য ক্লাসে ঢুকতে পারব না? এটা কেমন কথা!"],
+      student_adittya_gate_pass:["ADITTYA","থ্যাংক ইউ, আঙ্কেল! এত পানি পার হয়ে আইডিটা শেষ পর্যন্ত কাজে লাগল!"],
+      student_nafisa_chat_01:["NAFISA","সেকশন থ্রি। আর নৌকার রুট মাঝি ভাই জানে!"],
+      student_nafisa_chat_02:["NAFISA","হ্যাঁ, কাল রাতেই সাবমিট করছি। বন্যাও ডেডলাইন থামাইতে পারল না!"],
+      student_nafisa_id_01:["NAFISA","আঙ্কেল, আইডি কার্ডটা নাই! মনে হয় নৌকায় ওঠার সময় পানিতে পড়ে গেছে!"],
+      student_nafisa_id_02:["NAFISA","আঙ্কেল, ফোনে আইডির ছবি আছে! আসল আইডিটা হয়তো এখন মাছের কাছে!"],
+      student_nafisa_id_03:["NAFISA","আঙ্কেল, পুরা ঢাকা ডুবছে, আমার আইডিও ডুবছে! আমি তো ঠিকই হাজির! এখনো ঢুকতে দিবেন না?"],
+      student_nafisa_gate_pass:["NAFISA","থ্যাংক ইউ, আঙ্কেল! এবার ক্লাসে যাই!"],
+      student_usaeed_id_01:["USAEED","আঙ্কেল, চার্জার, পাওয়ার ব্যাংক, ল্যাপটপ—সব চেক করছি! আইডি কার্ডটাই চেকলিস্টে লিখতে ভুলে গেছি!"],
+      student_usaeed_id_02:["USAEED","আঙ্কেল, কানেক্টে আমার স্টুডেন্ট প্রোফাইল আছে! ওখানে দেখে একবার ঢুকতে দেন না?"],
+      student_usaeed_id_03:["USAEED","পুরা ঢাকা নদী হইয়া গেছে! এত প্ল্যান করলাম, আর শেষমেশ একটা কার্ডের জন্য সব শেষ?!"],
+      student_usaeed_solo_01:["USAEED","ল্যাপটপ আছে, অ্যাসাইনমেন্ট আছে, রুটিনও চেক করছি। এখন শুধু নৌকাটা টাইমমতো পৌঁছালেই হয়!"],
+      student_usaeed_solo_02:["USAEED","কানেক্টে ক্লাসের রুম নম্বর আছে, কিন্তু এই বন্যায় কোন রাস্তা দিয়ে ক্যাম্পাসে ঢুকব?"],
+      student_usaeed_chat_01:["USAEED","সুজাইল, অ্যাসাইনমেন্টটা সাবমিট করছিস? বন্যা হইলেও ডেডলাইন তো নড়ে নাই!"],
+      student_usaeed_chat_02:["USAEED","সাফিন, তুই হিসাব করে বল তো, এই স্রোতে ক্যাম্পাসে পৌঁছাতে আর কতক্ষণ লাগবে?"],
+      student_usaeed_gate_pass:["USAEED","থ্যাংক ইউ, আঙ্কেল! এইবার অন্তত আমার প্ল্যানটা ঠিকমতো কাজ করল!"],
+      student_sujail_id_01:["SUJAIL","আঙ্কেল... এইটা তো মেট্রো কার্ড! ঘুমের ঘোরে আইডির বদলে এইটা নিয়া আসছি!"],
+      student_sujail_id_02:["SUJAIL","আঙ্কেল প্লিজ, কালকেও তো আসছিলাম! আজকে একটু ঢুকতে দেন, কুইজ আছে!"],
+      student_sujail_id_03:["SUJAIL","আঙ্কেল, বন্যার মধ্যে নৌকায় কইরা আসলাম! এখন আবার ঘুমাইতে বাসায় পাঠাবেন?"],
+      student_sujail_solo_01:["SUJAIL","রাত তিনটায় অ্যাসাইনমেন্ট শেষ করছি... এখন নৌকার দোলায় আবার ঘুম আসতেছে!"],
+      student_sujail_solo_02:["SUJAIL","এত ঘুম পাইতেছে যে পানির ঢেউও লোরি মনে হইতেছে!"],
+      student_sujail_chat_01:["SUJAIL","করছি ভাই, রাত তিনটায়! এইজন্য এখন চোখই খুলতে পারতেছি না!"],
+      student_sujail_chat_02:["SUJAIL","কাজমি, ক্লাসে পৌঁছাইলে একটু জাগায় দিস। নৌকার দোলায় ঘুমায়া গেলে শেষ!"],
+      student_sujail_gate_pass:["SUJAIL","থ্যাংক ইউ, আঙ্কেল! এবার ক্লাসে ঢুকি... তার আগে এক কাপ কফি লাগবে!"],
+      student_kazmi_id_01:["KAZMI","আঙ্কেল, আইডি আনিনি! ভাবছিলাম এতদিনে আমার মুখটাই আইডি কার্ড হয়ে গেছে!"],
+      student_kazmi_id_02:["KAZMI","আঙ্কেল, এতবার আসছি! আপনি আমারে চিনেন না? ছবির চাইতেও আমি বেশি ক্লিয়ার!"],
+      student_kazmi_id_03:["KAZMI","পুরা ঢাকা ডুইবা গেছে, তাও আমি ক্লাসে হাজির! আর আমার মুখের ভ্যালু একটা প্লাস্টিক কার্ডের চেয়েও কম?"],
+      student_kazmi_solo_01:["KAZMI","পুরা শহর পানির নিচে! কিন্তু আমি বলি, আজকের দিনটা অ্যাডভেঞ্চার! ক্লাসের আগে ফ্রি বোট রাইড!"],
+      student_kazmi_solo_02:["KAZMI","এত নৌকা চলতেছে! মনে হয় ব্র্যাকুর সামনে শিগগিরই বোট পার্কিং লাগবে!"],
+      student_kazmi_chat_01:["KAZMI","চিন্তা করিস না, তোকে জাগামু! বন্যা পার হইছি, এখন কুইজও পার করব!"],
+      student_kazmi_chat_02:["KAZMI","সাফিন, তোর হিসাব মতে আজকের কুইজে আমার পাস করার চান্স কত? আমি কিন্তু ফুল কনফিডেন্ট!"],
+      student_kazmi_gate_pass:["KAZMI","দেখছেন আঙ্কেল! আমি বলছিলাম আজকে সব ঠিকই হবে! থ্যাংক ইউ!"],
+      student_safin_id_01:["SAFIN","আঙ্কেল! আইডিটা পানির হাত থেকে বাঁচাইতে জিপলক ব্যাগে রাখছিলাম... ব্যাগটাই ভেসে গেছে!"],
+      student_safin_id_02:["SAFIN","আঙ্কেল, আমার স্টুডেন্ট আইডি নম্বর মুখস্থ! কানেক্টে মিলায়া দেখেন, ডেটা তো ভুল বলবে না!"],
+      student_safin_id_03:["SAFIN","এত হিসাব করলাম, শেষে একটা প্লাস্টিক কার্ডের কাছে হার মানলাম! আঙ্কেল, এইটা কোন লজিক?"],
+      student_safin_solo_01:["SAFIN","মাঝি ভাই বামে ঘুরলে পাঁচ মিনিট বাঁচত। কিন্তু আমার মনে হয় উনি রাস্তা না, অ্যাডভেঞ্চার খুঁজতেছেন!"],
+      student_safin_solo_02:["SAFIN","গুগল ম্যাপ বলতেছে দশ মিনিট। এই পানিতে গুগল নিজে নৌকা চালাইছে কখন?"],
+      student_safin_chat_01:["SAFIN","হিসাব মতে বিশ মিনিট... যদি মাঝি ভাই আবার ভুল দিকে না ঘুরেন!"],
+      student_safin_chat_02:["SAFIN","তোর কনফিডেন্স একশ পার্সেন্ট। কিন্তু কতটুকু পড়ছিস সেই ডেটাই নাই! পাসের চান্স কেমনে বলি?"],
+      student_safin_gate_pass:["SAFIN","থ্যাংক ইউ, আঙ্কেল! অবশেষে হিসাব মিলল—আইডি আছে, এন্ট্রি আছে, এখন শুধু ক্লাসে লেট!"],
       menu_majhi_call:['SALAM','মামা! ব্র্যাকু যাবেন? ক্লাস কিন্তু বন্ধ নাই!']
     };
     const voicesByPerson={rickshaw_salam:['rickshaw_salam_01','rickshaw_salam_02','rickshaw_salam_03'],
@@ -1699,15 +1743,9 @@
       'meme_record_scratch','meme_sad_trombone','meme_vine_boom'];
     const exitNames=['exit_horror_riser','exit_flashlight_click','exit_impact'];
     const paths={};
-    const optionalVoiceFiles=new Set([
-      'student_adittya_id_01','student_adittya_id_02','student_adittya_id_03',
-      'student_nafisa_id_01','student_nafisa_id_02','student_nafisa_id_03',
-      'student_adittya_gate_pass','student_nafisa_gate_pass',
-      'student_adittya_solo_01','student_adittya_solo_02',
-      'student_adittya_chat_01','student_adittya_chat_02',
-      'student_nafisa_solo_01','student_nafisa_solo_02',
-      'student_nafisa_chat_01','student_nafisa_chat_02'
-    ]);
+    // These files are in the submitted ZIP. Missing requests should be visible
+    // in the browser console and audio status rather than silently ignored.
+    const optionalVoiceFiles=new Set();
     for(const n of Object.keys(voiceText))paths[n]=`./audio/voices/${n}.wav`;
     for(const n of [...ambientNames,...legacySfx])paths[n]=`./audio/${n}.mp3`;
     for(const n of memes)paths[n]=`./audio/meme/${n}.mp3`;
@@ -1745,6 +1783,7 @@
     let ctx=null,master=null,ambient=null,effects=null,voices=null,limiter=null;
     let loading=null,ready=false,started=false,on=true,speech=true,captionsOn=true;
     let volume=.78,voiceUserVolume=1,activeVoice=null,activeVoicePriority=-1,voiceBusyUntil=0;
+    let sequenceBusy=false,sequenceEpoch=0,lastConversationAt=-999,conversationCursor=0;
     let menuCalled=false,exitBusyUntil=0,lastZone='',lastAiRescues=0;
     let clock=0,peopleAt=10,bellAt=8,hornAt=9,thunderAt=25,paddleAt=0;
     let subtitle=null,ui=null,subtitleUntil=0;
@@ -1848,7 +1887,7 @@
     function voice(name,x,z,level=1,options={}){
       const actual=alias[name]||name;
       if(!voiceText[actual]||!speech||!on||!ctx||ctx.state!=='running')return false;
-      if(S.campusGateScene)return false;
+      if(S.campusGateScene||sequenceBusy)return false;
       const priority=options.priority??0;
       if(ctx.currentTime<voiceBusyUntil){
         if(!options.force||priority<activeVoicePriority)return false;
@@ -1861,74 +1900,123 @@
       voiceBusyUntil=ctx.currentTime+node.duration+.08;
       showSubtitle(actual,node.duration);updateMix();return true;
     }
-    // A gate line is queued by character identity. Missing recordings become
-    // timed subtitle beats; we never substitute another student's voice.
+    // Atomic conversational audio: one spoken turn at a time, with no NPC
+    // interruption, and no orphaned follow-up when a scene is cancelled.
     function talkSequence(entries,options={}){
-      if(!ctx||ctx.state!=='running'||!on){options.done?.();return;}
+      if(!ctx||ctx.state!=='running'||!on||!speech||sequenceBusy){return false;}
+      sequenceBusy=true;
+      const epoch=++sequenceEpoch;
       const playNext=(index)=>{
-        if(options.cancel?.()){options.done?.();return;}
-        if(index>=entries.length){options.done?.();return;}
+        if(epoch!==sequenceEpoch)return;
+        if(options.cancel?.()){
+          sequenceBusy=false;voiceBusyUntil=ctx.currentTime;
+          return;
+        }
+        if(index>=entries.length){
+          sequenceBusy=false;voiceBusyUntil=ctx.currentTime;
+          options.done?.();return;
+        }
         const entry=typeof entries[index]==='string'?{clip:entries[index]}:entries[index];
         options.turn?.(index,entry);
         const id=entry.clip;
-        const playSilence=()=>{
-          const duration=Math.max(1.7,Math.min(5.6,entry.duration||3.1));
+        const next=()=>{if(epoch===sequenceEpoch)playNext(index+1);};
+        if(!id||!buffers[id]){
+          const duration=Math.max(.8,Math.min(5.6,entry.duration||2.6));
           const silent=ctx.createBufferSource();
           silent.buffer=ctx.createBuffer(1,Math.max(1,Math.round(duration*ctx.sampleRate)),ctx.sampleRate);
-          silent.onended=()=>playNext(index+1);
-          silent.start();
-        };
-        if(!id||!buffers[id]||!speech){playSilence();return;}
+          silent.onended=next;silent.start();return;
+        }
         const node=emit(id,{x:options.x??S.x,z:options.z??S.z,
           ignoreDistance:options.ignoreDistance??true,volume:1.0,key:`seq-${options.key}-${index}`,cooldown:0});
-        if(!node){playSilence();return;}
+        if(!node){
+          // Avoid looping forever if a file cannot play.
+          const silent=ctx.createBufferSource();
+          silent.buffer=ctx.createBuffer(1,Math.round(1.2*ctx.sampleRate),ctx.sampleRate);
+          silent.onended=next;silent.start();return;
+        }
         activeVoice=node.src;activeVoicePriority=5;voiceBusyUntil=ctx.currentTime+node.duration+.08;
-        showSubtitle(id,node.duration);node.src.onended=()=>playNext(index+1);
+        showSubtitle(id,node.duration);
+        node.src.onended=next;
       };
       playNext(0);
+      return true;
+    }
+    function cancelSequence(){
+      sequenceEpoch++;sequenceBusy=false;
+      try{activeVoice?.stop();}catch(_e){}
+      activeVoice=null;voiceBusyUntil=ctx?.currentTime||0;
+    }
+    function maybeConversation(){
+      if(!ready||!speech||!on||S.mode!=='PLAYING'||S.campusQueue.length||S.campusGateScene||
+         sequenceBusy||ctx.currentTime<voiceBusyUntil+.3||S.time-lastConversationAt<15)return false;
+      const onboard=seated();
+      if(onboard.length<2)return false;
+      const eligible=[];
+      for(const conversation of PASSENGER_CONVERSATIONS){
+        const people=conversation.speakers.map(name=>onboard.find(r=>r.voiceCharacter===name));
+        if(people.some(p=>!p)||people[0]===people[1]||
+           people.some(p=>S.time-(p.boardedAt??S.time)<2.5))continue;
+        if(conversation.clips.some((clip,i)=>people[i].voicePlayed?.[clip]||!buffers[clip]))continue;
+        eligible.push({conversation,people});
+      }
+      if(!eligible.length)return false;
+      // Nafisa talks less, but participates naturally when Adittya addresses her.
+      // Give her pairs a smaller opportunity to start, never a clipped reply.
+      const chosen=eligible[conversationCursor++%eligible.length];
+      if(chosen.conversation.speakers.includes('Nafisa')&&Math.random()>.48)return false;
+      const ok=talkSequence(chosen.conversation.clips,{
+        key:`boat-${chosen.conversation.id}-${chosen.people.map(p=>p.id).join('-')}`,
+        ignoreDistance:true,
+        cancel:()=>S.mode!=='PLAYING'||!!S.campusGateScene||
+          chosen.people.some(p=>p.state!=='ONBOARD'),
+        done:()=>{lastConversationAt=S.time;}
+      });
+      if(!ok)return false;
+      // Both recordings are consumed together; never play the answer alone.
+      chosen.conversation.clips.forEach((clip,i)=>markPassengerClip(chosen.people[i],clip));
+      lastConversationAt=S.time;
+      return true;
     }
     function makeGateScript(scene){
       const character=scene.voiceCharacter;
-      const profile=PASSENGER_VOICE_CAST[character];
       const t=(clip,fallback)=>voiceText[clip]?.[1]||fallback;
-      const optional=(tag)=>character&&(character==='Nafisa'||character==='Adittya')?
-        `student_${character.toLowerCase()}_${tag}`:null;
-      const chosen=(clip,caption,duration=3.4)=>({clip:clip||null,speaker:'student',text:clip&&buffers[clip]?t(clip,caption):caption,duration});
+      const studentClip=tag=>character?`student_${character.toLowerCase()}_${tag}`:null;
+      const studentTurn=(tag,fallback,duration=3.5)=>{
+        const clip=studentClip(tag);
+        const valid=clip&&buffers[clip]&&voiceText[clip];
+        return {clip:valid?clip:null,speaker:'student',
+          text:valid?t(clip,fallback):fallback,duration};
+      };
       if(!scene.forgotId)return [
-        {clip:'guard_rahman_01',speaker:'guard',text:t('guard_rahman_01','আইডি ঠিক আছে, ভেতরে যান!')},
-        chosen(optional('gate_pass'),'ধন্যবাদ আঙ্কেল! ক্লাসে যাই!',2.6)
+        {clip:'guard_rahman_01',speaker:'guard',text:t('guard_rahman_01','আইডি ঠিক আছে। ক্লাসে যান!')},
+        studentTurn('gate_pass','থ্যাংক ইউ আঙ্কেল! ক্লাসে যাই!',2.6)
       ];
-      // Five distinct turns. Named passengers keep their own voice. The one
-      // existing relevant clip per student can fill the middle response until
-      // their dedicated ID argument recordings are supplied.
-      const reaction=profile?.gateReaction||null;
       return [
         {clip:'guard_rahman_02',speaker:'guard',text:t('guard_rahman_02','আইডি কার্ড কোথায়?')},
-        chosen(optional('id_01'),'আঙ্কেল, আইডি কার্ডটা বাসায় রয়ে গেছে! এত পানি পার হয়ে আসছি!',3.6),
-        chosen(optional('id_02')&&buffers[optional('id_02')]?optional('id_02'):reaction,
-          'আঙ্কেল প্লিজ! আজকে একবার ঢুকতে দেন! অ্যাটেনডেন্স মিস হবে!',4.2),
-        {clip:'guard_rahman_03',speaker:'guard',text:t('guard_rahman_03','পুরা ঢাকা ডুবলেও নিয়ম তো নিয়ম!')},
-        chosen(optional('id_03'),'আঙ্কেল! পুরা ঢাকা পানির নিচে, তারপরেও ঢুকতে দিবেন না?!',3.8)
+        studentTurn('id_01','আঙ্কেল, আইডি কার্ডটা খুঁজে পাচ্ছি না!',3.6),
+        studentTurn('id_02','আঙ্কেল, একবার ঢুকতে দেন না, প্লিজ!',4.0),
+        {clip:'guard_rahman_03',speaker:'guard',text:t('guard_rahman_03','নিয়ম তো নিয়ম! আগে আইডি আনেন!')},
+        studentTurn('id_03','পুরা ঢাকা পানির নিচে! তাও ঢুকতে দিবেন না?',3.8)
       ];
     }
     function startGate(scene){
       if(scene.audioStarted)return;
       scene.audioStarted=true;scene.audioComplete=false;scene.dialogueTurn=0;
       scene.dialogue=makeGateScript(scene);
-      if(!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
+      if(!on||!speech){scene.audioComplete=true;scene.finishedAt=S.time;return;}
       init().then(ok=>{
         if(!ok||S.campusGateScene!==scene||!on){scene.audioComplete=true;scene.finishedAt=S.time;return;}
-        try{activeVoice?.stop();}catch(_e){}
-        voiceBusyUntil=0;
-        // Rebuild now that the optional voice clips have been decoded.
+        cancelSequence();
+        // Rebuild now that all recorded clips have been decoded.
         scene.dialogue=makeGateScript(scene);
         if(scene.forgotId)play('meme_vine_boom',{ignoreDistance:true,volume:.67,key:`id-${scene.index}`,cooldown:0});
-        talkSequence(scene.dialogue,{key:`gate-${scene.index}`,ignoreDistance:true,cancel:()=>S.campusGateScene!==scene,
+        const gateStarted=talkSequence(scene.dialogue,{key:`gate-${scene.index}`,ignoreDistance:true,cancel:()=>S.campusGateScene!==scene,
           turn:i=>{scene.dialogueTurn=i;},
           done:()=>{
             scene.audioComplete=true;scene.finishedAt=S.time;
             if(scene.forgotId&&S.campusGateScene===scene)play('meme_error',{ignoreDistance:true,volume:.52,key:`rejected-${scene.index}`,cooldown:0});
           }});
+        if(!gateStarted){scene.audioComplete=true;scene.finishedAt=S.time;}
       });
     }
     function speakPassenger(person,event,options={}){
@@ -1997,8 +2085,8 @@
       const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:6px 8px;font:800 10px system-ui;cursor:pointer}#majhi-dhaka-audio label{display:flex;align-items:center;gap:5px}#majhi-dhaka-audio input{width:66px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{max-width:130px;overflow:hidden;white-space:nowrap;color:#b2d9ce}#majhi-dhaka-subtitle{position:fixed;z-index:12495;bottom:8%;left:50%;transform:translateX(-50%);width:min(620px,78vw);pointer-events:none;background:rgba(5,21,29,.89);border:1px solid #e9c476;border-radius:13px;padding:8px 16px;text-align:center;font:700 15px 'Nirmala UI',system-ui,sans-serif;color:#f8f3da;opacity:0;transition:opacity .18s}#majhi-dhaka-subtitle.mj-voice-show{opacity:1}#majhi-dhaka-subtitle [data-voice-who]{font:800 10px system-ui;color:#efce79;letter-spacing:.09em;margin-bottom:4px}@media(max-width:950px){#majhi-dhaka-audio{top:auto!important;bottom:8px;padding:5px 6px;font-size:8px}#majhi-dhaka-audio button{font-size:9px;padding:5px}#majhi-dhaka-audio input{width:43px}#majhi-dhaka-audio [data-audio-status]{display:none}#majhi-dhaka-subtitle{bottom:16%;font-size:12px}}`;
       document.head.appendChild(style);document.body.appendChild(ui);
       subtitle=document.createElement('div');subtitle.id='majhi-dhaka-subtitle';subtitle.innerHTML='<div data-voice-who></div><div data-voice-line></div>';document.body.appendChild(subtitle);
-      ui.querySelector('[data-audio-toggle]').onclick=()=>{on=!on;ui.querySelector('[data-audio-toggle]').textContent=on?'🔊 DHAKA AUDIO':'🔇 MUTED';if(on)ctx?.resume();else{try{activeVoice?.stop();}catch(_){}}updateMix();};
-      ui.querySelector('[data-audio-voices]').onclick=()=>{speech=!speech;ui.querySelector('[data-audio-voices]').textContent=speech?'🎤 VOICES ON':'🎤 VOICES OFF';if(!speech){try{activeVoice?.stop();}catch(_){}voiceBusyUntil=0;}updateMix();};
+      ui.querySelector('[data-audio-toggle]').onclick=()=>{on=!on;ui.querySelector('[data-audio-toggle]').textContent=on?'🔊 DHAKA AUDIO':'🔇 MUTED';if(on)ctx?.resume();else{cancelSequence();if(S.campusGateScene){S.campusGateScene.audioComplete=true;S.campusGateScene.finishedAt=S.time;}}updateMix();};
+      ui.querySelector('[data-audio-voices]').onclick=()=>{speech=!speech;ui.querySelector('[data-audio-voices]').textContent=speech?'🎤 VOICES ON':'🎤 VOICES OFF';if(!speech){cancelSequence();if(S.campusGateScene){S.campusGateScene.audioComplete=true;S.campusGateScene.finishedAt=S.time;}}updateMix();};
       ui.querySelector('[data-audio-caption]').onclick=()=>{captionsOn=!captionsOn;ui.querySelector('[data-audio-caption]').textContent=captionsOn?'CC ON':'CC OFF';if(!captionsOn)subtitle.classList.remove('mj-voice-show');};
       ui.querySelector('[data-audio-volume]').oninput=e=>{volume=Number(e.target.value)/100;updateMix();};
       ui.querySelector('[data-voice-volume]').oninput=e=>{voiceUserVolume=Number(e.target.value)/100;updateMix();};
@@ -2014,6 +2102,7 @@
     function begin(){started=true;initUI();init().then(()=>ctx?.resume());
       clock=0;peopleAt=8;bellAt=7;hornAt=6;thunderAt=26;paddleAt=0;
       lastZone='';lastAiRescues=0;lastCampusHeaven=false;quarrelsSeen.clear();
+      cancelSequence();lastConversationAt=-999;conversationCursor=0;
       subtitle?.classList.remove('mj-voice-show');activeVoicePriority=-1;voiceBusyUntil=0;
       updateMix();}
     function update(dt){
@@ -2051,17 +2140,21 @@
         hornAt=S.time+9+Math.random()*11;
       }
       for(const incident of S.rickshawQuarrels){const r=S.aiRickshaws.find(x=>x.id===incident.id);if(r)beginQuarrel(r,incident);}
-      if(S.time>peopleAt&&!S.campusGateScene&&ctx.currentTime>voiceBusyUntil+.2){
+      if(S.time>peopleAt&&!S.campusGateScene&&!sequenceBusy&&ctx.currentTime>voiceBusyUntil+.2){
+        const conversationStarted=maybeConversation();
+        if(!conversationStarted){
         const choices=[],party=seated().length;
         for(const r of S.rides){
           const x=r.personX??r.x,z=r.personZ??r.z;
           if(r.state==='WAITING'&&distance(x,z,S.x,S.z)<510){
             const clip=passengerClip(r,'waiting',party,name=>!!buffers[name]);
-            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>14)
+            const chance=PASSENGER_VOICE_CAST[r.voiceCharacter]?.chatterWeight??.9;
+            if(clip&&Math.random()<chance&&S.time-(r.voiceLastSpokenAt??-999)>14)
               choices.push({x,z,clip,ride:r,priority:r.type==='DROWNING'?3:2});
           }else if(r.state==='ONBOARD'){
             const clip=passengerClip(r,'onboard',party,name=>!!buffers[name]);
-            if(clip&&S.time-(r.voiceLastSpokenAt??-999)>14)
+            const chance=PASSENGER_VOICE_CAST[r.voiceCharacter]?.chatterWeight??.9;
+            if(clip&&Math.random()<chance&&S.time-(r.voiceLastSpokenAt??-999)>14)
               choices.push({x:S.x,z:S.z,clip,ride:r,priority:2});
           }
         }
@@ -2080,7 +2173,8 @@
           const c=preferred[Math.floor(Math.random()*preferred.length)];
           if(voice(c.clip,c.x,c.z,1,{priority:c.priority})&&c.ride)markPassengerClip(c.ride,c.clip);
         }
-        peopleAt=S.time+6+Math.random()*5;
+        }
+        peopleAt=S.time+(conversationStarted?18:6+Math.random()*5);
       }
       if(S.time>thunderAt){if(campusRainWeight(S.x,S.z)>.3)play('thunder',{ignoreDistance:true,volume:.65});thunderAt=S.time+31+Math.random()*23;}
     }
@@ -2089,7 +2183,8 @@
       impact(power){play('impact_'+(1+(Math.floor(S.time*3)%2)),{ignoreDistance:true,volume:.75*power});},
       getState(){return {started,ready,on,voices:speech,captions:captionsOn,
         loaded:Object.keys(buffers).length,expected:Object.keys(paths).length,
-        masterVolume:volume,voiceVolume:voiceUserVolume,activeVoicePriority};}};
+        masterVolume:volume,voiceVolume:voiceUserVolume,activeVoicePriority,sequenceBusy,
+        conversations:PASSENGER_CONVERSATIONS.map(({id,speakers,clips})=>({id,speakers,ready:clips.every(c=>!!buffers[c])}))};}};
   })();
   // Collision impact: a strong jolt that quickly settles, in both camera modes.
   const IMPACT_SHAKE_DURATION = 0.58;
@@ -2777,9 +2872,9 @@
       const scene=S.campusGateScene;
       const age=S.time-scene.start;
       // Gate animations wait for the actual recorded voice sequence to end.
-      // A 40-second safety cutoff prevents a missing/failed asset locking play.
+      // A generous safety cutoff prevents a stalled asset from locking play; the full recorded gate conversation can last over 30 seconds.
       const completed=scene.audioComplete&&age>=1.7&&S.time-(scene.finishedAt||S.time)>=.42;
-      if(completed||age>40){
+      if(completed||age>72){
         const match=S.campusQueue.find(e=>e.index===scene.index);
         if(match)match.sceneDone=true;
         S.campusGateScene=null;
@@ -3281,7 +3376,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity16-contextual-passenger-dialogue';
+  window.majhiVersion='fidelity17-80-voices-paired-dialogue';
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
