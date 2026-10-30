@@ -1,6 +1,6 @@
 /* Majhi Jaben?! — source-geometry browser port of the CSE423 PyOpenGL game.
  * Static geometry and character meshes exported from ORIGINAL Python rendering functions.
- * WebGL 2 Water Lab 02.1 GPU integration, with legacy WebGL 1 fallback.
+ * WebGL 2 Water Lab 02.1 GPU integration, with shader compatibility fixes and WebGL 1 fallback.
  * Original project: https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey
  */
 (() => {
@@ -26,7 +26,7 @@
   const sharedPrecision=precisionSupport&&precisionSupport.precision>0?'highp':'mediump';
   const VERT=`attribute vec3 aPos; attribute vec3 aColor; attribute float aKind;
   uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
-  ${lab2?'uniform sampler2D uLabField; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled;':''}
+  ${lab2?`uniform sampler2D uLabField; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled;`:''}
   varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
   void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5&&aKind<1.5){
   float mainWave=sin(.032*(p.z+.18*p.x)-1.80*uTime);
@@ -47,14 +47,14 @@
    p.y+=rough*(2.6*sin(.037*p.x+.023*p.z-uTime*3.8)+1.5*sin(.028*p.z-.032*p.x+uTime*4.5));
    ${lab2?`if(uLabEnabled>.5){
      vec2 uv=(p.xz-uLabCenter)/uLabSpan+.5;
-     float active=(1.0-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5))));
+     float labPatchWeight=(1.0-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5))));
      vec4 packed=texture2D(uLabField,clamp(uv,vec2(0.),vec2(1.)));
      float h=2.*dot(packed.rg,vec2(65280.,255.))/65535.-1.;
-     p.y+=h*13.0*active;
+     p.y+=h*13.0*labPatchWeight;
    }`:''}
    }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
-  ${lab2?'uniform sampler2D uLabNormals; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled; uniform vec3 uLabEye,uLabSun;':''}
+  ${lab2?`uniform sampler2D uLabNormals; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled; uniform vec3 uLabEye,uLabSun;`:''}
   void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
     opacity=mix(.53,.12,daylight);c=mix(c,vec3(.24,.31,.30),.55*daylight);float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
     float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
@@ -3891,7 +3891,7 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity18-water-integration-01-gpu-lab021';
+  window.majhiVersion='fidelity18-water-integration-01a-gpu-lab021-shader-fix';
   window.majhiWaterDiagnostics=()=>({webgl2:lab2,enabled:!!dhakaWater,error:waterIntegrationError,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
