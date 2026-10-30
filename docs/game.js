@@ -11,7 +11,8 @@
   // Prefer WebGL 2 for the proven Water Lab 02.1 GPU heightfield. If unavailable,
   // the original WebGL 1 game (including all missions and graphics) still runs.
   const gl=canvas.getContext('webgl2',options)||canvas.getContext('webgl',options)||canvas.getContext('experimental-webgl',options);
-  const lab2=!!gl&&typeof gl.createVertexArray==='function';
+  const webgl2Context=!!gl&&typeof gl.createVertexArray==='function';
+  let lab2=webgl2Context;
   if(!gl){
     window.majhiStartupError?.('WebGL unavailable', 'Enable graphics acceleration or try Chrome, Edge, or Firefox on a computer that supports WebGL.');
     return;
@@ -24,7 +25,7 @@
   // Select the best fragment precision available, then declare it on both sides.
   const precisionSupport=gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER,gl.HIGH_FLOAT);
   const sharedPrecision=precisionSupport&&precisionSupport.precision>0?'highp':'mediump';
-  const VERT=`attribute vec3 aPos; attribute vec3 aColor; attribute float aKind;
+  const makeVertexShader=()=>`attribute vec3 aPos; attribute vec3 aColor; attribute float aKind;
   uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
   ${lab2?`uniform sampler2D uLabField; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled;`:''}
   varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
@@ -48,12 +49,12 @@
    ${lab2?`if(uLabEnabled>.5){
      vec2 uv=(p.xz-uLabCenter)/uLabSpan+.5;
      float labPatchWeight=(1.0-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5))));
-     vec4 packedHeight = texture2D(uLabField, clamp(uv, vec2(0.), vec2(1.)));
-     float h = 2.*dot(packedHeight.rg, vec2(65280.,255.))/65535.-1.;
+     vec4 encodedHeight=texture2D(uLabField,clamp(uv,vec2(0.),vec2(1.)));
+     float h=2.*dot(encodedHeight.rg,vec2(65280.,255.))/65535.-1.;
      p.y+=h*13.0*labPatchWeight;
    }`:''}
    }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
-  const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
+  const makeFragmentShader=()=>`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
   ${lab2?`uniform sampler2D uLabNormals; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled; uniform vec3 uLabEye,uLabSun;`:''}
   void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
     opacity=mix(.53,.12,daylight);c=mix(c,vec3(.24,.31,.30),.55*daylight);float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
@@ -61,9 +62,9 @@
      c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
      ${lab2?`if(uLabEnabled>.5){
        vec2 uv=(vWorld.xz-uLabCenter)/uLabSpan+.5;
-       float patch=1.-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5)));
+       float patchWeight=1.-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5)));
        vec4 info=texture2D(uLabNormals,clamp(uv,vec2(.003),vec2(.997)));
-       vec2 slope=(info.rg*2.-1.)*8.*patch;
+       vec2 slope=(info.rg*2.-1.)*8.*patchWeight;
        vec3 N=normalize(vec3(-slope.x,1.,-slope.y));
        vec3 V=normalize(uLabEye-vWorld);
        vec3 L=normalize(uLabSun);
@@ -71,7 +72,7 @@
        float fresnel=.0204+.9796*pow(1.-facing,5.);
        float diffuse=max(0.,dot(N,L));
        vec3 H=normalize(V+L);
-       float spec=pow(max(dot(N,H),0.),85.)*.39;
+        float spec=pow(max(dot(N,H),0.),85.)*.39*mix(.30,1.,daylight);
        float shimmer=pow(max(0.,sin(vWorld.x*.12+vWorld.z*.09+uTime*1.3)),22.)*.024;
        float waveEnergy=min(1.0,length(slope)*.60);
        // Artistic water: reflective at grazing angles, readable street overhead.
@@ -80,21 +81,37 @@
        c+=vec3(.025,.070,.078)*waveEnergy;
        float campusDry=1.-smoothstep(235.,345.,length(vec2(vWorld.x,vWorld.z-1378.)));
        opacity=clamp(.23+.37*fresnel+.025*waveEnergy, .19, .63);
-       opacity*=1.-.89*campusDry;
+        opacity*=1.-campusDry; // no water overlay inside the dry campus core
      }`:''}
    }else if(vKind<.5&&vWorld.y<3.0){
     ${lab2?`if(uLabEnabled>.5){
-      // Subtle, artistic refracted-light focus on REAL source-road geometry.
-      // Sample near the bottom, not a painted road overlay.
-      vec2 at=vWorld.xz-uLabSun.xz/max(.2,uLabSun.y)*11.;
+      // Projected-area caustics adapted from Water Lab 02.1: refract the
+      // directional sun through three neighboring surface normals. A smaller
+      // projected footprint means focused light on the EXISTING street mesh.
+      // The result is intentionally subtle, preserving lane-marking clarity.
+      vec3 sun=normalize(uLabSun);
+      vec2 at=vWorld.xz-sun.xz/max(.22,sun.y)*11.;
       vec2 uv=(at-uLabCenter)/uLabSpan+.5;
-      float local=1.-smoothstep(.39,.49,max(abs(uv.x-.5),abs(uv.y-.5)));
-      vec2 slope=(texture2D(uLabNormals,clamp(uv,vec2(.003),vec2(.997))).rg*2.-1.)*9.;
-      float focus=sin((at.x+19.*slope.x)*.052+uTime*.55)*
-                  sin((at.y+19.*slope.y)*.047-uTime*.39);
-      float rippleFocus=pow(max(0.,focus),7.);
+      float local=1.-smoothstep(.38,.49,max(abs(uv.x-.5),abs(uv.y-.5)));
+      vec2 texel=vec2(1./256.,0.);
+      vec2 slope0=(texture2D(uLabNormals,clamp(uv,vec2(.003),vec2(.997))).rg*2.-1.)*3.;
+      vec2 slopeX=(texture2D(uLabNormals,clamp(uv+texel.xy,vec2(.003),vec2(.997))).rg*2.-1.)*3.;
+      vec2 slopeZ=(texture2D(uLabNormals,clamp(uv+texel.yx,vec2(.003),vec2(.997))).rg*2.-1.)*3.;
+      vec3 ray0=refract(-sun,normalize(vec3(-slope0.x,1.,-slope0.y)),1./1.333);
+      vec3 rayX=refract(-sun,normalize(vec3(-slopeX.x,1.,-slopeX.y)),1./1.333);
+      vec3 rayZ=refract(-sun,normalize(vec3(-slopeZ.x,1.,-slopeZ.y)),1./1.333);
+      float depth=max(1.,8.5-vWorld.y);
+      float cell=uLabSpan/256.;
+      vec2 hit0=at+ray0.xz*(depth/max(.2,-ray0.y));
+      vec2 hitX=at+vec2(cell,0.)+rayX.xz*(depth/max(.2,-rayX.y));
+      vec2 hitZ=at+vec2(0.,cell)+rayZ.xz*(depth/max(.2,-rayZ.y));
+      vec2 dx=(hitX-hit0)/cell,dz=(hitZ-hit0)/cell;
+      float footprint=abs(dx.x*dz.y-dx.y*dz.x);
+      float convergence=clamp(1./max(.30,footprint),.35,2.6);
+      float focused=smoothstep(1.04,1.82,convergence);
       float campusDry=1.-smoothstep(230.,355.,length(vec2(vWorld.x,vWorld.z-1378.)));
-      c+=vec3(.07,.12,.11)*rippleFocus*local*(1.-campusDry);
+      // Only diffused sunlight reaches the stormy city; the campus remains dry.
+      c+=vec3(.065,.11,.095)*focused*local*(1.-campusDry)*.34;
     }`:''}
   }else if(vKind>3.5&&vKind<4.5){
     // Warm streetlight halo: its shell is translucent, while its bulb is the
@@ -122,9 +139,31 @@
     c=mix(c,vec3(1.,.96,.78),.19);
   }
   float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,opacity);}`;
-  function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error(gl.getShaderInfoLog(s));return s;}
-  const prog=gl.createProgram();gl.attachShader(prog,shader(gl.VERTEX_SHADER,VERT));gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,FRAG));gl.linkProgram(prog);
-  if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){throw Error(gl.getProgramInfoLog(prog));}
+  function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){
+      const error=gl.getShaderInfoLog(s);gl.deleteShader(s);throw Error(error);
+    }
+    return s;
+  }
+  function createMainProgram(){
+    const p=gl.createProgram(),vs=shader(gl.VERTEX_SHADER,makeVertexShader()),fs=shader(gl.FRAGMENT_SHADER,makeFragmentShader());
+    gl.attachShader(p,vs);gl.attachShader(p,fs);gl.linkProgram(p);
+    gl.deleteShader(vs);gl.deleteShader(fs);
+    if(!gl.getProgramParameter(p,gl.LINK_STATUS)){const err=gl.getProgramInfoLog(p);gl.deleteProgram(p);throw Error(err);}
+    return p;
+  }
+  // The original game must remain playable even when a particular GPU rejects
+  // the new water shaders. Rebuild the shader WITHOUT the optional GPU path.
+  let prog,mainShaderFallback=null;
+  try {prog=createMainProgram();}
+  catch(error){
+    if(!lab2){window.majhiStartupError?.('Graphics shader unavailable',String(error));return;}
+    mainShaderFallback=String(error);
+    console.warn('Optional Water Lab shader failed; starting the original graphics mode:',error);
+    lab2=false;
+    try {prog=createMainProgram();}
+    catch(legacyError){window.majhiStartupError?.('Graphics shader unavailable',String(legacyError));return;}
+  }
   gl.useProgram(prog);
   const attrs={pos:gl.getAttribLocation(prog,'aPos'),color:gl.getAttribLocation(prog,'aColor'),kind:gl.getAttribLocation(prog,'aKind')};
   const uniforms={view:gl.getUniformLocation(prog,'uView'),proj:gl.getUniformLocation(prog,'uProj'),model:gl.getUniformLocation(prog,'uModel'),time:gl.getUniformLocation(prog,'uTime'),
@@ -445,7 +484,12 @@
       seenImpacts=new WeakSet();seenRain=new WeakSet();wakeCount=0;
       for(const b of buffers){gl.bindTexture(gl.TEXTURE_2D,b.texture);
         gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,N,N,gl.RGBA,gl.UNSIGNED_BYTE,blank);}
-      read=0;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindVertexArray(null);gl.useProgram(prog);
+      read=0;
+      // On the very first MENU frame the wave timer has not advanced. Initialize
+      // the auxiliary normal texture now instead of sampling undefined RGBA8 data.
+      run(effects.normals);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
+      gl.bindVertexArray(null);gl.useProgram(prog);gl.enable(gl.DEPTH_TEST);
     }
     function ripple(x,z,strength=.04,radius=.018){const center=uv(x,z);
       if(center[0]<.05||center[0]>.95||center[1]<.05||center[1]>.95)return;
@@ -3891,8 +3935,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity18-water-integration-01a-gpu-lab021-shader-fix';
-  window.majhiWaterDiagnostics=()=>({webgl2:lab2,enabled:!!dhakaWater,error:waterIntegrationError,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='fidelity18-water-lab021-phase1-reliability-fix';
+  window.majhiWaterDiagnostics=()=>({webgl2:webgl2Context,enabled:!!dhakaWater,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
@@ -3978,6 +4022,6 @@
   });
   document.querySelectorAll('[data-key]').forEach(btn=>btn.addEventListener('click',()=>action(btn.dataset.key)));
   // Read-only diagnostics to make browser smoke tests deterministic.
-  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),rowing:S.rowing,strokeFrame:Math.floor((S.strokeTime/0.65)*24)%24,renderer:dhakaWater?'WebGL2 + Water Lab 02.1 / Python source geometry':(lab2?'WebGL2 / legacy water':'WebGL1 / legacy water'),sourceGeometryLoaded:!!sourceMeshes,sourceLoadError}),start:reset};
+  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),rowing:S.rowing,strokeFrame:Math.floor((S.strokeTime/0.65)*24)%24,renderer:dhakaWater?'WebGL2 + Water Lab 02.1 / Python source geometry':(webgl2Context?'WebGL2 / legacy water':'WebGL1 / legacy water'),sourceGeometryLoaded:!!sourceMeshes,sourceLoadError}),start:reset};
   requestAnimationFrame(loop);
 })();
