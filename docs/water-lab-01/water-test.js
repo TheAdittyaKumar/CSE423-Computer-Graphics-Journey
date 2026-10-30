@@ -1,6 +1,6 @@
 /*
  * MAJHI JABEN?! / VISUAL LAB 02
- * Water Lab 01: experimental WebGL 2 GPU ripple simulation and Fresnel water.
+ * Water Lab 01.1: per-pixel GPU ripple normals, Fresnel optics, diagnostics.
  * No dependencies, downloads, build step, or changes to the main game.
  */
 (() => {
@@ -81,16 +81,21 @@
     gl_Position=uProjection*view;
   }`;
 
+  // The GPU simulation writes a *separate*, linearly-filterable normal/height
+  // field. A single texture lookup per water pixel preserves fine ripples that
+  // are lost when normals are interpolated from low-density water vertices.
   const waterFragment = `#version 300 es
   precision highp float;
   precision highp int;
   in vec3 vNormal,vWorld;
   in float vDistance,vWave;
   uniform vec3 uTint,uCamera;
-  uniform float uTime,uReflect,uWind;
+  uniform float uTime,uReflect,uWind,uWaveScale;
   uniform highp int uType,uWaterMode;
-  uniform int uLighting;
+  uniform int uLighting,uDebug;
+  uniform sampler2D uSurfaceNormalTex;
   out vec4 fragColor;
+
   float hash21(vec2 p){
     p=fract(p*vec2(123.34,345.45));
     p+=dot(p,p+34.345);
@@ -102,34 +107,78 @@
     return mix(mix(hash21(i),hash21(i+vec2(1.,0.)),f.x),
                mix(hash21(i+vec2(0.,1.)),hash21(i+vec2(1.,1.)),f.x),f.y);
   }
+  vec3 skyColor(vec3 dir){
+    float y=clamp(dir.y,-1.0,1.0);
+    vec3 horizon=uLighting==0?vec3(.53,.70,.69):vec3(.38,.52,.58);
+    vec3 zenith=uLighting==0?vec3(.21,.38,.47):vec3(.25,.35,.43);
+    vec3 sky=mix(horizon,zenith,smoothstep(-.02,.88,y));
+    // Broad, soft cloudy reflections: no planar repeating diamond pattern.
+    vec2 coord=dir.xz/max(.25,dir.y+.65);
+    float cloud=noise(coord*1.85+vec2(uTime*.006,-uTime*.004));
+    cloud=.65*cloud+.35*noise(coord*4.0+vec2(13.7,8.9));
+    float cloudAmount=smoothstep(.50,.78,cloud)*smoothstep(-.06,.32,y);
+    sky=mix(sky,vec3(.82,.84,.78),cloudAmount*(uLighting==0?.38:.21));
+    vec3 sunDir=normalize(vec3(-.6,1.0,.9));
+    float sunGlow=pow(max(0.,dot(dir,sunDir)),70.0);
+    sky+=vec3(.65,.50,.25)*sunGlow*(uLighting==0?.29:.07);
+    return sky;
+  }
   void main(){
     vec3 sun=normalize(uLighting==0?vec3(-.6,1.0,.9):vec3(-.35,1.0,.2));
     vec3 color=uTint;
     if(uType==1){
       vec2 p=vWorld.xz;
-      vec2 flow=p*1.25+vec2(uTime*.055,-uTime*.088)*uWind;
-      float n1=noise(flow);
-      float n2=noise(flow*2.57+vec2(23.1,7.2));
-      float n3=noise(flow*4.53+vec2(8.6,34.7));
+      vec2 flow=p*.78+vec2(uTime*.035,-uTime*.051)*uWind;
+      float n1=noise(flow*1.29);
+      float n2=noise(flow*3.17+vec2(23.1,7.2));
+      float n3=noise(flow*7.63+vec2(8.6,34.7));
       if(uWaterMode==1){
-        vec3 n=normalize(vNormal+vec3((n1-n2)*.065*uWind,0.,(n3-n1)*.065*uWind));
-        vec3 viewDir=normalize(uCamera-vWorld);
-        float nv=clamp(dot(n,viewDir),0.0,1.0);
-        float fresnel=0.02+0.98*pow(1.0-nv,5.0);
-        vec3 reflected=reflect(-viewDir,n);
-        float skyT=clamp(reflected.y*.65+.5,0.0,1.0);
-        vec3 sky=mix(vec3(.13,.22,.24),vec3(.49,.66,.67),skyT);
-        if(uLighting==1)sky*=.76;
-        float fine=(n1-.5)*.042+(n2-.5)*.029+(n3-.5)*.014;
-        vec3 deep=vec3(.026,.13,.16),shallow=vec3(.064,.23,.24);
-        color=mix(deep,shallow,clamp(.47+fine*6.0,0.0,1.0));
-        color=mix(color,sky,clamp(fresnel*uReflect*.75,0.0,.70));
-        float gloss=pow(max(dot(reflect(-sun,n),viewDir),0.),96.0);
-        color+=vec3(.48,.56,.47)*gloss*(uLighting==0?.48:.21);
-        float lively=smoothstep(.29,.80,abs(vWave));
-        color+=vec3(.045,.075,.071)*lively*.35;
+        vec2 uv=p/24.0+.5;
+        float outside=max(abs(uv.x-.5),abs(uv.y-.5))*2.0;
+        float fade=1.0-smoothstep(.74,.98,outside);
+        vec4 info=texture(uSurfaceNormalTex,clamp(uv,vec2(.002),vec2(.998)));
+        vec2 slope=(info.rg*2.0-1.0)*3.0*fade;
+        float height=(info.b*2.0-1.0)*fade;
+        // Two drifting wind wave trains, with analytical derivatives.
+        float w1=dot(p,vec2(.58,.34))-uTime*.71;
+        float w2=dot(p,vec2(-.37,.83))+uTime*.48;
+        vec2 windSlope=(vec2(.58,.34)*cos(w1)*.15+
+                        vec2(-.37,.83)*cos(w2)*.12)*uWind;
+        vec2 noiseSlope=vec2(n1-n2,n3-n1)*.092*uWind;
+        vec3 N=normalize(vec3(-(slope.x*(.10+uWaveScale*1.8)+windSlope.x+noiseSlope.x),
+                               1.0,
+                               -(slope.y*(.10+uWaveScale*1.8)+windSlope.y+noiseSlope.y)));
+        if(uDebug==1){
+          // Warm red = crest, deep blue = trough, neutral grey = flat.
+          float h=clamp(height*5.0,-1.,1.);
+          vec3 neutral=vec3(.22,.26,.27);
+          vec3 crest=vec3(.91,.42,.20);
+          vec3 trough=vec3(.16,.39,.84);
+          color=mix(neutral,h>=0.0?crest:trough,abs(h));
+        }else if(uDebug==2){
+          // RGB normal visualization: surface detail remains readable.
+          color=N*.5+.5;
+        }else{
+          vec3 V=normalize(uCamera-vWorld);
+          float nv=clamp(dot(N,V),0.,1.);
+          float fresnel=.025+.975*pow(1.0-nv,5.0);
+          vec3 R=reflect(-V,N);
+          vec3 reflected=skyColor(R);
+          float tiny=(n1-.5)*.055+(n2-.5)*.030+(n3-.5)*.012;
+          vec3 deep=vec3(.035,.17,.19);
+          vec3 bright=vec3(.074,.28,.29);
+          color=mix(deep,bright,clamp(.48+tiny*5.0+height*.09,0.,1.));
+          // Schlick Fresnel with some base reflection so it remains legible
+          // even when viewed from above (unlike the first lab).
+          float reflectAmount=clamp((.09+.84*fresnel)*uReflect,0.,.81);
+          color=mix(color,reflected,reflectAmount);
+          float shine=pow(max(dot(reflect(-sun,N),V),0.),75.0);
+          color+=vec3(.73,.76,.64)*shine*(uLighting==0?.42:.16);
+          float rippleGradient=length(slope)*(.10+uWaveScale);
+          color+=vec3(.085,.13,.12)*smoothstep(.13,.85,rippleGradient)*.25;
+        }
       }else{
-        // The original decorative noise is retained for A/B inspection.
+        // A/B baseline from Water Lab 01 (do not alter its texture pattern).
         float raw=noise(p*2.7+vec2(uTime*.16,-uTime*.10));
         float small=noise(p*6.8+vec2(-uTime*.18,uTime*.12));
         color=mix(vec3(.036,.18,.22),vec3(.075,.31,.34),
@@ -142,8 +191,10 @@
       float wrapped=clamp(diffuse*.75+.25,0.,1.);
       color*=uLighting==0?(.50+.57*wrapped):(.49+.42*wrapped);
     }
-    vec3 fog=uLighting==0?vec3(.65,.77,.74):vec3(.57,.66,.69);
-    color=mix(color,fog,smoothstep(28.,72.,vDistance));
+    if(!(uType==1&&uWaterMode==1&&uDebug!=0)){
+      vec3 fog=uLighting==0?vec3(.65,.77,.74):vec3(.57,.66,.69);
+      color=mix(color,fog,smoothstep(28.,72.,vDistance));
+    }
     fragColor=vec4(color,1.);
   }`;
 
@@ -202,6 +253,20 @@
       outputInfo(h.x+uStrength*f,h.y);
     }`;
 
+  // Original WebGL Water computes a normal field after each wave update.
+  // Here we use a separate RGBA8 normal texture with LINEAR filtering:
+  //   R/G = encoded height gradient in world units, B = height for debug.
+  // This avoids bilinear interpolation on the packed height/velocity bytes.
+  const simNormalFragment = `#version 300 es\n${simCommon}
+    void main(){
+      ivec2 p=ivec2(gl_FragCoord.xy);
+      float h=info(p).x;
+      float hx=(info(p+ivec2(1,0)).x-info(p-ivec2(1,0)).x)*256.0/(2.0*24.0);
+      float hz=(info(p+ivec2(0,1)).x-info(p-ivec2(0,1)).x)*256.0/(2.0*24.0);
+      fragColor=vec4(clamp(vec2(hx,hz)/3.0*.5+.5,0.,1.),
+                     clamp(h*.5+.5,0.,1.),1.0);
+    }`;
+
   function shader(kind, src) {
     const s=gl.createShader(kind);
     gl.shaderSource(s,src); gl.compileShader(s);
@@ -227,7 +292,9 @@
     waveScale:gl.getUniformLocation(program,'uWaveScale'),
     wind:gl.getUniformLocation(program,'uWind'),
     reflections:gl.getUniformLocation(program,'uReflect'),
-    camera:gl.getUniformLocation(program,'uCamera')
+    camera:gl.getUniformLocation(program,'uCamera'),
+    normal:gl.getUniformLocation(program,'uSurfaceNormalTex'),
+    debug:gl.getUniformLocation(program,'uDebug')
   };
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
@@ -267,7 +334,22 @@
     }
     sim={buffers,read:0,blank,quad:gl.createVertexArray(),
       update:createSimulationProgram(simUpdateFragment),
-      drop:createSimulationProgram(simDropFragment)};
+      drop:createSimulationProgram(simDropFragment),
+      normals:createSimulationProgram(simNormalFragment)};
+    const normalTex=gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D,normalTex);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,SIM_SIZE,SIM_SIZE,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+    const normalFB=gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER,normalFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,normalTex,0);
+    if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)
+      throw Error('Surface-normal framebuffer is incomplete');
+    sim.normalTex=normalTex;
+    sim.normalFB=normalFB;
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
     gl.bindVertexArray(null);
     gl.useProgram(program);
@@ -299,6 +381,18 @@
     gl.drawArrays(gl.TRIANGLES,0,3);
     sim.read=next;
   }
+  function updateNormalField(){
+    gl.disable(gl.DEPTH_TEST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER,sim.normalFB);
+    gl.viewport(0,0,SIM_SIZE,SIM_SIZE);
+    gl.useProgram(sim.normals.program);
+    gl.bindVertexArray(sim.quad);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D,sim.buffers[sim.read].tex);
+    gl.uniform1i(sim.normals.previous,0);
+    gl.drawArrays(gl.TRIANGLES,0,3);
+  }
+
   const pendingDrops=[];
   function splashAt(x,z,strength=.35,radius=.015){
     const uv=[x/SIM_SPAN+.5,z/SIM_SPAN+.5];
@@ -358,11 +452,21 @@
     return m.upload();
   }
   function waterGeo() {
-    const m=new Geometry(),N=140,SIZE=100;
-    for(let i=0;i<N;i++)for(let j=0;j<N;j++){
-      const x=-SIZE/2+i*SIZE/N,z=-SIZE/2+j*SIZE/N,d=SIZE/N;
-      m.quad([x,.035,z],[x+d,.035,z],[x+d,.035,z+d],[x,.035,z+d]);
+    const m=new Geometry();
+    // Dense geometry ONLY within the 24-unit interactive area. Outside that
+    // square a coarse outer ring reaches the horizon. No overlapping planes.
+    function tile(x0,x1,z0,z1,nx,nz){
+      for(let i=0;i<nx;i++)for(let j=0;j<nz;j++){
+        const x=x0+(x1-x0)*i/nx,z=z0+(z1-z0)*j/nz;
+        const dx=(x1-x0)/nx,dz=(z1-z0)/nz;
+        m.quad([x,.035,z],[x+dx,.035,z],[x+dx,.035,z+dz],[x,.035,z+dz]);
+      }
     }
+    tile(-12,12,-12,12,160,160);
+    tile(-50,-12,-50,50,16,40);
+    tile(12,50,-50,50,16,40);
+    tile(-12,12,-50,-12,24,16);
+    tile(-12,12,12,50,24,16);
     return m.upload();
   }
   const sphere=sphereGeo(),cylinder=cylinderGeo(),cube=cubeGeo(),water=waterGeo();
@@ -793,7 +897,8 @@
     side:{yaw:PI/2,pitch:.14,distance:4.2,target:[0,1.06,0]},
     rear:{yaw:PI,pitch:.15,distance:4.2,target:[0,1.10,0]},
     top:{yaw:.50,pitch:1.10,distance:5.25,target:[0,.88,0]},
-    closeup:{yaw:.36,pitch:.12,distance:2.55,target:[-.45,1.55,0]}
+    closeup:{yaw:.36,pitch:.12,distance:2.55,target:[-.45,1.55,0]},
+    surface:{yaw:.60,pitch:.82,distance:7.8,target:[1.35,.035,1.4]}
   };
   const cam={...presets.threequarter,target:[...presets.threequarter.target]};
   function selectView(name){
@@ -851,7 +956,7 @@
   canvas.addEventListener('pointercancel',release);
   canvas.addEventListener('wheel',e=>{e.preventDefault();cam.distance=clamp(cam.distance*Math.exp(e.deltaY*.001),1.8,14);},{passive:false});
 
-  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,rain:.22,wake:.72,wave:.26,wind:.52,reflections:.85};
+  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.72,wave:.38,wind:.52,reflections:.85};
   const tempo=$('rowingSpeed'),stroke=$('strokePhase');
   function updatePauseButton(){
     $('pauseRowing').textContent=state.running?'Pause Rowing':'Resume Rowing';
@@ -890,7 +995,27 @@
       output.textContent=input.value+'%';
     });
   }
+  function setDebug(mode){
+    state.debug=mode;
+    document.querySelectorAll('.debug-btn').forEach(btn=>{
+      const on=Number(btn.dataset.debug)===mode;
+      btn.classList.toggle('active',on);
+      btn.setAttribute('aria-pressed',String(on));
+    });
+    $('debugExplanation').textContent=mode===0
+      ? 'Shaded water: height changes become lighting and reflective highlights.'
+      :mode===1
+      ? 'Crest = warm orange, trough = blue, flat water = grey. Click to inject waves.'
+      : 'RGB surface normals: tilted water changes the surface color. This is computed on the GPU.';
+  }
+  document.querySelectorAll('.debug-btn').forEach(btn=>
+    btn.addEventListener('click',()=>setDebug(Number(btn.dataset.debug))));
+
   function updateMode(){
+    if(state.mode===0 && state.debug!==0)setDebug(0);
+    document.querySelectorAll('.debug-btn').forEach(btn=>{
+      btn.disabled=state.mode===0 && Number(btn.dataset.debug)!==0;
+    });
     $('modeSim').classList.toggle('active',state.mode===1);
     $('modeClassic').classList.toggle('active',state.mode===0);
     $('modeSim').setAttribute('aria-pressed',String(state.mode===1));
@@ -991,6 +1116,7 @@
         }
         for(let i=0;i<2;i++)simulationPass(sim.update);
       }else if(pendingDrops.length>40){pendingDrops.splice(0,pendingDrops.length-40);}
+      if(state.mode===1)updateNormalField();
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);
       gl.viewport(0,0,canvas.width,canvas.height);
       gl.useProgram(program);
@@ -998,6 +1124,10 @@
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D,sim.buffers[sim.read].tex);
       gl.uniform1i(uni.ripple,0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D,sim.normalTex);
+      gl.uniform1i(uni.normal,1);
+      gl.uniform1i(uni.debug,state.debug);
       gl.uniform1i(uni.waterMode,state.mode);
       gl.uniform1f(uni.waveScale,state.wave*.55);
       gl.uniform1f(uni.wind,state.wind);
@@ -1018,7 +1148,7 @@
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Water Lab 01 ready';
+      status.textContent='WebGL 2 active · Water Lab 01.1 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);

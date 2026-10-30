@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#081e29">
-  <meta name="description" content="Majhi Jaben?! Water Lab 01 — GPU interactive floodwater simulation, tested separately from the main game.">
+  <meta name="description" content="Majhi Jaben?! Water Lab 01.1 — GPU interactive floodwater simulation, tested separately from the main game.">
   <title>Majhi Jaben?! · Water Lab 01</title>
   <link rel="stylesheet" href="./style.css">
-  <script src="./water-test.js?v=1" defer></script>
+  <script src="./water-test.js?v=11" defer></script>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 01</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
+      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 01.1</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
       <a class="game-link" href="../index.html">Original game</a>
     </header>
     <main class="layout">
@@ -20,7 +20,7 @@
         <canvas id="scene" tabindex="0">Your browser does not support the 3D preview.</canvas>
         <div class="scene-status"><span class="status-dot"></span><span id="rendererStatus">Starting water simulation...</span></div>
         <div id="errorPanel" class="error-panel" hidden><h2>Renderer unavailable</h2><p id="errorMessage">Could not start WebGL 2.</p></div>
-        <div class="hero"><span class="eyebrow">WATER STUDY 01 / SEPARATE FROM MAIN GAME</span><h2>Ripples, not tiles.</h2><p>Click the water to create a ripple. Drag to orbit, scroll to zoom. Compare the original noise water against the new simulated surface.</p></div>
+        <div class="hero"><span class="eyebrow">WATER STUDY 01.1 / PER-PIXEL GPU NORMALS</span><h2>See the ripples.</h2><p>Click the water to create a ripple. Switch to Height and Normals to see the simulation working. Use Water view to inspect the surface.</p></div>
         <div class="viewer-footer">CLICK WATER TO SPLASH <span>·</span> DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM</div>
       </section>
       <aside class="panel">
@@ -30,12 +30,19 @@
           <div class="duo"><button type="button" class="mode-btn active" id="modeSim" aria-pressed="true">New simulated</button><button type="button" class="mode-btn" id="modeClassic" aria-pressed="false">Previous water</button></div>
           <p class="note" id="modeDescription">GPU height and velocity ripples · paddle splashes · hull wake · rain</p>
           <div class="duo"><button type="button" class="secondary-btn" id="centerDrop">Drop a ripple</button><button type="button" class="secondary-btn" id="resetWater">Clear ripples</button></div>
+          <h3 class="diagnostic-heading">Surface diagnostics</h3>
+          <div class="diagnostic-grid" role="group" aria-label="Water surface visualization">
+            <button type="button" class="debug-btn active" data-debug="0" aria-pressed="true">Shaded</button>
+            <button type="button" class="debug-btn" data-debug="1" aria-pressed="false">Height</button>
+            <button type="button" class="debug-btn" data-debug="2" aria-pressed="false">Normals</button>
+          </div>
+          <p class="note" id="debugExplanation">Shaded water: height changes become lighting and reflective highlights.</p>
         </section>
         <section class="section">
           <h3>Water behavior</h3>
           <div class="slider-label"><label for="rainSlider">Rain frequency</label><output id="rainSliderValue">22%</output></div><input type="range" id="rainSlider" min="0" max="100" value="22">
           <div class="slider-label"><label for="wakeSlider">Boat wake</label><output id="wakeSliderValue">72%</output></div><input type="range" id="wakeSlider" min="0" max="100" value="72">
-          <div class="slider-label"><label for="waveSlider">Ripple height</label><output id="waveSliderValue">26%</output></div><input type="range" id="waveSlider" min="0" max="100" value="26">
+          <div class="slider-label"><label for="waveSlider">Ripple height</label><output id="waveSliderValue">38%</output></div><input type="range" id="waveSlider" min="0" max="100" value="38">
           <div class="slider-label"><label for="windSlider">Wind surface detail</label><output id="windSliderValue">52%</output></div><input type="range" id="windSlider" min="0" max="100" value="52">
           <div class="slider-label"><label for="reflectionSlider">View-angle reflections</label><output id="reflectionSliderValue">85%</output></div><input type="range" id="reflectionSlider" min="0" max="100" value="85">
         </section>
@@ -48,6 +55,7 @@
             <button class="view-btn" data-view="rear" type="button" aria-pressed="false">Rear</button>
             <button class="view-btn" data-view="top" type="button" aria-pressed="false">Top</button>
             <button class="view-btn" data-view="closeup" type="button" aria-pressed="false">Close-up</button>
+            <button class="view-btn" data-view="surface" type="button" aria-pressed="false">Water view</button>
           </div><button id="resetCamera" type="button" class="secondary-btn wide">Reset camera</button>
         </section>
         <section class="section">
