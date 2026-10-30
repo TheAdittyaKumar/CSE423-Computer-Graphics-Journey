@@ -416,6 +416,14 @@
     facadeWaterline.quad([x0,y0,z0],[x1,y0,z1],[x1,y1,z1],[x0,y1,z0],
       [.12,.28,.30],8);
   }
+  function addFacadePanelZ(cx,cy,wallZ,dir,w,h,col){
+    cityFacadeDetails.box(cx,cy,wallZ+dir*.55,w,h,1.0,col);
+    cityFacadeDetails.box(cx,cy+h*.5-1.0,wallZ+dir*1.0,w,2.0,.8,col.map(v=>Math.min(1,v*1.08)));
+  }
+  function addFacadePanelX(wallX,cy,cz,dir,w,h,col){
+    cityFacadeDetails.box(wallX+dir*.55,cy,cz,1.0,h,w,col);
+    cityFacadeDetails.box(wallX+dir*1.0,cy+h*.5-1.0,cz,.8,2.0,w,col.map(v=>Math.min(1,v*1.08)));
+  }
   for(const b of buildings){
     // Campus has its own protected sunny courtyard, not flooded walls.
     if(distance(b.x,b.z,0,1378)<445)continue;
@@ -2561,10 +2569,10 @@
   shopSigns.upload();
   const cityFacadeDetails=new Mesh(),cityFacadeLights=new Mesh(),storeCanopies=new Mesh();
   const utilityPoles=new Mesh(),overheadWires=new Mesh();
-  const dhakaWallBands=[[.80,.72,.67],[.73,.66,.74],[.82,.74,.62],[.72,.78,.76],[.77,.69,.60]];
-  const dhakaAccents=[[.72,.33,.24],[.33,.50,.73],[.47,.63,.39],[.83,.61,.22],[.54,.36,.69]];
-  const dhakaTiles=[[.67,.58,.50],[.62,.55,.50],[.55,.52,.51],[.74,.66,.57]];
-  const grillMetal=[.27,.31,.33],windowDark=[.10,.16,.20],wireColor=[.12,.12,.13];
+  const dhakaWallBands=[[.86,.78,.73],[.82,.74,.80],[.88,.80,.68],[.76,.82,.80],[.84,.74,.66],[.90,.76,.76]];
+  const dhakaAccents=[[.76,.36,.28],[.36,.54,.77],[.51,.67,.42],[.88,.64,.22],[.58,.40,.72],[.52,.37,.30]];
+  const dhakaTiles=[[.73,.64,.56],[.68,.60,.55],[.60,.57,.56],[.80,.71,.61]];
+  const grillMetal=[.30,.33,.35],windowDark=[.08,.14,.18],wireColor=[.19,.18,.18];
   const buildingRoofAnchors=[];
   const lerp=(a,b,t)=>a+(b-a)*t;
   function addBalconyZ(cx,cy,wallZ,dir,span,depth,accent){
@@ -2595,7 +2603,7 @@
     for(let k=-2;k<=2;k++)cityFacadeDetails.box(wallX+dir*1.1,cy,cz+k*(w/5.5),.85,h,1.0,[.68,.71,.74]);
     if(lit)cityFacadeLights.box(wallX+dir*.65,cy,cz,.9,h-3,w-3,[.98,.84,.60]);
   }
-  function addSagWire(a,b,sag=11,segments=8,radius=.42){
+  function addSagWire(a,b,sag=11,segments=10,radius=.66){
     let prev=[a.x,a.y,a.z];
     for(let i=1;i<=segments;i++){
       const t=i/segments;
@@ -2610,19 +2618,24 @@
     const frontZ=b.z-b.hd-2.8,backZ=b.z+b.hd+2.8,leftX=b.x-b.hw-2.8,rightX=b.x+b.hw+2.8;
     const hasCornerBalcony=b.idx%2===0,hasSideBalcony=b.idx%3!==1,roundedStack=b.idx%4===1;
     // Street-level Dhaka-style gates and tiled podiums.
-    cityFacadeDetails.box(b.x,10,frontZ,Math.min(b.hw*1.18,128),20,3.2,tile);
-    cityFacadeDetails.box(b.x,22,frontZ-1.8,Math.min(b.hw*1.12,122),4,6.6,accent);
-    cityFacadeDetails.box(b.x,14,frontZ-1.0,30,24,2.4,[.16,.20,.23]);
-    cityFacadeDetails.box(b.x,5.5,frontZ-.5,34,3.2,1.4,[.22,.24,.26]);
-    for(let k=-2;k<=2;k++)cityFacadeDetails.box(b.x+k*5.5,14,frontZ-1.9,1.1,22,.95,[.74,.77,.80]);
-    cityFacadeDetails.box(b.x,10,backZ,Math.min(b.hw*1.06,118),20,3.0,tile.map(v=>v*.92));
+    cityFacadeDetails.box(b.x,10,frontZ,Math.min(b.hw*1.30,154),22,4.0,tile);
+    cityFacadeDetails.box(b.x,22.5,frontZ-2.0,Math.min(b.hw*1.22,146),5,7.5,accent);
+    cityFacadeDetails.box(b.x,14,frontZ-1.0,36,24,2.4,[.16,.20,.23]);
+    cityFacadeDetails.box(b.x,5.5,frontZ-.5,38,3.2,1.4,[.22,.24,.26]);
+    for(let k=-3;k<=3;k++)cityFacadeDetails.box(b.x+k*5.4,14,frontZ-1.9,1.15,22,.95,[.74,.77,.80]);
+    cityFacadeDetails.box(b.x,10,backZ,Math.min(b.hw*1.10,126),20,3.0,tile.map(v=>v*.92));
+    // Stronger front/side facade recoloring so buildings read more like Dhaka apartments.
+    addFacadePanelZ(b.x,b.h*.50,frontZ,-1,b.hw*1.28,b.h-10,wall);
+    addFacadePanelZ(b.x,b.h*.50,backZ,1,b.hw*1.08,b.h-18,wall.map(v=>v*.96));
+    addFacadePanelX(leftX,b.h*.52,b.z,-1,b.hd*1.20,b.h-16,wall.map(v=>v*.98));
+    addFacadePanelX(rightX,b.h*.52,b.z,1,b.hd*1.22,b.h-16,wall.map(v=>v*1.02));
     // Vertical facade bands and parapet lips on all four sides.
-    cityFacadeDetails.box(b.x-b.hw*.28,b.h*.5,frontZ-.2,12,b.h-18,1.8,wall.map(v=>v*1.05));
-    cityFacadeDetails.box(b.x+b.hw*.28,b.h*.5,frontZ-.2,12,b.h-18,1.8,wall.map(v=>v*.96));
-    cityFacadeDetails.box(leftX+.2,b.h*.53,b.z-b.hd*.24,1.8,b.h-30,18,wall.map(v=>v*.98));
-    cityFacadeDetails.box(rightX-.2,b.h*.53,b.z+b.hd*.24,1.8,b.h-30,18,wall.map(v=>v*.98));
-    cityFacadeDetails.box(b.x,b.h+5,frontZ-1.8,b.hw*1.06,5,5.0,accent.map(v=>v*.78));
-    cityFacadeDetails.box(b.x,b.h+5,backZ+1.8,b.hw*1.00,5,4.6,accent.map(v=>v*.74));
+    cityFacadeDetails.box(b.x-b.hw*.30,b.h*.5,frontZ-.2,14,b.h-18,2.0,accent.map(v=>v*.95));
+    cityFacadeDetails.box(b.x+b.hw*.30,b.h*.5,frontZ-.2,14,b.h-18,2.0,accent.map(v=>v*.88));
+    cityFacadeDetails.box(leftX+.2,b.h*.53,b.z-b.hd*.24,2.0,b.h-30,20,accent.map(v=>v*.86));
+    cityFacadeDetails.box(rightX-.2,b.h*.53,b.z+b.hd*.24,2.0,b.h-30,20,accent.map(v=>v*.86));
+    cityFacadeDetails.box(b.x,b.h+5,frontZ-1.8,b.hw*1.10,5.5,5.0,accent.map(v=>v*.78));
+    cityFacadeDetails.box(b.x,b.h+5,backZ+1.8,b.hw*1.02,5.0,4.6,accent.map(v=>v*.74));
     // Dhaka-like balcony stacks, grilled windows and small AC boxes.
     for(let level=0;level<floors-1;level++){
       const y=41+level*32;
@@ -2640,6 +2653,10 @@
         cityFacadeDetails.box(b.x+b.hw*.36, y-2.5, frontZ-4.0, 11,8,7,[.56,.58,.60]);
         cityFacadeDetails.box(b.x+b.hw*.36, y-1.0, frontZ-6.2, 12,2,2,[.32,.36,.39]);
       }
+      if(level%2===1){
+        addGrillWindowX(leftX,y,b.z+b.hd*.20,-1,16,16,lit&&level%3===1);
+        addBalconyX(leftX,y-1.2,b.z-b.hd*.18,-1,10,36,wall.map(v=>v*.9));
+      }
     }
     // Rooftop tanks, a stair head-room and parapet details are common in Dhaka.
     cityFacadeDetails.box(b.x-b.hw*.16,b.h+10,b.z+b.hd*.10,36,20,32,[.29,.34,.36]);
@@ -2655,31 +2672,41 @@
     for(let k=-4;k<=4;k++)storeCanopies.box(x+k*11,53,z-61.4,7,9,1.2,k%2?[.96,.58,.21]:[.98,.89,.64]);
   }
   const utilityPoleData=[];
-  function pushPole(x,z,h=150,type=0){utilityPoleData.push({x,z,h,type});}
-  for(const z of [-1150,-600,-50,500,1050])for(const x of [-1375,-825,-275,275,825]){
-    pushPole(x+165,z+(z<0?-155:155),148+((x+z)%3===0?10:0),(Math.abs(x)===275||z===500)?1:0);
+  function pushPole(x,z,h=130,type=0){utilityPoleData.push({x,z,h,type});}
+  // Put denser poles close to the visible road corridors so they actually read in gameplay.
+  const roadCentersX=[-550,0,550,1100,-1100], roadCentersZ=[-600,-50,500,1050,-1150];
+  for(const x of roadCentersX){
+    for(const z of [-1180,-730,-280,170,620,1070]){
+      pushPole(x-135,z,128+((x+z)%4===0?8:0),Math.abs(z)<350?1:0);
+      pushPole(x+135,z+35,132+((x-z)%5===0?6:0),((Math.abs(x)<60)||(x===550&&z<500))?1:0);
+    }
   }
-  for(const x of [-1100,0,1100])for(const z of [-1375,-875,-325,225,775])pushPole(x+(x<=0?-168:168),z+138,146+((x-z)%4===0?8:0),Math.abs(z)<400?1:0);
+  for(const z of [-600,-50,500]){
+    for(const x of [-1320,-770,-220,330,880,1430]){
+      pushPole(x,z-132,126+((x+z)%4===0?10:0),Math.abs(x)<400?1:0);
+      pushPole(x+40,z+132,130+((x-z)%3===0?8:0),x===330||x===880?1:0);
+    }
+  }
   const poleSpanRows=new Map(),poleSpanCols=new Map();
   for(const pole of utilityPoleData){
-    utilityPoles.cylinder(pole.x,pole.h*.5,pole.z,3.2,pole.h,[.39,.33,.29],8);
-    utilityPoles.box(pole.x,pole.h-16,pole.z,36,3.0,5.0,[.34,.29,.24]);
-    utilityPoles.box(pole.x,pole.h-25,pole.z,24,2.2,4.0,[.34,.29,.24]);
-    utilityPoles.box(pole.x,pole.h-46,pole.z,8,18,10,[.22,.25,.27]);
-    utilityPoles.box(pole.x,pole.h-62,pole.z,13,3,13,[.28,.32,.34]);
+    utilityPoles.cylinder(pole.x,pole.h*.5,pole.z,4.8,pole.h,[.41,.34,.28],10);
+    utilityPoles.box(pole.x,pole.h-16,pole.z,48,3.4,6.0,[.34,.29,.24]);
+    utilityPoles.box(pole.x,pole.h-25,pole.z,30,2.6,4.6,[.34,.29,.24]);
+    utilityPoles.box(pole.x,pole.h-46,pole.z,12,20,12,[.22,.25,.27]);
+    utilityPoles.box(pole.x,pole.h-62,pole.z,18,3.5,18,[.28,.32,.34]);
     if(pole.type){
-      utilityPoles.box(pole.x+10,pole.h-30,pole.z,18,22,14,[.35,.39,.40]);
+      utilityPoles.box(pole.x+12,pole.h-30,pole.z,22,24,16,[.35,.39,.40]);
       utilityPoles.cylinder(pole.x+10,pole.h-15,pole.z-2,4.2,6,[.16,.18,.20],6);
     }
     for(const y of [pole.h-15,pole.h-24]){
-      overheadWires.ring(pole.x+2.2,y,pole.z,5.4,.55,wireColor,12);
-      overheadWires.ring(pole.x-2.8,y-4,pole.z,4.1,.55,wireColor,10);
+      overheadWires.ring(pole.x+2.2,y,pole.z,7.2,.9,wireColor,14);
+      overheadWires.ring(pole.x-3.6,y-4,pole.z,5.6,.8,wireColor,12);
     }
     const rowKey=Math.round(pole.z/5)*5,colKey=Math.round(pole.x/5)*5;
     if(!poleSpanRows.has(rowKey))poleSpanRows.set(rowKey,[]);poleSpanRows.get(rowKey).push(pole);
     if(!poleSpanCols.has(colKey))poleSpanCols.set(colKey,[]);poleSpanCols.get(colKey).push(pole);
     const nearby=buildingRoofAnchors.filter(a=>distance(a.x,a.z,pole.x,pole.z)<265).sort((p,q)=>distance(p.x,p.z,pole.x,pole.z)-distance(q.x,q.z,pole.x,pole.z)).slice(0,2);
-    nearby.forEach((a,i)=>addSagWire({x:pole.x,y:pole.h-18-i*8,z:pole.z},{x:a.x,y:a.y-i*4,z:a.z},7+i*2,6,.32));
+    nearby.forEach((a,i)=>addSagWire({x:pole.x,y:pole.h-18-i*8,z:pole.z},{x:a.x,y:a.y-i*4,z:a.z},10+i*3,7,.46));
   }
   for(const arr of poleSpanRows.values()){
     arr.sort((a,b)=>a.x-b.x);
@@ -2687,8 +2714,8 @@
       const a=arr[i],b=arr[i+1];
       if(Math.abs(a.x-b.x)>620)continue;
       const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1,px=-dz/len,pz=dx/len;
-      for(const [off,y,sag] of [[-2.4,0,10],[0,7,14],[2.8,13,12],[-5.2,21,16]]){
-        addSagWire({x:a.x+px*off,y:a.h-18-y,z:a.z+pz*off},{x:b.x+px*off,y:b.h-18-y,z:b.z+pz*off},sag,8,.36);
+      for(const [off,y,sag] of [[-3.8,0,12],[0,6,15],[3.6,12,13],[-7.0,20,17],[7.4,24,18]]){
+        addSagWire({x:a.x+px*off,y:a.h-18-y,z:a.z+pz*off},{x:b.x+px*off,y:b.h-18-y,z:b.z+pz*off},sag,10,.48);
       }
     }
   }
@@ -2698,11 +2725,23 @@
       const a=arr[i],b=arr[i+1];
       if(Math.abs(a.z-b.z)>620)continue;
       const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1,px=-dz/len,pz=dx/len;
-      for(const [off,y,sag] of [[-2.2,0,10],[0,7,14],[2.4,13,12]]){
-        addSagWire({x:a.x+px*off,y:a.h-20-y,z:a.z+pz*off},{x:b.x+px*off,y:b.h-20-y,z:b.z+pz*off},sag,8,.34);
+      for(const [off,y,sag] of [[-3.0,0,11],[0,7,15],[3.0,13,13],[-6.2,19,16]]){
+        addSagWire({x:a.x+px*off,y:a.h-20-y,z:a.z+pz*off},{x:b.x+px*off,y:b.h-20-y,z:b.z+pz*off},sag,10,.46);
       }
     }
   }
+  // Extra low crossing wires near the core play area so the Dhaka street clutter is unmistakable.
+  const extraWireSpans=[
+    [{x:-160,y:108,z:-620},{x:160,y:112,z:-610}],
+    [{x:390,y:110,z:-40},{x:720,y:108,z:-20}],
+    [{x:-700,y:106,z:220},{x:-360,y:109,z:240}],
+    [{x:-165,y:98,z:520},{x:155,y:100,z:540}],
+    [{x:935,y:102,z:500},{x:1265,y:104,z:500}],
+    [{x:540,y:114,z:-610},{x:540,y:105,z:-300}],
+    [{x:0,y:112,z:-300},{x:0,y:100,z:80}],
+    [{x:-550,y:110,z:-300},{x:-550,y:101,z:120}]
+  ];
+  extraWireSpans.forEach(([a,b],i)=>{addSagWire(a,b,12+(i%3)*3,10,.52); if(i%2===0)addSagWire({x:a.x+8,y:a.y-8,z:a.z+5},{x:b.x-8,y:b.y-10,z:b.z-6},15,10,.38);});
   cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();utilityPoles.upload();overheadWires.upload();
   // Detailed, source-independent flood-damaged electrical cabinets. The legacy
   // baked powerboxes mesh is intentionally not drawn, to avoid overlapping models.
@@ -5055,8 +5094,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='phase13-dhaka-buildings-wires';
-  window.majhiWaterDiagnostics=()=>({phase:'13-dhaka-buildings-wires',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='phase14-dhaka-buildings-wires-dense';
+  window.majhiWaterDiagnostics=()=>({phase:'14-dhaka-buildings-wires-dense',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
     minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatCruiseSpeed:245,boatReverseSpeed:165,boatSinglePassOars:true,boatWetGeometryDraws:0,firstPersonTorsoHidden:true,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
