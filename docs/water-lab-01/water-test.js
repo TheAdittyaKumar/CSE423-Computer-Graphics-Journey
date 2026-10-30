@@ -1,6 +1,6 @@
 /*
  * MAJHI JABEN?! / VISUAL LAB 02
- * Water Lab 01.1: per-pixel GPU ripple normals, Fresnel optics, diagnostics.
+ * Water Lab 01.2: motion-linked wakes, paddle entry ripples, calibrated optics.
  * No dependencies, downloads, build step, or changes to the main game.
  */
 (() => {
@@ -31,8 +31,8 @@
   }
   if (!gl) { fail('WebGL 2 is not enabled in this browser. Try Chrome or Edge with hardware acceleration enabled.'); return; }
 
-  // The boat meshes and character are preserved from Visual Lab 02.3.
-  // Water Lab 01 adds interactive height/velocity textures on the GPU.
+  // Existing boat/rower geometry is preserved. This version changes only
+  // water simulation, optical shading, and controlled horizontal travel.
   const SIM_SIZE = 256;
   const SIM_SPAN = 24.0; // physical area in world units, centered on the boat
   const waterVertex = `#version 300 es
@@ -94,6 +94,8 @@
   uniform highp int uType,uWaterMode;
   uniform int uLighting,uDebug;
   uniform sampler2D uSurfaceNormalTex;
+  uniform vec4 uFoam[8];  // x,z,visibility,radius in world units
+  uniform int uFoamCount;
   out vec4 fragColor;
 
   float hash21(vec2 p){
@@ -150,14 +152,16 @@
                                -(slope.y*(.10+uWaveScale*1.8)+windSlope.y+noiseSlope.y)));
         if(uDebug==1){
           // Warm red = crest, deep blue = trough, neutral grey = flat.
-          float h=clamp(height*5.0,-1.,1.);
+          float h=clamp(height*13.0,-1.,1.);
           vec3 neutral=vec3(.22,.26,.27);
           vec3 crest=vec3(.91,.42,.20);
           vec3 trough=vec3(.16,.39,.84);
           color=mix(neutral,h>=0.0?crest:trough,abs(h));
         }else if(uDebug==2){
           // RGB normal visualization: surface detail remains readable.
-          color=N*.5+.5;
+          // Diagnostic contrast is deliberately amplified, not physical normal magnitude.
+          vec3 diagnosticN=normalize(vec3(N.x*5.0,max(.15,N.y),N.z*5.0));
+          color=diagnosticN*.5+.5;
         }else{
           vec3 V=normalize(uCamera-vWorld);
           float nv=clamp(dot(N,V),0.,1.);
@@ -165,17 +169,29 @@
           vec3 R=reflect(-V,N);
           vec3 reflected=skyColor(R);
           float tiny=(n1-.5)*.055+(n2-.5)*.030+(n3-.5)*.012;
-          vec3 deep=vec3(.035,.17,.19);
-          vec3 bright=vec3(.074,.28,.29);
+          vec3 deep=vec3(.040,.176,.185);
+          vec3 bright=vec3(.085,.295,.289);
           color=mix(deep,bright,clamp(.48+tiny*5.0+height*.09,0.,1.));
           // Schlick Fresnel with some base reflection so it remains legible
           // even when viewed from above (unlike the first lab).
-          float reflectAmount=clamp((.09+.84*fresnel)*uReflect,0.,.81);
+          // Keep glancing reflections but prevent a broad blown-out horizon.
+          float reflectAmount=clamp((.055+.51*fresnel)*uReflect,0.,.48);
           color=mix(color,reflected,reflectAmount);
           float shine=pow(max(dot(reflect(-sun,N),V),0.),75.0);
           color+=vec3(.73,.76,.64)*shine*(uLighting==0?.42:.16);
           float rippleGradient=length(slope)*(.10+uWaveScale);
-          color+=vec3(.085,.13,.12)*smoothstep(.13,.85,rippleGradient)*.25;
+          color+=vec3(.075,.11,.10)*smoothstep(.14,.65,rippleGradient)*.18;
+          // Brief, subdued foam/sheen where an actual oar blade contacts water
+          // or a moving hull displaces it. No tiled circular white decals.
+          float foam=0.0;
+          for(int i=0;i<8;i++){
+            if(i>=uFoamCount)break;
+            vec4 f=uFoam[i];
+            float r=length((p-f.xy)/max(f.w,.01));
+            float randomEdge=noise(p*8.3+float(i)*13.1);
+            foam+=f.z*exp(-2.4*r*r)*(.55+.45*randomEdge);
+          }
+          color=mix(color,vec3(.59,.75,.69),clamp(foam*.34,0.,.23));
         }
       }else{
         // A/B baseline from Water Lab 01 (do not alter its texture pattern).
@@ -235,8 +251,10 @@
       vec2 h=info(p);
       float average=.25*(info(p+ivec2(1,0)).x+info(p-ivec2(1,0)).x+
                          info(p+ivec2(0,1)).x+info(p-ivec2(0,1)).x);
-      float v=(h.y+(average-h.x)*.38)*.992;
-      float newH=(h.x+v)*.997;
+      // Slightly stronger damping: a few small strokes shouldn't create
+      // ripples that travel across several boat lengths indefinitely.
+      float v=(h.y+(average-h.x)*.34)*.981;
+      float newH=(h.x+v)*.992;
       vec2 edge=min(vUv,1.0-vUv);
       float edgeFade=smoothstep(0.0,.055,min(edge.x,edge.y));
       outputInfo(newH*edgeFade,v*edgeFade);
@@ -294,7 +312,9 @@
     reflections:gl.getUniformLocation(program,'uReflect'),
     camera:gl.getUniformLocation(program,'uCamera'),
     normal:gl.getUniformLocation(program,'uSurfaceNormalTex'),
-    debug:gl.getUniformLocation(program,'uDebug')
+    debug:gl.getUniformLocation(program,'uDebug'),
+    foam:gl.getUniformLocation(program,'uFoam[0]'),
+    foamCount:gl.getUniformLocation(program,'uFoamCount')
   };
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
@@ -361,6 +381,8 @@
       gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,SIM_SIZE,SIM_SIZE,gl.RGBA,gl.UNSIGNED_BYTE,sim.blank);
     }
     sim.read=0;
+    pendingDrops.length=0;
+    foamSpots.length=0;
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   }
   function simulationPass(effect,center,radius,strength){
@@ -394,10 +416,16 @@
   }
 
   const pendingDrops=[];
-  function splashAt(x,z,strength=.35,radius=.015){
+  const foamSpots=[];
+  function addFoam(x,z,amount=.20,radius=.25){
+    foamSpots.push({x,z,amount,radius,age:0,lifetime:.55});
+    if(foamSpots.length>24)foamSpots.shift();
+  }
+  function splashAt(x,z,strength=.16,radius=.010){
     const uv=[x/SIM_SPAN+.5,z/SIM_SPAN+.5];
     if(uv[0]>.02&&uv[0]<.98&&uv[1]>.02&&uv[1]<.98)
       pendingDrops.push({uv,strength,radius});
+    if(pendingDrops.length>30)pendingDrops.shift();
   }
 
   // CPU-side model generation is done ONCE. Only transformation matrices change per frame.
@@ -489,7 +517,14 @@
       ...mul(axisZ,radiusZ),0, ...center,1
     ]);
   }
+  let boatOffsetX=0;
   function draw(mesh,matrix,color,type=0) {
+    // Translate the complete boat/rower as one scene object.
+    // The water mesh (type 1) always stays fixed in world space.
+    if(type!==1 && boatOffsetX!==0){
+      matrix=new Float32Array(matrix);
+      matrix[12]+=boatOffsetX;
+    }
     gl.uniformMatrix4fv(uni.model,false,matrix);
     gl.uniform3fv(uni.tint,color);
     gl.uniform1i(uni.type,type);
@@ -947,7 +982,8 @@
         const distance=(.045-eye[1])/ray[1];
         if(distance>0){
           const hit=add(eye,mul(ray,distance));
-          splashAt(hit[0],hit[2],.52,.024);
+          splashAt(hit[0],hit[2],.26,.014);
+          addFoam(hit[0],hit[2],.13,.18);
         }
       }
     }
@@ -956,7 +992,27 @@
   canvas.addEventListener('pointercancel',release);
   canvas.addEventListener('wheel',e=>{e.preventDefault();cam.distance=clamp(cam.distance*Math.exp(e.deltaY*.001),1.8,14);},{passive:false});
 
-  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.72,wave:.38,wind:.52,reflections:.85};
+  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.72,wave:.38,wind:.52,reflections:.85,travel:0};
+  // Boat motion is an explicit experiment, rather than a perpetual fake wake.
+  // This slider is inserted beside the existing wake slider: no HTML/CSS edits.
+  const travelLabel=document.createElement('div');
+  travelLabel.className='slider-label';
+  const travelTitle=document.createElement('label');
+  travelTitle.htmlFor='travelSlider';
+  travelTitle.textContent='Boat movement';
+  const travelValue=document.createElement('output');
+  travelValue.id='travelSliderValue';
+  travelValue.textContent='0% (still)';
+  travelLabel.append(travelTitle,travelValue);
+  const travelSlider=document.createElement('input');
+  travelSlider.type='range';
+  travelSlider.id='travelSlider';
+  travelSlider.min='0';travelSlider.max='100';travelSlider.value='0';
+  $('wakeSlider').after(travelLabel,travelSlider);
+  travelSlider.addEventListener('input',()=>{
+    state.travel=Number(travelSlider.value)/100;
+    travelValue.textContent=state.travel===0?'0% (still)':travelSlider.value+'%';
+  });
   const tempo=$('rowingSpeed'),stroke=$('strokePhase');
   function updatePauseButton(){
     $('pauseRowing').textContent=state.running?'Pause Rowing':'Resume Rowing';
@@ -1027,7 +1083,7 @@
   $('modeSim').addEventListener('click',()=>{state.mode=1;updateMode();});
   $('modeClassic').addEventListener('click',()=>{state.mode=0;updateMode();});
   $('resetWater').addEventListener('click',clearRipples);
-  $('centerDrop').addEventListener('click',()=>splashAt(2.4,1.0,.70,.042));
+  $('centerDrop').addEventListener('click',()=>{splashAt(2.4,1.0,.27,.015);addFoam(2.4,1.0,.20,.22);});
   updateMode();
 
   // Very low-detail distant silhouettes are intentionally secondary to the model.
@@ -1062,7 +1118,17 @@
     gl.viewport(0,0,w,h);
   }
   let previous=0,fpsClock=0,fpsFrames=0,lastFps=0,seconds=0;
-  let lastOarDrop=0,lastWake=0,rainAccumulator=0;
+  let boatX=0,boatDirection=1,lastOarDrop=-10,lastWake=-10,rainAccumulator=0;
+  let simAccumulator=0;
+  // The blade's outer segment crosses the surface only during catch/drive.
+  // Compute the *actual* intersection with the still-water level.
+  function paddleContact(pose){
+    const a=pose.bladeStart,b=pose.bladeEnd;
+    const level=.040;
+    if((a[1]-level)*(b[1]-level)>0)return null;
+    const f=clamp((level-a[1])/(b[1]-a[1]),0,1);
+    return [mix(a[0],b[0],f)+boatX,mix(a[2],b[2],f)];
+  }
   function frame(now){
     try {
       resize();
@@ -1075,47 +1141,72 @@
         lastFps=Math.round(fpsFrames/fpsClock);$('fpsValue').textContent=lastFps+' FPS';
         fpsClock=0;fpsFrames=0;
       }
-      if(state.mode===1 && state.showWater && state.running){
-        // Simulated paddle contact: both blades disturb water during the drive.
-        if(state.phase>=.10&&state.phase<.53 && seconds-lastOarDrop>.11){
+      let actualSpeed=0;
+      if(state.running && state.travel>.001){
+        // Demonstration travel: move for real, then reverse within the GPU
+        // simulation area. The directional wake changes sides on reversal.
+        const speed=1.65*state.travel;
+        const next=boatX+boatDirection*speed*dt;
+        if(next>3.5){boatX=3.5;boatDirection=-1;}
+        else if(next< -3.5){boatX=-3.5;boatDirection=1;}
+        else boatX=next;
+        actualSpeed=speed*boatDirection;
+      }
+      // The simulation continues settling even if the majhi is paused.
+      if(state.mode===1 && state.showWater){
+        if(state.running && state.phase>=.10 && state.phase<.53 &&
+           seconds-lastOarDrop>.105){
           lastOarDrop=seconds;
           for(const side of [-1,1]){
-            const o=oarPose(state.phase,side);
-            splashAt(o.bladeEnd[0],o.bladeEnd[2],.12,.013);
+            const contact=paddleContact(oarPose(state.phase,side));
+            if(contact){
+              const [x,z]=contact;
+              splashAt(x,z,.028+.040*state.wave,.0085);
+              addFoam(x,z,.29,.19);
+            }
           }
         }
-        // Fixed-camera boat demonstration: paddle wakes originate behind the hull.
-        if(state.wake>.015&&seconds-lastWake>.13){
+        // Wake only while physically moving, attached to the back corners.
+        if(Math.abs(actualSpeed)>.04 && state.wake>.005 &&
+           seconds-lastWake>.115){
           lastWake=seconds;
+          const behind=actualSpeed>0?-1:1;
+          const intensity=Math.abs(actualSpeed)/1.65;
           for(const side of [-1,1]){
-            splashAt(-1.60+(Math.random()-.5)*.45,side*(.30+Math.random()*.25),
-              .16*state.wake,.016);
+            const x=boatX+behind*(1.15+(Math.random()-.5)*.12);
+            const z=side*(.23+.08*Math.random());
+            splashAt(x,z,(.018+.040*intensity)*state.wake,.009);
+            addFoam(x,z,.13*intensity*state.wake,.22);
           }
         }
-        // Occasional scattered rainfall, not a grid of evenly placed drops.
-        if(state.rain>.01){
-          rainAccumulator+=dt*(2.0+32.0*state.rain);
-          let rainCount=0;
-          while(rainAccumulator>=1 && rainCount++<3){
+        if(state.rain>.005){
+          rainAccumulator+=dt*(1.0+19.0*state.rain);
+          let count=0;
+          while(rainAccumulator>=1 && count++<3){
             rainAccumulator-=1;
-            splashAt((Math.random()-.5)*SIM_SPAN*.85,
-                     (Math.random()-.5)*SIM_SPAN*.85,.08+state.rain*.07,.007);
+            splashAt((Math.random()-.5)*SIM_SPAN*.80,
+                     (Math.random()-.5)*SIM_SPAN*.80,
+                     .018+state.rain*.025,.005);
           }
         }
-        // Keep a bounded number of GPU passes to control frame time.
-        for(let i=0;i<2;i++)simulationPass(sim.update);
-        for(let i=0;i<Math.min(6,pendingDrops.length);i++){
+        // Fixed-rate ping-pong steps: consistent ripple propagation at 30,
+        // 60 or 120 FPS, independent of how fast the canvas draws.
+        simAccumulator=Math.min(simAccumulator+dt,.05);
+        let steps=0;
+        while(simAccumulator>=1/60 && steps++<3){
+          simulationPass(sim.update);
+          simulationPass(sim.update);
+          simAccumulator-=1/60;
+        }
+        for(let i=0;i<Math.min(8,pendingDrops.length);i++){
           const d=pendingDrops.shift();
           simulationPass(sim.drop,d.uv,d.radius,d.strength);
         }
-      }else if(pendingDrops.length>0 && state.mode===1){
-        // Allow manual clicks even when the rowing animation is paused.
-        for(let i=0;i<Math.min(6,pendingDrops.length);i++){
-          const d=pendingDrops.shift();
-          simulationPass(sim.drop,d.uv,d.radius,d.strength);
-        }
-        for(let i=0;i<2;i++)simulationPass(sim.update);
-      }else if(pendingDrops.length>40){pendingDrops.splice(0,pendingDrops.length-40);}
+      } else if(pendingDrops.length>30)pendingDrops.splice(0,pendingDrops.length-30);
+      for(let i=foamSpots.length-1;i>=0;i--){
+        foamSpots[i].age+=dt;
+        if(foamSpots[i].age>=foamSpots[i].lifetime)foamSpots.splice(i,1);
+      }
       if(state.mode===1)updateNormalField();
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);
       gl.viewport(0,0,canvas.width,canvas.height);
@@ -1128,6 +1219,14 @@
       gl.bindTexture(gl.TEXTURE_2D,sim.normalTex);
       gl.uniform1i(uni.normal,1);
       gl.uniform1i(uni.debug,state.debug);
+      const activeFoam=foamSpots.slice(-8);
+      const foamData=new Float32Array(32);
+      for(let i=0;i<activeFoam.length;i++){
+        const f=activeFoam[i];
+        foamData.set([f.x,f.z,f.amount*(1-f.age/f.lifetime),f.radius],i*4);
+      }
+      gl.uniform1i(uni.foamCount,activeFoam.length);
+      gl.uniform4fv(uni.foam,foamData);
       gl.uniform1i(uni.waterMode,state.mode);
       gl.uniform1f(uni.waveScale,state.wave*.55);
       gl.uniform1f(uni.wind,state.wind);
@@ -1143,12 +1242,13 @@
       gl.uniform1i(uni.lighting,state.lighting);
       gl.uniform3fv(uni.camera,eye);
       if(state.showWater)draw(water,mat(),[.08,.25,.28],1);
+      boatOffsetX=boatX;
       // Keep the backdrop out of this focused mechanical inspection.
       // Dhaka architecture will have its own separate visual lab.
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Water Lab 01.1 ready';
+      status.textContent='WebGL 2 active · Water Lab 01.2 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);
