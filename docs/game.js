@@ -60,14 +60,13 @@
      p.y+=h*13.0*labPatchWeight;
    }`:''}
    }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
-  const makeFragmentShader=()=>`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime; uniform float uSubmergeMask,uWetOnly;
+  const makeFragmentShader=()=>`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime; uniform float uSubmergeMask;
   ${lab2?`uniform sampler2D uLabNormals,uLabField; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled; uniform vec3 uLabEye,uLabSun;`:''}
   void main(){
-   // Phase 10: two *complementary* clipping passes. Below-surface oars
-   // belong to the optical scene capture; dry shaft/handles are drawn AFTER
-   // water, never both at the same pixel. Match the optical water vertex height
-   // instead of cutting against the old completely flat three-metre datum.
-   if(uSubmergeMask>.5 || uWetOnly>.5){
+   // Phase 11: ONE visible oar mesh after the optical water pass.
+   // Discard blade portions underwater instead of rendering a separate wet
+   // copy into uScene (which displaced/refracted a ghost of the same paddle).
+   if(uSubmergeMask>.5){
      float cutY=${FLOOD_WATERLINE.toFixed(1)};
      ${lab2?`if(uLabEnabled>.5){
        vec2 simUv=(vWorld.xz-uLabCenter)/uLabSpan+.5;
@@ -83,8 +82,7 @@
        cutY+=(.92*swell+13.*displacement*envelope)*(1.-.55*dry);
      }`:''}
      bool cityFlood=length(vWorld.xz-vec2(0.,1378.))>360.;
-     if(cityFlood && uSubmergeMask>.5 && vWorld.y<cutY)discard;
-     if(cityFlood && uWetOnly>.5 && vWorld.y>=cutY)discard;
+     if(cityFlood && vWorld.y<cutY)discard;
    }
    vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
     opacity=mix(.53,.12,daylight);c=mix(c,vec3(.24,.31,.30),.55*daylight);float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
@@ -211,7 +209,7 @@
   const uniforms={view:gl.getUniformLocation(prog,'uView'),proj:gl.getUniformLocation(prog,'uProj'),model:gl.getUniformLocation(prog,'uModel'),time:gl.getUniformLocation(prog,'uTime'),
     labField:gl.getUniformLocation(prog,'uLabField'),labNormal:gl.getUniformLocation(prog,'uLabNormals'),
     labCenter:gl.getUniformLocation(prog,'uLabCenter'),labSpan:gl.getUniformLocation(prog,'uLabSpan'),
-    labEnabled:gl.getUniformLocation(prog,'uLabEnabled'),submergeMask:gl.getUniformLocation(prog,'uSubmergeMask'),wetOnly:gl.getUniformLocation(prog,'uWetOnly'),labEye:gl.getUniformLocation(prog,'uLabEye'),labSun:gl.getUniformLocation(prog,'uLabSun')};
+    labEnabled:gl.getUniformLocation(prog,'uLabEnabled'),submergeMask:gl.getUniformLocation(prog,'uSubmergeMask'),labEye:gl.getUniformLocation(prog,'uLabEye'),labSun:gl.getUniformLocation(prog,'uLabSun')};
   gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
   function perspective(fovy,aspect,near,far){const f=1/Math.tan(fovy*.5),nf=1/(near-far);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]);}
   function norm(a){const m=Math.hypot(...a)||1;return a.map(x=>x/m);}
@@ -254,10 +252,9 @@
     disk(x,y,z,r,col,n=25){for(let i=0;i<n;i++){const a=i*TAU/n,b=(i+1)*TAU/n;this.tri([x,y,z],[x+Math.cos(b)*r,y,z+Math.sin(b)*r],[x+Math.cos(a)*r,y,z+Math.sin(a)*r],col);}}
     upload(){this.length=this.data.length/7;const arr=new Float32Array(this.data);this.buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferData(gl.ARRAY_BUFFER,arr,gl.STATIC_DRAW);this.data=[];return this;}
   }
-  function render(mesh,mat=ID,submerged=false,wetOnly=false){if(!mesh||!mesh.length)return;
-    // Render state is set on EVERY draw to avoid leaking waterline masks.
+  function render(mesh,mat=ID,submerged=false){if(!mesh||!mesh.length)return;
+    // Reset the one visible-oar submersion mask on EVERY mesh draw.
     gl.uniform1f(uniforms.submergeMask,submerged?1:0);
-    gl.uniform1f(uniforms.wetOnly,wetOnly?1:0);
     gl.uniformMatrix4fv(uniforms.model,false,mat);gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
     gl.vertexAttribPointer(attrs.pos,3,gl.FLOAT,false,28,0);gl.vertexAttribPointer(attrs.color,3,gl.FLOAT,false,28,12);gl.vertexAttribPointer(attrs.kind,1,gl.FLOAT,false,28,24);
     gl.drawArrays(gl.TRIANGLES,0,mesh.length);}
@@ -1205,7 +1202,7 @@
     mesh.quad(...sections[2],wood);
   }
   function makeMajhiRowingFrame(phase,shirtId=0){
-    const full=new Mesh(),first=new Mesh(),wet=new Mesh();
+    const full=new Mesh(),first=new Mesh();
     const shirt=majhiShirts[shirtId%majhiShirts.length];
     const shade=shirt.map(x=>x*.77),skin=majhiSkin,hair=majhiHair,wood=majhiWood;
     const active=phase>=.10&&phase<.53;
@@ -1214,16 +1211,9 @@
     const torsoX=-59+lean;
     // Seated captain, knees and feet inside the passenger-capable hull.
     full.box(torsoX,26.5,0,19,20,28,shirt);
-    // In first-person, show the majhi's upper body at the lower edge of the
-    // view. The arms now grow from this shirt rather than floating in space.
-    // Deliberately omit the head, which would obstruct the forward camera.
-    first.box(torsoX+7,26.0,0,18,15.5,26,shirt);
-    first.box(torsoX+8.7,20.0,0,19,9.0,25,shade);
-    first.box(torsoX+12.0,13.8,0,18,6.5,24,[.25,.31,.39]);
-    for(const side of [-1,1]){
-      first.box(torsoX+18,11.0,side*8,22,6,8,[.27,.34,.41]);
-      first.box(torsoX+22,7.6,side*8,9,3,7,[.26,.24,.21]);
-    }
+    // First-person is viewed from the majhi's eyes. Never draw a headless
+    // back, chest, knees, or head in front of the camera. Sleeve geometry is
+    // separately authored below as a POV view-model, emerging from frame edges.
     full.box(torsoX+7.8,28,0,2,13,21,shade);
     full.box(torsoX,16.0,0,17,11,27,[.24,.30,.39]);
     for(const side of [-1,1]){
@@ -1245,11 +1235,6 @@
       majhiShaft(full,o.hand,o.pivot,2.0,wood);
       majhiShaft(full,o.pivot,o.shaftStart,2.25,wood);
       majhiBlade(full,o.shaftStart,o.bladeEnd,wood);
-      // Wet-only second rendering before the refractive optical pass.
-      if(o.bladeY<1){
-        majhiBlade(wet,o.shaftStart,o.bladeEnd,wood);
-        majhiShaft(wet,o.pivot,o.shaftStart,2.2,wood);
-      }
       const shoulder=[torsoX+2,32.0,side*13.3];
       const delta=o.hand.map((v,i)=>v-shoulder[i]);
       const len=Math.hypot(...delta)||1;
@@ -1261,21 +1246,28 @@
       let perp=pole.map((v,i)=>v-dp*axis[i]);
       const pl=Math.hypot(...perp)||1;perp=perp.map(v=>v/pl);
       const elbow=shoulder.map((v,i)=>v+axis[i]*along+perp[i]*depth);
-      // A visible sleeve seam connects the upper arm to the chest in POV.
-      majhiShaft(first,[torsoX+7,27.0,side*8.8],shoulder,6.0,shirt);
-      for(const target of [full,first]){
-        target.sphere(shoulder[0],shoulder[1],shoulder[2],6.3,shirt,4,8);
-        majhiShaft(target,shoulder,elbow,4.3,shirt);
-        target.sphere(...elbow,4,skin,4,7);
-        majhiShaft(target,elbow,o.hand,3.6,skin);
-        target.sphere(...o.hand,3.8,skin,4,7);
-      }
+      // Third person: true seated body with shoulder / elbow IK.
+      full.sphere(shoulder[0],shoulder[1],shoulder[2],6.3,shirt,4,8);
+      majhiShaft(full,shoulder,elbow,4.3,shirt);
+      full.sphere(...elbow,4,skin,4,7);
+      majhiShaft(full,elbow,o.hand,3.6,skin);
+      full.sphere(...o.hand,3.8,skin,4,7);
+      // First person: a dedicated view-model. Sleeve roots sit near the
+      // camera and slightly below it; elbows and hands project naturally
+      // from the bottom left/right into the SAME animated handle grips.
+      // This keeps the boat interior visible and hides the headless torso.
+      const povShoulder=[-126,37,side*31];
+      const povElbow=[-90,25,side*26];
+      majhiShaft(first,povShoulder,povElbow,5.25,shirt);
+      first.sphere(...povElbow,4.5,shirt,4,8);
+      majhiShaft(first,povElbow,o.hand,3.25,skin);
+      first.sphere(...o.hand,3.8,skin,4,7);
       // First-person uses the EXACT same oar pose and grip coordinates.
       majhiShaft(first,o.hand,o.pivot,2.0,wood);
       majhiShaft(first,o.pivot,o.shaftStart,2.25,wood);
       majhiBlade(first,o.shaftStart,o.bladeEnd,wood);
     }
-    return {full:full.upload(),first:first.upload(),wet:wet.upload()};
+    return {full:full.upload(),first:first.upload()};
   }
   const majhiRigs=majhiShirts.map((_,s)=>Array.from({length:MAJHI_STROKE_FRAMES},(_,i)=>
     makeMajhiRowingFrame((i+.5)/MAJHI_STROKE_FRAMES,s)));
@@ -4591,8 +4583,8 @@
       target=[S.x+c*80,boatY+22+10*nearWall,S.z+s*80];
       fov=73+12*nearWall;
     }else{
-      // Position within the stern so actual rigged handles/blades, not an
-      // unrelated first-person animation, fall into the lower field of view.
+      // Eye-level forward view: the head is the camera, so do not display a
+      // separate headless torso. Dedicated POV sleeves enter from below.
       eye=[S.x-c*80,boatY+42,S.z-s*80];
       target=[S.x+c*210,boatY+13,S.z+s*210];fov=82;
     }
@@ -4696,20 +4688,9 @@
       const f=Math.floor((S.bobTime*3+i*1.8)/TAU*24)%24;
       render(driverFrames[(f+24)%24],model(dx,FLOOD_WATERLINE-10,dz,car.angle,1));
     }
-    // Submerged oar blades are captured BEFORE refraction. Above-water limbs
-    // are rendered later with the submerged-fragment mask: no ghost paddles.
-    if(S.mode==='PLAYING'){
-      const f=S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame;
-      render(majhiRigs[0][f].wet,
-        rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll),false,true);
-      for(const boat of S.aiBoats){
-        if(distance(S.x,S.z,boat.x,boat.z)>1050||boat.pause>0)continue;
-        const bf=strokeFrame((boat.strokeCycle||0)%1);
-        const bob=.65*Math.sin(S.time*4+boat.id)+.85*analyticSurface(boat.x,boat.z,S.bobTime*.85);
-        render(majhiRigs[(boat.id%3)+1][bf].wet,
-          model(boat.x,FLOOD_WATERLINE+.2+bob,boat.z,boat.angle,.51),false,true);
-      }
-    }
+    // NO oar geometry is captured before the water pass. This is deliberate:
+    // the refractive scene texture previously showed a displaced duplicate
+    // alongside the above-water oar. Water contacts still update the GPU waves.
     // Semi-transparent animated water is drawn AFTER the original flooded
     // road textures, so lane markings remain visible underneath the surface.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
@@ -4898,11 +4879,11 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='phase10-paddle-clip-pov-speed';
-  window.majhiWaterDiagnostics=()=>({phase:'10-paddle-clipping-pov-3m',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='phase11-single-oars-true-pov';
+  window.majhiWaterDiagnostics=()=>({phase:'11-single-pass-oars-pov-3m',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
-    minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatCruiseSpeed:245,boatReverseSpeed:165,boatWetPassClipped:true,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
+    minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatCruiseSpeed:245,boatReverseSpeed:165,boatSinglePassOars:true,boatWetGeometryDraws:0,firstPersonTorsoHidden:true,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     slowCars:S.movingCars.map(c=>({x:+c.x.toFixed(1),z:+c.z.toFixed(1),stopped:c.stopped})),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
