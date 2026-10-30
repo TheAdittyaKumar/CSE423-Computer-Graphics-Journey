@@ -1,8 +1,8 @@
 /*
- * MAJHI JABEN?! / WATER LAB 01.5
- * Refraction and contact refinement: wave-gradient distortion of submerged
- * streets, Fresnel-view optics, physical oar entry disturbances, and moving wakes.
- * Preserves 01.4 hull, rowing rig, GPU ripple simulation, and independent testing.
+ * MAJHI JABEN?! / WATER LAB 01.6
+ * Deeper floodwater with artistically legible submerged streets, longer
+ * direction-aware V-wakes, bow pressure, paddle-driven ripples and refraction.
+ * Preserves the rowing rig, GPU simulation, camera controls and independent test.
  * No dependencies, downloads, build step, or changes to the main game.
  */
 (() => {
@@ -92,7 +92,8 @@
   in vec3 vNormal,vWorld;
   in float vDistance,vWave;
   uniform vec3 uTint,uCamera;
-  uniform float uTime,uReflect,uWind,uWaveScale,uClarity,uRain,uDistortion;
+  uniform float uTime,uReflect,uWind,uWaveScale,uClarity,uRain,uDistortion,uFloodDepth;
+  uniform vec4 uWakeBoat; // x,z,direction,speed (actual movement only)
   uniform highp int uType,uWaterMode;
   uniform int uLighting,uDebug;
   uniform sampler2D uSurfaceNormalTex;
@@ -220,19 +221,39 @@
           float f0=pow((1.333-1.0)/(1.333+1.0),2.0); // about 2% at normal incidence
           float fresnel=f0+(1.0-f0)*pow(1.0-nv,5.0);
           vec3 reflection=skyColor(reflect(-V,N));
-          // Ray intersected with a shallow flooded road, not bright pool tiles.
+          // The submerged road is an actual optical reference plane 3.2 m
+          // below the water by default, not a near-surface road decal.
+          // Raise the depth control to simulate deep accumulated flooding.
           vec3 T=refract(-V,N,1.0/1.333);
-          float distanceToBed=(-1.20-vWorld.y)/min(-.075,T.y);
-          vec2 hit=vWorld.xz+T.xz*max(0.0,distanceToBed);
+          float depthToBed=max(.05,uFloodDepth+vWorld.y);
+          float distanceToBed=depthToBed/max(.10,-T.y);
+          vec2 hit=vWorld.xz+T.xz*distanceToBed;
+          // Direction-aware wake shimmer only exists with real movement.
+          // The GPU simulation supplies trailing traveling waves; this narrow
+          // optical cue makes the two Kelvin-like arms distinguishable.
+          float travelSpeed=clamp(uWakeBoat.w,0.0,1.0);
+          float behind=(uWakeBoat.x-1.12*uWakeBoat.z-p.x)*uWakeBoat.z;
+          float wakeWidth=.25+behind*.36;
+          float wakeArm=exp(-pow((abs(p.y-uWakeBoat.y)-wakeWidth)/.15,2.0));
+          float wakeEnvelope=smoothstep(-.05,.40,behind)*
+                             (1.0-smoothstep(2.9,4.8,behind));
+          float wakeShimmer=wakeArm*wakeEnvelope*travelSpeed;
+          float bowAhead=(p.x-uWakeBoat.x)*uWakeBoat.z;
+          float bowPressure=exp(-pow((bowAhead-1.80)/.36,2.0))*
+                            exp(-pow((p.y-uWakeBoat.y)/.76,2.0))*travelSpeed;
           // Water Lab 01.5: the SAME GPU height-field gradient that creates
           // ripples also bends what we see beneath the water. Wind/rain waves
           // contribute smaller shifts. Clamp the bend so road markings remain
           // recognizable even during heavy rain. The 0% control removes this
           // EXTRA bending but preserves the physically refracted ray above.
-          vec2 rippleBend=slope*uWaveScale*4.2;
+          // Deeper water gives the refracted ray a longer physical path.
+          // Distortion stays local and bounded, so road navigation is readable.
+          vec2 rippleBend=slope*uWaveScale*4.5;
           vec2 microBend=windSlope*.12+rainSlope*.18;
-          vec2 opticalOffset=clamp((rippleBend+microBend)*uDistortion*1.45,
-                                  vec2(-.21),vec2(.21));
+          vec2 wakeBend=vec2(-uWakeBoat.z*wakeShimmer*.13,
+                              sign(p.y-uWakeBoat.y)*wakeShimmer*.18);
+          vec2 opticalOffset=clamp((rippleBend+microBend)*uDistortion*1.5+
+                                   wakeBend*uDistortion,vec2(-.24),vec2(.24));
           float downView=smoothstep(.08,.95,nv);
           vec2 refractedHit=hit+opticalOffset*(.50+.50*downView);
           vec3 roadColor=submergedStreet(refractedHit);
@@ -241,9 +262,14 @@
           // still make it view-dependent so the street is clearest when looking
           // down and more reflective toward the horizon.
           float viewThrough=smoothstep(.16,.92,nv);
-          float absorption=mix(1.55,.06,pow(clarity,1.35));
-          float transmission=exp(-absorption*1.08/max(.18,-T.y));
-          float streetVisibility=clamp(mix(.32,1.0,clarity)*(0.55+0.45*viewThrough),0.0,1.0);
+          // Optical attenuation scales with the actual depth, but the high
+          // clarity end is deliberately more forgiving than muddy floodwater.
+          // Evan-like legibility is a deliberate artistic setting, not a claim
+          // that 3+ meters of real Dhaka floodwater would be transparent.
+          float absorption=mix(.42,.006,pow(clarity,1.42));
+          float transmission=exp(-absorption*depthToBed/max(.28,-T.y));
+          float streetVisibility=clamp(mix(.30,1.0,clarity)*
+                              (.70+.30*viewThrough),0.0,1.0);
           vec3 depthColor=mix(vec3(.034,.158,.168),vec3(.072,.258,.238),
                               clamp(.48+(n1-.5)*.28+(n2-.5)*.16,0.0,1.0));
           // Soft caustic-like modulation on the submerged road for attractive
@@ -257,12 +283,17 @@
                      uDistortion*downView*.28;
           vec3 refracted=mix(depthColor,roadColor,transmission*streetVisibility);
           vec3 waterBody=mix(refracted,refracted+vec3(.016,.055,.052),0.22);
+          // Thin traveling wake highlights plus subtle bow displacement.
+          // The line is intentionally NOT a bright floating white decal.
+          waterBody=mix(waterBody,waterBody+vec3(.12,.23,.20),
+                        clamp(wakeShimmer*.68+bowPressure*.36,0.0,.65));
           // Reflection remains physically motivated by Fresnel, but is art-
           // directed so the surface stays readable instead of turning milky.
           float reflectAmount=clamp(mix(fresnel*.55,fresnel*1.35,clamp(uReflect,0.0,1.0))
                                     *mix(.80,1.08,1.0-viewThrough)
                                     +0.012*uReflect, .0, .66);
           color=mix(waterBody,reflection,reflectAmount);
+          color+=vec3(.06,.12,.11)*wakeShimmer*.42;
           // Narrow glints follow the actually computed normal; the old wide
           // additive gradient was creating cloudy pale blotches around oars.
           float shine=pow(max(dot(reflect(-sun,N),V),0.0),145.0);
@@ -340,8 +371,10 @@
                          info(p+ivec2(0,1)).x+info(p-ivec2(0,1)).x);
       // Slightly stronger damping: a few small strokes shouldn't create
       // ripples that travel across several boat lengths indefinitely.
-      float v=(h.y+(average-h.x)*.34)*.981;
-      float newH=(h.x+v)*.992;
+      // Just enough damping for wakes to persist several seconds, without
+      // turning the whole 24-unit patch into an endless ringing pool.
+      float v=(h.y+(average-h.x)*.34)*.986;
+      float newH=(h.x+v)*.994;
       vec2 edge=min(vUv,1.0-vUv);
       float edgeFade=smoothstep(0.0,.055,min(edge.x,edge.y));
       outputInfo(newH*edgeFade,v*edgeFade);
@@ -358,9 +391,10 @@
       outputInfo(h.x+uStrength*f,h.y);
     }`;
 
-  // An oriented Kelvin-style V approximation. Unlike independent circular
-  // drops, the injected heightfield is narrow along two trailing arms, with
-  // strength proportional to actual hull speed and no wake when stationary.
+  // A moving hull displaces water in three distinguishable regions:
+  // bow pressure, two diverging arms from the stern, and a central drawdown.
+  // The shader writes into the traveling GPU height field, rather than drawing
+  // an independent overlay that would follow the boat unrealistically.
   const simWakeFragment = `#version 300 es\n${simCommon}
     uniform vec2 uCenter;
     uniform float uStrength,uHeading;
@@ -368,16 +402,22 @@
       ivec2 pixel=ivec2(gl_FragCoord.xy);
       vec2 old=info(pixel);
       vec2 p=(vUv-uCenter)*24.0;
-      float behind=-p.x*uHeading;
-      float zDistance=abs(p.y);
-      // Two diverging crests originating behind the stern, accompanied by
-      // a narrower central depression. Only added by the moving-hull code.
-      float vee=abs(zDistance-(.13+behind*.34));
-      float arm=exp(-pow(vee/.105,2.0));
-      float longitudinal=smoothstep(-.12,.16,behind)*(1.0-smoothstep(1.35,2.15,behind));
-      float centerDip=exp(-pow(zDistance/.22,2.0))*
-                      exp(-pow((behind-.50)/.72,2.0));
-      float displacement=arm*longitudinal-centerDip*.38;
+      float ahead=p.x*uHeading;
+      float behind=-ahead;
+      float lateral=abs(p.y);
+      float sternFade=smoothstep(.70,1.28,behind)*
+                       (1.0-smoothstep(3.0,4.5,behind));
+      float vee=abs(lateral-(.24+max(0.0,behind-1.0)*.35));
+      float arm=exp(-pow(vee/.18,2.0))*sternFade;
+      float secondArm=exp(-pow((vee-.26)/.19,2.0))*sternFade*.32;
+      float drawdown=exp(-pow(lateral/.30,2.0))*
+                     exp(-pow((behind-1.85)/1.18,2.0))*.36;
+      // Front bow compression is concentrated near the pointed hull nose.
+      float bow=exp(-pow((ahead-1.90)/.32,2.0))*
+                exp(-pow(lateral/.68,2.0))*.50;
+      float shoulder=exp(-pow((lateral-.73)/.19,2.0))*
+                     exp(-pow(ahead/.96,2.0))*.18;
+      float displacement=arm+secondArm+bow+shoulder-drawdown;
       outputInfo(old.x+displacement*uStrength,old.y);
     }`;
 
@@ -427,7 +467,9 @@
     foamCount:gl.getUniformLocation(program,'uFoamCount'),
     clarity:gl.getUniformLocation(program,'uClarity'),
     rain:gl.getUniformLocation(program,'uRain'),
-    distortion:gl.getUniformLocation(program,'uDistortion')
+    distortion:gl.getUniformLocation(program,'uDistortion'),
+    depth:gl.getUniformLocation(program,'uFloodDepth'),
+    wakeBoat:gl.getUniformLocation(program,'uWakeBoat')
   };
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
@@ -639,9 +681,10 @@
   function draw(mesh,matrix,color,type=0) {
     // Translate the complete boat/rower as one scene object.
     // The water mesh (type 1) always stays fixed in world space.
-    if(type!==1 && boatOffsetX!==0){
+    if(type!==1){
       matrix=new Float32Array(matrix);
       matrix[12]+=boatOffsetX;
+      matrix[13]-=.145; // real waterline intersects the hull, not an air gap
     }
     gl.uniformMatrix4fv(uni.model,false,matrix);
     gl.uniform3fv(uni.tint,color);
@@ -1111,7 +1154,7 @@
   canvas.addEventListener('pointercancel',release);
   canvas.addEventListener('wheel',e=>{e.preventDefault();cam.distance=clamp(cam.distance*Math.exp(e.deltaY*.001),1.8,14);},{passive:false});
 
-  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.65,wave:.35,wind:.40,reflections:.40,travel:0,clarity:.85,distortion:.68};
+  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.78,wave:.38,wind:.40,reflections:.40,travel:0,clarity:.88,distortion:.76,depth:3.2};
   // Boat motion is an explicit experiment, rather than a perpetual fake wake.
   // This slider is inserted beside the existing wake slider: no HTML/CSS edits.
   const travelLabel=document.createElement('div');
@@ -1170,6 +1213,25 @@
     state.distortion=Number(distortionSlider.value)/100;
     distortionValue.textContent=distortionSlider.value+'%';
   });
+  // Unlike changing surface height (which would swamp the rower), changing
+  // flood depth lowers the optical road-bed reference under the boat.
+  const depthLabel=document.createElement('div');
+  depthLabel.className='slider-label';
+  const depthTitle=document.createElement('label');
+  depthTitle.htmlFor='depthSlider';depthTitle.textContent='Flood depth over road';
+  const depthValue=document.createElement('output');
+  depthValue.id='depthSliderValue';depthValue.textContent='3.2 m';
+  depthLabel.append(depthTitle,depthValue);
+  const depthSlider=document.createElement('input');
+  depthSlider.type='range';depthSlider.id='depthSlider';
+  depthSlider.min='1.2';depthSlider.max='5.0';depthSlider.step='0.1';
+  depthSlider.value='3.2';
+  distortionSlider.after(depthLabel,depthSlider);
+  depthSlider.addEventListener('input',()=>{
+    state.depth=Number(depthSlider.value);
+    depthValue.textContent=state.depth.toFixed(1)+' m';
+    $('heroDepth').textContent=state.depth.toFixed(1)+' m';
+  });
   const tempo=$('rowingSpeed'),stroke=$('strokePhase');
   function updatePauseButton(){
     $('pauseRowing').textContent=state.running?'Pause Rowing':'Resume Rowing';
@@ -1221,6 +1283,8 @@
     state[key]=Number(input.value)/100;
     value.textContent=input.value+'%'+(key==='travel'&&state.travel===0?' (still)':'');
   }
+  state.depth=Number(depthSlider.value);depthValue.textContent=state.depth.toFixed(1)+' m';
+  $('heroDepth').textContent=state.depth.toFixed(1)+' m';
   function setDebug(mode){
     state.debug=mode;
     document.querySelectorAll('.debug-btn').forEach(btn=>{
@@ -1289,12 +1353,13 @@
   }
   let previous=0,fpsClock=0,fpsFrames=0,lastFps=0,seconds=0;
   let boatX=0,boatDirection=1,lastOarDrop=-10,lastWake=-10,rainAccumulator=0;
+  let wakeSpeedVisual=0;
   let simAccumulator=0;
   // The blade's outer segment crosses the surface only during catch/drive.
   // Compute the *actual* intersection with the still-water level.
   function paddleContact(pose){
     const a=pose.bladeStart,b=pose.bladeEnd;
-    const level=.040;
+    const level=.040+.145; // oars are now translated down with the hull
     if((a[1]-level)*(b[1]-level)>0)return null;
     const f=clamp((level-a[1])/(b[1]-a[1]),0,1);
     return [mix(a[0],b[0],f)+boatX,mix(a[2],b[2],f)];
@@ -1322,6 +1387,10 @@
         else boatX=next;
         actualSpeed=speed*boatDirection;
       }
+      // The faint overlay vanishes promptly if boat motion stops; the genuine
+      // height-field wake, however, continues spreading and dissipating.
+      const speedNormalized=clamp(Math.abs(actualSpeed)/1.65,0,1);
+      wakeSpeedVisual=mix(wakeSpeedVisual,speedNormalized,clamp(dt*7.0,0,1));
       // The simulation continues settling even if the majhi is paused.
       if(state.mode===1 && state.showWater){
         if(state.running && state.phase>=.10 && state.phase<.53 &&
@@ -1334,9 +1403,12 @@
               // Disturb both sides of the blade: a localized crest and a
               // small low-pressure trough immediately behind its path.
               const energy=clamp(state.speed*.60,.30,1.30);
-              splashAt(x,z,(.018+.040*state.wave)*energy,.0065);
-              splashAt(x-.075,z+side*.060,-.008*energy,.0075);
-              addFoam(x,z,.19*energy,.145);
+              // Moving blade entry + the low-pressure pocket following it.
+              // These three small sources resolve as distinct paddle tracks.
+              splashAt(x,z,(.030+.065*state.wave)*energy,.0095);
+              splashAt(x-.13,z+side*.08,-.019*energy,.0100);
+              splashAt(x+.10,z-side*.055,.012*energy,.0070);
+              addFoam(x,z,.27*energy,.22);
             }
           }
         }
@@ -1344,17 +1416,20 @@
         // arms are injected in one GPU pass (not concentric circular drops).
         // The moving object continues even when its rowing pose is paused.
         if(Math.abs(actualSpeed)>.04 && state.wake>.005 &&
-           seconds-lastWake>.095){
+           seconds-lastWake>.080){
           lastWake=seconds;
           const heading=Math.sign(actualSpeed);
           const intensity=clamp(Math.abs(actualSpeed)/1.65,0.0,1.0);
           // The wake originates near the stern, not the center of the boat.
-          const sternX=boatX-heading*.95;
+          const sternX=boatX;
           const center=[sternX/24+.5,.5];
-          // Deferred until after normal simulation steps.
-          pendingWakes.push({center,heading,strength:(.012+.019*intensity)*state.wake*intensity});
-          addFoam(sternX-heading*.30,-.27,.11*intensity,.15);
-          addFoam(sternX-heading*.30,.27,.11*intensity,.15);
+          // Both 4-meter diverging arms and bow pressure in one GPU pass.
+          pendingWakes.push({center,heading,strength:(.032+.055*intensity)*state.wake*intensity});
+          for(const side of [-1,1]){
+            const crestX=boatX-heading*(1.30+.40*intensity);
+            addFoam(crestX,side*(.26+.40*intensity),.23*intensity,.27);
+          }
+          addFoam(boatX+heading*1.73,0,.16*intensity,.26);
         }
         if(state.rain>.005){
           rainAccumulator+=dt*(.8+8.0*state.rain);
@@ -1414,6 +1489,8 @@
       gl.uniform1f(uni.reflections,state.reflections);
       gl.uniform1f(uni.clarity,state.clarity);
       gl.uniform1f(uni.distortion,state.distortion);
+      gl.uniform1f(uni.depth,state.depth);
+      gl.uniform4f(uni.wakeBoat,boatX,0,boatDirection,wakeSpeedVisual*state.wake);
       gl.uniform1f(uni.rain,state.rain);
       gl.clearColor(...(state.lighting===0?[.63,.76,.73,1]:[.52,.63,.68,1]));
       gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
@@ -1432,7 +1509,7 @@
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Water Lab 01.5 ready';
+      status.textContent='WebGL 2 active · Water Lab 01.6 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);
