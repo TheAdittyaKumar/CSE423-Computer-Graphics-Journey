@@ -2567,7 +2567,7 @@
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
   }
   shopSigns.upload();
-  const cityFacadeDetails=new Mesh(),cityFacadeLights=new Mesh(),storeCanopies=new Mesh();
+  const cityFacadeDetails=new Mesh(),cityFacadeLights=new Mesh(),storeCanopies=new Mesh(),cityPosterDecor=new Mesh();
   const utilityPoles=new Mesh(),overheadWires=new Mesh();
   const dhakaWallBands=[[.86,.78,.73],[.82,.74,.80],[.88,.80,.68],[.76,.82,.80],[.84,.74,.66],[.90,.76,.76]];
   const dhakaAccents=[[.76,.36,.28],[.36,.54,.77],[.51,.67,.42],[.88,.64,.22],[.58,.40,.72],[.52,.37,.30]];
@@ -2603,6 +2603,54 @@
     for(let k=-2;k<=2;k++)cityFacadeDetails.box(wallX+dir*1.1,cy,cz+k*(w/5.5),.85,h,1.0,[.68,.71,.74]);
     if(lit)cityFacadeLights.box(wallX+dir*.65,cy,cz,.9,h-3,w-3,[.98,.84,.60]);
   }
+  function addRailingZ(cx,cy,wallZ,dir,span){
+    const rz=wallZ+dir*2.2;
+    cityFacadeDetails.box(cx,cy+4.7,rz,span,1.1,.9,grillMetal);
+    cityFacadeDetails.box(cx-span*.5+.9,cy+2.4,rz,1.0,5.6,.9,grillMetal);
+    cityFacadeDetails.box(cx+span*.5-.9,cy+2.4,rz,1.0,5.6,.9,grillMetal);
+    for(let k=-2;k<=2;k++)cityFacadeDetails.box(cx+k*(span/5.4),cy+2.3,rz,.85,5.1,.72,[.72,.75,.78]);
+  }
+  function addRailingX(wallX,cy,cz,dir,span){
+    const rx=wallX+dir*2.2;
+    cityFacadeDetails.box(rx,cy+4.7,cz,.9,1.1,span,grillMetal);
+    cityFacadeDetails.box(rx,cy+2.4,cz-span*.5+.9,.9,5.6,1.0,grillMetal);
+    cityFacadeDetails.box(rx,cy+2.4,cz+span*.5-.9,.9,5.6,1.0,grillMetal);
+    for(let k=-2;k<=2;k++)cityFacadeDetails.box(rx,cy+2.3,cz+k*(span/5.4),.72,5.1,.85,[.72,.75,.78]);
+  }
+  function addPosterPanelZ(cx,cy,wallZ,dir,w,h,base,accent){
+    const z=wallZ+dir*1.5;
+    cityPosterDecor.box(cx,cy,z,w,h,.55,[.92,.90,.84]);
+    cityPosterDecor.box(cx,cy,z+.02*dir,w-2,h-2,.35,base);
+    cityPosterDecor.box(cx,cy+h*.22,z+.05*dir,w-5,2.6,.26,[.95,.95,.90]);
+    cityPosterDecor.box(cx-w*.18,cy-.8,z+.08*dir,w*.16,h*.48,.22,accent);
+    cityPosterDecor.box(cx+w*.08,cy-.8,z+.08*dir,w*.26,h*.48,.22,accent.map(v=>Math.min(1,v*1.18)));
+    cityPosterDecor.box(cx,cy-h*.28,z+.08*dir,w*.54,2.1,.24,[.18,.20,.22]);
+  }
+  function addPosterPanelX(wallX,cy,cz,dir,w,h,base,accent){
+    const x=wallX+dir*1.5;
+    cityPosterDecor.box(x,cy,cz,.55,h,w,[.92,.90,.84]);
+    cityPosterDecor.box(x+.02*dir,cy,cz,.35,h-2,w-2,base);
+    cityPosterDecor.box(x+.05*dir,cy+h*.22,cz,.26,2.6,w-5,[.95,.95,.90]);
+    cityPosterDecor.box(x+.08*dir,cy-.8,cz-w*.18,.22,h*.48,w*.16,accent);
+    cityPosterDecor.box(x+.08*dir,cy-.8,cz+w*.08,.22,h*.48,w*.26,accent.map(v=>Math.min(1,v*1.18)));
+    cityPosterDecor.box(x+.08*dir,cy-h*.28,cz,.24,2.1,w*.54,[.18,.20,.22]);
+  }
+  function addRoadBannerX(x1,x2,y,z,base,accent){
+    const cx=(x1+x2)*.5,w=Math.abs(x2-x1);
+    citizenLimb(cityPosterDecor,[x1,y+6,z],[x2,y+5,z],.18,[.26,.26,.27]);
+    cityPosterDecor.box(cx,y,z,w,16,.55,base);
+    cityPosterDecor.box(cx,y+3.0,z,w-5,2.4,.3,[.94,.94,.88]);
+    cityPosterDecor.box(cx-w*.18,y-1.4,z,w*.16,7.8,.26,accent);
+    cityPosterDecor.box(cx+w*.16,y-1.2,z,w*.18,7.8,.26,accent.map(v=>Math.min(1,v*1.15)));
+  }
+  function addRoadBannerZ(x,z1,z2,y,base,accent){
+    const cz=(z1+z2)*.5,w=Math.abs(z2-z1);
+    citizenLimb(cityPosterDecor,[x,y+6,z1],[x,y+5,z2],.18,[.26,.26,.27]);
+    cityPosterDecor.box(x,y,cz,.55,16,w,base);
+    cityPosterDecor.box(x,y+3.0,cz,.3,2.4,w-5,[.94,.94,.88]);
+    cityPosterDecor.box(x,y-1.4,cz-w*.18,.26,7.8,w*.16,accent);
+    cityPosterDecor.box(x,y-1.2,cz+w*.16,.26,7.8,w*.18,accent.map(v=>Math.min(1,v*1.15)));
+  }
   function addSagWire(a,b,sag=11,segments=10,radius=.66){
     let prev=[a.x,a.y,a.z];
     for(let i=1;i<=segments;i++){
@@ -2612,11 +2660,14 @@
       prev=p;
     }
   }
+  const posterBases=[[.70,.25,.22],[.18,.43,.69],[.89,.58,.18],[.31,.56,.34],[.58,.33,.68]];
   for(const b of buildings){
     const wall=dhakaWallBands[b.idx%dhakaWallBands.length],accent=dhakaAccents[b.idx%dhakaAccents.length],tile=dhakaTiles[b.idx%dhakaTiles.length];
+    const posterBase=posterBases[b.idx%posterBases.length];
     const floors=Math.max(4,Math.floor((b.h-30)/34));
     const frontZ=b.z-b.hd-2.8,backZ=b.z+b.hd+2.8,leftX=b.x-b.hw-2.8,rightX=b.x+b.hw+2.8;
-    const hasCornerBalcony=b.idx%2===0,hasSideBalcony=b.idx%3!==1,roundedStack=b.idx%4===1;
+    const useBalconies=b.idx%3!==1, useRailOnly=!useBalconies, roundedStack=b.idx%4===1;
+    const posterStyle=b.idx%5, hasWallPoster=(b.idx%4===0||b.idx%7===2), hasRoadsideBanner=(b.idx%9===3);
     // Street-level Dhaka-style gates and tiled podiums.
     cityFacadeDetails.box(b.x,10,frontZ,Math.min(b.hw*1.30,154),22,4.0,tile);
     cityFacadeDetails.box(b.x,22.5,frontZ-2.0,Math.min(b.hw*1.22,146),5,7.5,accent);
@@ -2624,39 +2675,55 @@
     cityFacadeDetails.box(b.x,5.5,frontZ-.5,38,3.2,1.4,[.22,.24,.26]);
     for(let k=-3;k<=3;k++)cityFacadeDetails.box(b.x+k*5.4,14,frontZ-1.9,1.15,22,.95,[.74,.77,.80]);
     cityFacadeDetails.box(b.x,10,backZ,Math.min(b.hw*1.10,126),20,3.0,tile.map(v=>v*.92));
-    // Stronger front/side facade recoloring so buildings read more like Dhaka apartments.
-    addFacadePanelZ(b.x,b.h*.50,frontZ,-1,b.hw*1.28,b.h-10,wall);
-    addFacadePanelZ(b.x,b.h*.50,backZ,1,b.hw*1.08,b.h-18,wall.map(v=>v*.96));
-    addFacadePanelX(leftX,b.h*.52,b.z,-1,b.hd*1.20,b.h-16,wall.map(v=>v*.98));
-    addFacadePanelX(rightX,b.h*.52,b.z,1,b.hd*1.22,b.h-16,wall.map(v=>v*1.02));
+    // Recolor facades but leave window zones legible.
+    addFacadePanelZ(b.x,b.h*.50,frontZ,-1,b.hw*1.20,b.h-10,wall);
+    addFacadePanelZ(b.x,b.h*.50,backZ,1,b.hw*1.00,b.h-18,wall.map(v=>v*.96));
+    addFacadePanelX(leftX,b.h*.52,b.z,-1,b.hd*1.10,b.h-16,wall.map(v=>v*.98));
+    addFacadePanelX(rightX,b.h*.52,b.z,1,b.hd*1.12,b.h-16,wall.map(v=>v*1.02));
     // Vertical facade bands and parapet lips on all four sides.
-    cityFacadeDetails.box(b.x-b.hw*.30,b.h*.5,frontZ-.2,14,b.h-18,2.0,accent.map(v=>v*.95));
-    cityFacadeDetails.box(b.x+b.hw*.30,b.h*.5,frontZ-.2,14,b.h-18,2.0,accent.map(v=>v*.88));
-    cityFacadeDetails.box(leftX+.2,b.h*.53,b.z-b.hd*.24,2.0,b.h-30,20,accent.map(v=>v*.86));
-    cityFacadeDetails.box(rightX-.2,b.h*.53,b.z+b.hd*.24,2.0,b.h-30,20,accent.map(v=>v*.86));
+    cityFacadeDetails.box(b.x-b.hw*.30,b.h*.5,frontZ-.2,12,b.h-18,1.5,accent.map(v=>v*.95));
+    cityFacadeDetails.box(b.x+b.hw*.30,b.h*.5,frontZ-.2,12,b.h-18,1.5,accent.map(v=>v*.88));
+    cityFacadeDetails.box(leftX+.2,b.h*.53,b.z-b.hd*.24,1.6,b.h-30,18,accent.map(v=>v*.86));
+    cityFacadeDetails.box(rightX-.2,b.h*.53,b.z+b.hd*.24,1.6,b.h-30,18,accent.map(v=>v*.86));
     cityFacadeDetails.box(b.x,b.h+5,frontZ-1.8,b.hw*1.10,5.5,5.0,accent.map(v=>v*.78));
     cityFacadeDetails.box(b.x,b.h+5,backZ+1.8,b.hw*1.02,5.0,4.6,accent.map(v=>v*.74));
-    // Dhaka-like balcony stacks, grilled windows and small AC boxes.
+    // Dhaka-like windows, plus either balconies OR external railings per building.
     for(let level=0;level<floors-1;level++){
       const y=41+level*32;
       const lit=((b.idx+level)%3===0)||(b.idx%5===0&&level<2);
       addGrillWindowZ(b.x,y,frontZ,-1,32,18,lit);
-      if(level<floors-2||b.idx%3===0)addGrillWindowZ(b.x-39,y,frontZ,-1,20,17,lit&&level%2===0);
-      if(level<floors-2)addGrillWindowZ(b.x+39,y,frontZ,-1,20,17,lit&&level%2===1);
-      if(hasCornerBalcony && (level%2===0||b.idx%4===0))addBalconyZ(b.x+b.hw*.22,y-1.5,frontZ,-1,roundedStack?40:48,12,accent);
-      else addBalconyZ(b.x,y-1.5,frontZ,-1,78,11,wall.map(v=>v*.95));
-      if(level<floors-1 && hasSideBalcony){
-        addGrillWindowX(rightX,y,b.z-b.hd*.18,1,16,17,lit&&level%2===0);
-        if(level%2===0)addBalconyX(rightX,y-1.2,b.z+b.hd*.16,1,11,44,accent.map(v=>v*.92));
+      const hasLeft=level<floors-2||b.idx%3===0, hasRight=level<floors-2;
+      if(hasLeft)addGrillWindowZ(b.x-39,y,frontZ,-1,20,17,lit&&level%2===0);
+      if(hasRight)addGrillWindowZ(b.x+39,y,frontZ,-1,20,17,lit&&level%2===1);
+      addGrillWindowX(rightX,y,b.z-b.hd*.18,1,16,17,lit&&level%2===0);
+      addGrillWindowX(leftX,y,b.z+b.hd*.20,-1,16,16,lit&&level%3===1);
+      if(useBalconies){
+        if(level%2===0)addBalconyZ(b.x,y-1.5,frontZ,-1,roundedStack?36:42,10,accent);
+        else if(hasLeft&&b.idx%2===0)addBalconyZ(b.x-39,y-1.4,frontZ,-1,28,9,wall.map(v=>v*.95));
+        else if(hasRight)addBalconyZ(b.x+39,y-1.4,frontZ,-1,28,9,wall.map(v=>v*.95));
+        if(level%3===0)addBalconyX(rightX,y-1.2,b.z+b.hd*.16,1,10,34,accent.map(v=>v*.92));
+        if(level%3===1&&b.idx%2===0)addBalconyX(leftX,y-1.2,b.z-b.hd*.18,-1,10,30,wall.map(v=>v*.9));
+      }else{
+        addRailingZ(b.x,y-1.0,frontZ,-1,30);
+        if(hasLeft&&level%2===0)addRailingZ(b.x-39,y-1.0,frontZ,-1,18);
+        if(hasRight&&level%2===1)addRailingZ(b.x+39,y-1.0,frontZ,-1,18);
+        if(level%2===0)addRailingX(rightX,y-1.1,b.z+b.hd*.16,1,28);
+        if(level%2===1)addRailingX(leftX,y-1.1,b.z-b.hd*.18,-1,24);
       }
       if(level===1||level===floors-3){
         cityFacadeDetails.box(b.x+b.hw*.36, y-2.5, frontZ-4.0, 11,8,7,[.56,.58,.60]);
         cityFacadeDetails.box(b.x+b.hw*.36, y-1.0, frontZ-6.2, 12,2,2,[.32,.36,.39]);
       }
-      if(level%2===1){
-        addGrillWindowX(leftX,y,b.z+b.hd*.20,-1,16,16,lit&&level%3===1);
-        addBalconyX(leftX,y-1.2,b.z-b.hd*.18,-1,10,36,wall.map(v=>v*.9));
-      }
+    }
+    // A light amount of posters / banners like in Dhaka.
+    if(hasWallPoster){
+      if(posterStyle<2)addPosterPanelZ(b.x-b.hw*.20,58,frontZ,-1,26,30,posterBase,accent);
+      else addPosterPanelZ(b.x+b.hw*.18,72,frontZ,-1,34,42,posterBase,accent);
+      if(b.idx%6===0)addPosterPanelX(leftX,54,b.z+b.hd*.05,-1,22,28,posterBase.map(v=>Math.min(1,v*1.08)),accent);
+    }
+    if(hasRoadsideBanner){
+      if(b.idx%2===0)addRoadBannerX(b.x-b.hw-34,b.x+b.hw+34,118,frontZ-24,posterBase,accent);
+      else addRoadBannerZ(rightX+22,b.z-b.hd-26,b.z+b.hd+26,116,posterBase,accent);
     }
     // Rooftop tanks, a stair head-room and parapet details are common in Dhaka.
     cityFacadeDetails.box(b.x-b.hw*.16,b.h+10,b.z+b.hd*.10,36,20,32,[.29,.34,.36]);
@@ -2672,77 +2739,59 @@
     for(let k=-4;k<=4;k++)storeCanopies.box(x+k*11,53,z-61.4,7,9,1.2,k%2?[.96,.58,.21]:[.98,.89,.64]);
   }
   const utilityPoleData=[];
-  function pushPole(x,z,h=130,type=0){utilityPoleData.push({x,z,h,type});}
-  // Put denser poles close to the visible road corridors so they actually read in gameplay.
-  const roadCentersX=[-550,0,550,1100,-1100], roadCentersZ=[-600,-50,500,1050,-1150];
-  for(const x of roadCentersX){
-    for(const z of [-1180,-730,-280,170,620,1070]){
-      pushPole(x-135,z,128+((x+z)%4===0?8:0),Math.abs(z)<350?1:0);
-      pushPole(x+135,z+35,132+((x-z)%5===0?6:0),((Math.abs(x)<60)||(x===550&&z<500))?1:0);
-    }
-  }
-  for(const z of [-600,-50,500]){
-    for(const x of [-1320,-770,-220,330,880,1430]){
-      pushPole(x,z-132,126+((x+z)%4===0?10:0),Math.abs(x)<400?1:0);
-      pushPole(x+40,z+132,130+((x-z)%3===0?8:0),x===330||x===880?1:0);
-    }
-  }
-  const poleSpanRows=new Map(),poleSpanCols=new Map();
-  for(const pole of utilityPoleData){
-    utilityPoles.cylinder(pole.x,pole.h*.5,pole.z,4.8,pole.h,[.41,.34,.28],10);
-    utilityPoles.box(pole.x,pole.h-16,pole.z,48,3.4,6.0,[.34,.29,.24]);
-    utilityPoles.box(pole.x,pole.h-25,pole.z,30,2.6,4.6,[.34,.29,.24]);
-    utilityPoles.box(pole.x,pole.h-46,pole.z,12,20,12,[.22,.25,.27]);
-    utilityPoles.box(pole.x,pole.h-62,pole.z,18,3.5,18,[.28,.32,.34]);
-    if(pole.type){
-      utilityPoles.box(pole.x+12,pole.h-30,pole.z,22,24,16,[.35,.39,.40]);
-      utilityPoles.cylinder(pole.x+10,pole.h-15,pole.z-2,4.2,6,[.16,.18,.20],6);
-    }
-    for(const y of [pole.h-15,pole.h-24]){
-      overheadWires.ring(pole.x+2.2,y,pole.z,7.2,.9,wireColor,14);
-      overheadWires.ring(pole.x-3.6,y-4,pole.z,5.6,.8,wireColor,12);
-    }
-    const rowKey=Math.round(pole.z/5)*5,colKey=Math.round(pole.x/5)*5;
-    if(!poleSpanRows.has(rowKey))poleSpanRows.set(rowKey,[]);poleSpanRows.get(rowKey).push(pole);
-    if(!poleSpanCols.has(colKey))poleSpanCols.set(colKey,[]);poleSpanCols.get(colKey).push(pole);
-    const nearby=buildingRoofAnchors.filter(a=>distance(a.x,a.z,pole.x,pole.z)<265).sort((p,q)=>distance(p.x,p.z,pole.x,pole.z)-distance(q.x,q.z,pole.x,pole.z)).slice(0,2);
-    nearby.forEach((a,i)=>addSagWire({x:pole.x,y:pole.h-18-i*8,z:pole.z},{x:a.x,y:a.y-i*4,z:a.z},10+i*3,7,.46));
-  }
-  for(const arr of poleSpanRows.values()){
-    arr.sort((a,b)=>a.x-b.x);
-    for(let i=0;i<arr.length-1;i++){
-      const a=arr[i],b=arr[i+1];
-      if(Math.abs(a.x-b.x)>620)continue;
-      const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1,px=-dz/len,pz=dx/len;
-      for(const [off,y,sag] of [[-3.8,0,12],[0,6,15],[3.6,12,13],[-7.0,20,17],[7.4,24,18]]){
-        addSagWire({x:a.x+px*off,y:a.h-18-y,z:a.z+pz*off},{x:b.x+px*off,y:b.h-18-y,z:b.z+pz*off},sag,10,.48);
-      }
-    }
-  }
-  for(const arr of poleSpanCols.values()){
-    arr.sort((a,b)=>a.z-b.z);
-    for(let i=0;i<arr.length-1;i++){
-      const a=arr[i],b=arr[i+1];
-      if(Math.abs(a.z-b.z)>620)continue;
-      const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1,px=-dz/len,pz=dx/len;
-      for(const [off,y,sag] of [[-3.0,0,11],[0,7,15],[3.0,13,13],[-6.2,19,16]]){
-        addSagWire({x:a.x+px*off,y:a.h-20-y,z:a.z+pz*off},{x:b.x+px*off,y:b.h-20-y,z:b.z+pz*off},sag,10,.46);
-      }
-    }
-  }
-  // Extra low crossing wires near the core play area so the Dhaka street clutter is unmistakable.
-  const extraWireSpans=[
-    [{x:-160,y:108,z:-620},{x:160,y:112,z:-610}],
-    [{x:390,y:110,z:-40},{x:720,y:108,z:-20}],
-    [{x:-700,y:106,z:220},{x:-360,y:109,z:240}],
-    [{x:-165,y:98,z:520},{x:155,y:100,z:540}],
-    [{x:935,y:102,z:500},{x:1265,y:104,z:500}],
-    [{x:540,y:114,z:-610},{x:540,y:105,z:-300}],
-    [{x:0,y:112,z:-300},{x:0,y:100,z:80}],
-    [{x:-550,y:110,z:-300},{x:-550,y:101,z:120}]
+  const utilityPoleGroups=[];
+  function pushPole(x,z,h=130,type=0){const pole={x,z,h,type}; utilityPoleData.push(pole); return pole;}
+  // Random-looking Dhaka utility clusters: not everywhere, but in selective messy pockets.
+  const poleGroupDefs=[
+    {dir:'x',count:3,start:[-760,-610],step:225},
+    {dir:'x',count:2,start:[360,-40],step:255},
+    {dir:'x',count:4,start:[-210,520],step:195},
+    {dir:'x',count:3,start:[820,500],step:205},
+    {dir:'z',count:2,start:[-555,-320],step:260},
+    {dir:'z',count:3,start:[545,-760],step:255},
+    {dir:'z',count:4,start:[1080,-120],step:225},
+    {dir:'x',count:2,start:[-1180,170],step:235}
   ];
-  extraWireSpans.forEach(([a,b],i)=>{addSagWire(a,b,12+(i%3)*3,10,.52); if(i%2===0)addSagWire({x:a.x+8,y:a.y-8,z:a.z+5},{x:b.x-8,y:b.y-10,z:b.z-6},15,10,.38);});
-  cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();utilityPoles.upload();overheadWires.upload();
+  poleGroupDefs.forEach((g,gi)=>{
+    const group=[];
+    for(let i=0;i<g.count;i++){
+      const x=g.start[0]+(g.dir==='x'?i*g.step:0), z=g.start[1]+(g.dir==='z'?i*g.step:0);
+      group.push(pushPole(x,z,126+((gi+i)%3)*6,(gi+i)%3===0?1:0));
+    }
+    utilityPoleGroups.push(group);
+  });
+  for(const pole of utilityPoleData){
+    utilityPoles.cylinder(pole.x,pole.h*.5,pole.z,4.5,pole.h,[.41,.34,.28],10);
+    utilityPoles.box(pole.x,pole.h-16,pole.z,42,3.2,5.8,[.34,.29,.24]);
+    utilityPoles.box(pole.x,pole.h-25,pole.z,26,2.4,4.2,[.34,.29,.24]);
+    utilityPoles.box(pole.x,pole.h-46,pole.z,11,18,11,[.22,.25,.27]);
+    utilityPoles.box(pole.x,pole.h-62,pole.z,16,3.3,16,[.28,.32,.34]);
+    if(pole.type){
+      utilityPoles.box(pole.x+11,pole.h-30,pole.z,22,24,16,[.35,.39,.40]);
+      utilityPoles.cylinder(pole.x+9,pole.h-15,pole.z-2,4.1,6,[.16,.18,.20],6);
+    }
+    overheadWires.ring(pole.x+2.2,pole.h-15,pole.z,7.0,.85,wireColor,14);
+    overheadWires.ring(pole.x-3.1,pole.h-19,pole.z,5.4,.75,wireColor,12);
+    const nearby=buildingRoofAnchors.filter(a=>distance(a.x,a.z,pole.x,pole.z)<235).sort((p,q)=>distance(p.x,p.z,pole.x,pole.z)-distance(q.x,q.z,pole.x,pole.z)).slice(0,1+(pole.type?1:0));
+    nearby.forEach((a,i)=>addSagWire({x:pole.x,y:pole.h-18-i*7,z:pole.z},{x:a.x,y:a.y-i*4,z:a.z},10+i*2,7,.42));
+  }
+  utilityPoleGroups.forEach((arr,gi)=>{
+    for(let i=0;i<arr.length-1;i++){
+      const a=arr[i],b=arr[i+1];
+      const dx=b.x-a.x,dz=b.z-a.z,len=Math.hypot(dx,dz)||1,px=-dz/len,pz=dx/len;
+      const wireSet=arr.length===2?[[-2.4,0,10],[1.8,8,13],[5.2,15,12]]:arr.length===3?[[-3.0,0,11],[0,7,14],[3.3,13,12],[6.4,18,16]]:[[-3.6,0,12],[-1.0,6,14],[2.4,12,13],[5.8,18,17]];
+      for(const [off,y,sag] of wireSet){
+        addSagWire({x:a.x+px*off,y:a.h-18-y,z:a.z+pz*off},{x:b.x+px*off,y:b.h-18-y,z:b.z+pz*off},sag,9,.46);
+      }
+      if((gi+i)%2===0)addSagWire({x:a.x+px*8,y:a.h-36,z:a.z+pz*8},{x:b.x-px*8,y:b.h-39,z:b.z-pz*8},17,9,.32);
+    }
+  });
+  // A few extra hanging street banners / poster strings, but not everywhere.
+  addRoadBannerX(-650,-330,114,-610,[.67,.23,.20],[.93,.81,.36]);
+  addRoadBannerX(-115,165,118,520,[.33,.55,.36],[.94,.92,.84]);
+  addRoadBannerZ(540,-690,-470,116,[.25,.44,.68],[.90,.58,.18]);
+  addRoadBannerZ(1080,60,305,114,[.55,.31,.63],[.92,.90,.84]);
+  cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();cityPosterDecor.upload();utilityPoles.upload();overheadWires.upload();
   // Detailed, source-independent flood-damaged electrical cabinets. The legacy
   // baked powerboxes mesh is intentionally not drawn, to avoid overlapping models.
   // Every part is generated once; only light state and tiny spark meshes animate.
@@ -4850,7 +4899,7 @@
       // Rebuilt parked vehicles are drawn separately below, allowing CNGs and
       // the colorful rickshaw to REPLACE, not overlap, the baked source cars.
       // Omit the old solid-color traffic beacon; draw a realistic signal below.
-      render(campusLettering);render(teaSignBoard);render(shopSigns);render(storeCanopies);render(cityFacadeDetails);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);render(utilityPoles);render(overheadWires);
+      render(campusLettering);render(teaSignBoard);render(shopSigns);render(storeCanopies);render(cityFacadeDetails);render(cityPosterDecor);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);render(utilityPoles);render(overheadWires);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
@@ -5094,8 +5143,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='phase14-dhaka-buildings-wires-dense';
-  window.majhiWaterDiagnostics=()=>({phase:'14-dhaka-buildings-wires-dense',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='phase15-dhaka-random-wires-posters';
+  window.majhiWaterDiagnostics=()=>({phase:'15-dhaka-random-wires-posters',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
     minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatCruiseSpeed:245,boatReverseSpeed:165,boatSinglePassOars:true,boatWetGeometryDraws:0,firstPersonTorsoHidden:true,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
