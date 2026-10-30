@@ -251,7 +251,7 @@
     return g.upload();
   }
 
-  // Visual Lab 02.2 — Closed, tapered sampan hull.
+  // Visual Lab 02.3 — Closed sampan hull with fitted interior planks.
   // The hull is modeled as a continuous surface, NOT sealed with vertical posts.
   // The two ends meet at a single point in 3D; the bottom, sides and inner
   // floor all rise together so there is no bow/stern slot or upright wall.
@@ -319,6 +319,60 @@
   }
   const hullRail=makeRail();
 
+  // LAB 02.3: Every interior board must follow the upward-curving inner hull.
+  // The old straight rectangular boards sat at y=.407 even when the bow and
+  // stern floor rose above them, so they appeared BELOW the hull in side views.
+  function interiorY(x){
+    return hullSection(x,1).floorCenter[1];
+  }
+  function makeFollowHullBoards(){
+    const pieces=[];
+    const seams=new Geometry();
+    const count=16,limit=BOAT_LENGTH-.065;
+    const start=-limit,step=2*limit/count;
+    const segments=5;
+    const surface=(x,zsign,offset)=>[
+      x,interiorY(x)+offset,zsign*hullWidth(x)*.61
+    ];
+    for(let i=0;i<count;i++){
+      const g=new Geometry();
+      const x0=start+i*step;
+      for(let j=0;j<segments;j++){
+        const a=x0+step*j/segments;
+        const b=x0+step*(j+1)/segments;
+        const A=surface(a,-1,.019),B=surface(b,-1,.019);
+        const C=surface(b,1,.019),D=surface(a,1,.019);
+        g.quad(A,B,C,D);
+        // Thin visible board edges, following the interior contour.
+        const A0=surface(a,-1,.002),B0=surface(b,-1,.002);
+        const C0=surface(b,1,.002),D0=surface(a,1,.002);
+        g.quad(A,A0,B0,B);
+        g.quad(C,D,D0,C0);
+      }
+      pieces.push(g.upload());
+      if(i>0){
+        const a=x0-.008,b=x0+.008;
+        seams.quad(surface(a,-1,.025),surface(b,-1,.025),
+                   surface(b,1,.025),surface(a,1,.025));
+      }
+    }
+    return {pieces,seams:seams.upload()};
+  }
+  const fittedBoards=makeFollowHullBoards();
+
+  // The center reinforcement also bends upward and terminates inside the tips.
+  function makeFittedSpine(){
+    const g=new Geometry(),n=60,limit=BOAT_LENGTH-.16;
+    for(let i=0;i<n;i++){
+      const a=-limit+2*limit*i/n,b=-limit+2*limit*(i+1)/n;
+      const at=(x,z,y)=>[x,interiorY(x)+y,z];
+      g.quad(at(a,-.031,.040),at(b,-.031,.040),
+             at(b,.031,.040),at(a,.031,.040));
+    }
+    return g.upload();
+  }
+  const fittedSpine=makeFittedSpine();
+
   // Shaped solid wooden oar blade rather than an elongated sphere or rod.
   // The local Y axis runs from -0.5 (neck) to +0.5 (rounded tip).
   function makePaddleBlade(){
@@ -381,24 +435,25 @@
     draw(hull.floor,mat(),wood.inner);
     draw(hullRail,mat(),wood.edge);
 
-    // Individually spaced wood floorboards with contrasting joints.
-    for(let i=0;i<14;i++){
-      const x=-1.63+i*.245,w=hullWidth(x)*1.20;
-      box([x,.407,0],i%4===0?wood.inner:color.plank,[.193,.038,w]);
-      box([x+.101,.421,0],wood.seam,[.014,.012,w*.99]);
-    }
+    // Fitted planks follow the hull's actual inner floor in all six views.
+    fittedBoards.pieces.forEach((mesh,i)=>draw(mesh,mat(),
+      i%4===0?wood.inner:color.plank));
+    draw(fittedBoards.seams,mat(),wood.seam);
     // A lower, more believable seated rowing bench, supported by two feet.
     for(const side of [-1,1])box([-.48,.51,side*.48],wood.rib,[.115,.23,.13]);
     box([-.48,.638,0],wood.edge,[.45,.078,1.28]);
     box([-.48,.609,0],wood.rib,[.46,.075,1.30]);
     box([-.48,.662,0],color.plank,[.44,.055,1.27]);
 
-    // Longitudinal keel strip and internal strengthening ribs.
-    box([.01,.434,0],wood.seam,[3.14,.028,.055]);
+    // Center strip and ribs follow the same rising interior surface.
+    draw(fittedSpine,mat(),wood.seam);
     for(const x of [-1.28,-.87,.35,.91,1.29]){
-      const w=hullWidth(x);
-      box([x,.49,0],wood.rib,[.075,.12,w*1.47]);
-      for(const side of [-1,1])bone([x,.49,side*w*.66],[x,hullTop(x)-.13,side*w*.91],.028,wood.rib);
+      const w=hullWidth(x),base=interiorY(x)+.045;
+      box([x,base,0],wood.rib,[.075,.07,w*1.30]);
+      for(const side of [-1,1]){
+        bone([x,base,side*w*.64],
+             [x,hullTop(x)-.13,side*w*.90],.028,wood.rib);
+      }
     }
     // Small rounded tip caps where the existing gunwale rails converge.
     // These are NOT hull-closure posts: the 3D hull itself is watertight.
@@ -675,7 +730,7 @@
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Hull 02.2 ready';
+      status.textContent='WebGL 2 active · Hull 02.3 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);
