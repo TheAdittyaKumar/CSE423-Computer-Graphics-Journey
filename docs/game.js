@@ -586,7 +586,7 @@
     }}
     const vao=gl.createVertexArray();let read=0;
     let cx=0,cz=-1450,active=false,elapsed=0,lastX=0,lastZ=0,stepAccumulator=0;
-    let lastSplash=0,lastStroke=-1,travelDistance=0,wakeCount=0;
+    let lastSplash=0,lastStroke=-1,travelDistance=0,wakeCount=0,lastCurrentTurbulence=0;
     const aiBladeContact=new Map();
     let lastObjectRipple=-1,objectWaveCount=0;
     let seenImpacts=new WeakSet(),seenRain=new WeakSet();
@@ -633,6 +633,7 @@
     }
     function reset(x=0,z=-1450){cx=x;cz=z;lastX=x;lastZ=z;active=true;
       elapsed=0;lastSplash=0;lastStroke=-1;travelDistance=0;stepAccumulator=0;
+      lastCurrentTurbulence=0;
       lastObjectRipple=-1;objectWaveCount=0;
       sampleTime=-1;Object.assign(hullWater,{heave:0,pitch:0,roll:0,targetHeave:0,
         targetPitch:0,targetRoll:0,samples:0,available:false,disabled:!sampleFB});
@@ -714,6 +715,33 @@
       for(const hit of S.rainSplashes){
         if(!seenRain.has(hit)){seenRain.add(hit);
           ripple(hit.x,hit.z,.078,.011);
+        }
+      }
+      // Replace the old floating cyan triangles with actual rougher water.
+      // Nearby current zones continuously inject choppy cross-ripples and short
+      // forward shears into the GPU heightfield so the rough patches are read
+      // directly from the water surface itself.
+      if(S.mode==='PLAYING' && elapsed-lastCurrentTurbulence>.085){
+        lastCurrentTurbulence=elapsed;
+        for(let i=0;i<currents.length;i++){
+          const zone=currents[i];
+          const zx=(zone.a+zone.b)*.5,zz=(zone.c+zone.d)*.5;
+          const halfW=(zone.b-zone.a)*.5,halfD=(zone.d-zone.c)*.5;
+          if(Math.abs(zx-cx)>halfW+SPAN*.53 || Math.abs(zz-cz)>halfD+SPAN*.53)continue;
+          const len=Math.hypot(zone.dx,zone.dz)||1,fx=zone.dx/len,fz=zone.dz/len;
+          const sx=-fz,sz=fx;
+          for(let k=0;k<2;k++){
+            const seed=i*13.7+k*2.1;
+            const t=elapsed*(.72+.08*k)+seed;
+            const along=.5+.42*Math.sin(t*.93+seed*.7);
+            const across=.38*Math.sin(t*1.61+seed*1.9);
+            const x=(zone.a+24)+(zone.b-zone.a-48)*along + sx*across*38;
+            const z=(zone.c+24)+(zone.d-zone.c-48)*(.5+.42*Math.sin(t*1.17+seed*1.3)) + sz*across*38;
+            const strength=.020+.010*(.5+.5*Math.sin(t*2.7));
+            run(effects.wake,{center:uv(x,z),forward:[fx,fz],strength:.030+.010*k});
+            ripple(x,z,strength,.015+.004*k);
+            ripple(x+sx*12,z+sz*12,strength*.72,.012);
+          }
         }
       }
       lastX=S.x;lastZ=S.z;
@@ -3870,6 +3898,38 @@
     for(const b of buildings){const x=px(b.x-b.hw),y=py(b.z+b.hd),bw=2*b.hw*scale,bh=2*b.hd*scale;
       if(x+bw>=0&&x<=w&&y+bh>=0&&y<=h)ctx.fillRect(x,y,bw,bh);}
     ctx.fillStyle='#4a815c';ctx.fillRect(px(-220),py(1620),490*scale,390*scale);
+    function currentZoneHighlight(zone){
+      const x1=px(zone.a),x2=px(zone.b),y1=py(zone.c),y2=py(zone.d);
+      const left=Math.min(x1,x2),right=Math.max(x1,x2),top=Math.min(y1,y2),bottom=Math.max(y1,y2);
+      if(right<0||left>w||bottom<0||top>h)return;
+      const bw=right-left,bh=bottom-top;
+      ctx.save();
+      ctx.fillStyle='rgba(77,177,212,.12)';
+      ctx.fillRect(left,top,bw,bh);
+      ctx.strokeStyle='rgba(255,214,110,.85)';ctx.lineWidth=2;ctx.setLineDash([6,4]);
+      ctx.lineDashOffset=-(S.time*18)%10;ctx.strokeRect(left,top,bw,bh);
+      ctx.setLineDash([]);
+      ctx.strokeStyle='rgba(255,255,255,.22)';ctx.lineWidth=1.2;
+      for(let yy=top+8;yy<bottom-3;yy+=11){
+        ctx.beginPath();
+        for(let xx=left+5;xx<right-3;xx+=12){
+          const wy=yy+Math.sin((xx+S.time*55)*.06)*2.2;
+          if(xx===left+5)ctx.moveTo(xx,wy); else ctx.lineTo(xx,wy);
+        }
+        ctx.stroke();
+      }
+      const label='ROUGH WATER';
+      ctx.font='800 9px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      const labelW=Math.min(bw-6,ctx.measureText(label).width+12);
+      if(labelW>36 && bh>18){
+        const lx=clamp((left+right)*.5,4+labelW*.5,w-4-labelW*.5),ly=top+11;
+        ctx.fillStyle='rgba(7,26,34,.92)';ctx.beginPath();ctx.roundRect(lx-labelW*.5,ly-7,labelW,14,4);ctx.fill();
+        ctx.strokeStyle='rgba(255,214,110,.95)';ctx.lineWidth=1;ctx.stroke();
+        ctx.fillStyle='#fff1bf';ctx.fillText(label,lx,ly+.5);
+      }
+      ctx.restore();
+    }
+    for(const zone of currents)currentZoneHighlight(zone);
     // Draw the GREEN drop-off first, then the GOLD pickup above it, so both
     // are simultaneously visible even when somebody is already onboard.
     function route(target,color){
@@ -4704,7 +4764,9 @@
     // Facade waterline ribbons exist on real wall planes; blend after the
     // optical water and honor the depth buffer, not fake screen-space decals.
     if(S.quality==='HIGH')render(facadeWaterline);
-    render(currentArrows);
+    // The old floating cyan triangles were only a placeholder cue. Current
+    // zones are now communicated by turbulent water itself and by minimap
+    // highlights, so the triangles are no longer rendered in-world.
     render(campusGround);
     render(sunshineAura);render(sunshineSun);
     gl.depthMask(true);gl.disable(gl.BLEND);
