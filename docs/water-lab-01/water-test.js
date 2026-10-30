@@ -1,6 +1,7 @@
 /*
- * MAJHI JABEN?! / WATER LAB 02.0
- * Spatially sampled, speed-scaled hull wakes and stroke-contact paddle impulses.
+ * MAJHI JABEN?! / WATER LAB 02.1
+ * Final physics and optics study: velocity-heightfield, optically projected caustics,
+ * light direction, buoyancy/displacement sphere, and water-contact wakes.
  * Smoothed GPU heightfield gradients, balanced wake injection and natural decay.
  * Readable, artist-directed transparent floodwater and 3.2 m road depth remain.
  * Preserves the rowing rig, GPU simulation, camera controls and independent test.
@@ -93,7 +94,8 @@
   in vec3 vNormal,vWorld;
   in float vDistance,vWave;
   uniform vec3 uTint,uCamera;
-  uniform float uTime,uReflect,uWind,uWaveScale,uClarity,uRain,uDistortion,uFloodDepth;
+  uniform float uTime,uReflect,uWind,uWaveScale,uClarity,uRain,uDistortion,uFloodDepth,uCaustics;
+  uniform vec3 uSunDir;
   uniform vec4 uWakeBoat; // x,z,direction,speed (actual movement only)
   uniform highp int uType,uWaterMode;
   uniform int uLighting,uDebug;
@@ -124,8 +126,8 @@
     cloud=.65*cloud+.35*noise(coord*4.0+vec2(13.7,8.9));
     float cloudAmount=smoothstep(.50,.78,cloud)*smoothstep(-.06,.32,y);
     sky=mix(sky,vec3(.82,.84,.78),cloudAmount*(uLighting==0?.38:.21));
-    vec3 sunDir=normalize(vec3(-.6,1.0,.9));
-    float sunGlow=pow(max(0.,dot(dir,sunDir)),70.0);
+    vec3 sunDir=normalize(uSunDir);
+    float sunGlow=pow(max(0.,dot(dir,sunDir)),180.0);
     sky+=vec3(.65,.50,.25)*sunGlow*(uLighting==0?.29:.07);
     return sky;
   }
@@ -176,7 +178,7 @@
     return road;
   }
   void main(){
-    vec3 sun=normalize(uLighting==0?vec3(-.6,1.0,.9):vec3(-.35,1.0,.2));
+    vec3 sun=normalize(uSunDir);
     vec3 color=uTint;
     if(uType==1){
       vec2 p=vWorld.xz;
@@ -269,11 +271,11 @@
           // This adds a depth cue without hiding lane markings or making
           // 3.2 m of floodwater opaque.
           vec2 shadowAt=vec2(uWakeBoat.x,0.0)
-            -sun.xz/max(.25,sun.y)*uFloodDepth*.38;
+            -sun.xz/max(.28,sun.y)*min(uFloodDepth,4.5)*.56;
           vec2 shadowScale=vec2(1.05+uFloodDepth*.25,.78+uFloodDepth*.22);
           vec2 shadowRel=(refractedHit-shadowAt)/shadowScale;
           float underHullShadow=exp(-dot(shadowRel,shadowRel)*2.3);
-          roadColor*=1.0-underHullShadow*(.080/(1.0+uFloodDepth*.10));
+          roadColor*=1.0-underHullShadow*(.125/(1.0+uFloodDepth*.15));
           float clarity=clamp(uClarity,0.0,1.0);
           // We keep the water artistically transparent like Evan's study, but
           // still make it view-dependent so the street is clearest when looking
@@ -289,15 +291,37 @@
                               (.70+.30*viewThrough),0.0,1.0);
           vec3 depthColor=mix(vec3(.034,.158,.168),vec3(.072,.258,.238),
                               clamp(.48+(n1-.5)*.28+(n2-.5)*.16,0.0,1.0));
-          // Soft caustic-like modulation on the submerged road for attractive
-          // readability. It is stylized, not a claim of strict realism.
-          float caustic=pow(max(0.0,dot(normalize(vec3(-N.x*.95,1.0,-N.z*.95)),sun)),7.0);
-          // Subdued optical convergence: ripples produce a living underwater
-          // highlight, rather than a static bright decal on top of the water.
-          float focus=clamp(dot(normalize(vec3(-N.x*.7,1.0,-N.z*.7)),sun),0.0,1.0);
-          roadColor+=vec3(.12,.20,.18)*caustic*(0.25+0.75*clarity);
-          roadColor+=vec3(.09,.14,.12)*(focus*focus-.75)*
-                     uDistortion*downView*.28;
+          // Evan Wallace's pool focuses refracted sunlight where its
+          // projected surface triangles compress. For a broad road rather
+          // than a tiled pool, evaluate a local two-axis Jacobian of the
+          // refracted rays: a compressed footprint means brighter caustics.
+          // Two extra filtered GPU normal samples, no fixed moving texture.
+          // These patterns are deliberately subtle so the road stays legible.
+          float lightTransmission=max(0.0,sun.y);
+          float causticLight=(uLighting==0?1.0:.26)*uCaustics;
+          if(causticLight>.005){
+            vec2 eps=vec2(1.5/256.0,0.0);
+            float causticScale=.10+uWaveScale*1.8;
+            vec2 grad0=slope*causticScale;
+            vec2 gradX=(texture(uSurfaceNormalTex,clamp(uv+eps.xy,vec2(.002),vec2(.998))).rg*2.0-1.0)*3.0*fade*causticScale;
+            vec2 gradZ=(texture(uSurfaceNormalTex,clamp(uv+eps.yx,vec2(.002),vec2(.998))).rg*2.0-1.0)*3.0*fade*causticScale;
+            vec3 r0=refract(-sun,normalize(vec3(-grad0.x,1.0,-grad0.y)),1.0/1.333);
+            vec3 rx=refract(-sun,normalize(vec3(-gradX.x,1.0,-gradX.y)),1.0/1.333);
+            vec3 rz=refract(-sun,normalize(vec3(-gradZ.x,1.0,-gradZ.y)),1.0/1.333);
+            float cellSize=24.0*eps.x;
+            vec2 hit0=p+r0.xz*(depthToBed/max(.15,-r0.y));
+            vec2 hitX=p+vec2(cellSize,0.0)+rx.xz*(depthToBed/max(.15,-rx.y));
+            vec2 hitZ=p+vec2(0.0,cellSize)+rz.xz*(depthToBed/max(.15,-rz.y));
+            vec2 ax=(hitX-hit0)/cellSize;
+            vec2 az=(hitZ-hit0)/cellSize;
+            float area=abs(ax.x*az.y-ax.y*az.x);
+            float convergence=clamp(1.0/max(.28,area),.35,2.60);
+            float focused=smoothstep(1.04,1.82,convergence);
+            float broad=clamp((convergence-1.0)*.28,0.0,.28);
+            float caustic=(focused*.65+broad*.35);
+            roadColor+=vec3(.155,.172,.130)*caustic*causticLight*
+              (.35+.65*clarity)*lightTransmission;
+          }
           vec3 refracted=mix(depthColor,roadColor,transmission*streetVisibility);
           vec3 waterBody=mix(refracted,refracted+vec3(.016,.055,.052),0.22);
           // Very subtle local turbulence, not long glowing wake lines.
@@ -374,18 +398,18 @@
     in vec2 vUv;
     uniform sampler2D uPrevious;
     out vec4 fragColor;
-    vec2 packed(float value){
+    vec2 packSigned16(float value){
       float v=floor((clamp(value,-1.0,1.0)*.5+.5)*65535.0+.5);
       return vec2(floor(v/256.0),mod(v,256.0))/255.0;
     }
-    float unpacked(vec2 bytes){
+    float unpackSigned16(vec2 bytes){
       return 2.0*(dot(bytes,vec2(65280.0,255.0))/65535.0)-1.0;
     }
     vec2 info(ivec2 at){
       vec4 c=texelFetch(uPrevious,clamp(at,ivec2(0),ivec2(255)),0);
-      return vec2(unpacked(c.rg),unpacked(c.ba));
+      return vec2(unpackSigned16(c.rg),unpackSigned16(c.ba));
     }
-    void outputInfo(float h,float v){fragColor=vec4(packed(h),packed(v));}
+    void outputInfo(float h,float v){fragColor=vec4(packSigned16(h),packSigned16(v));}
   `;
   const simUpdateFragment = `#version 300 es\n${simCommon}
     void main(){
@@ -397,8 +421,12 @@
       // for a moving hull to leave a short trail; spatial averaging reduces
       // grid-scale stair-steps rather than painting smooth waves over the top.
       // With two fixed steps per 1/60 s, this damps both motion and height.
-      float v=(h.y+(average-h.x)*.31)*.974;
-      float newH=(mix(h.x,average,.036)+v)*.995;
+      // Semi-implicit integration of a discrete wave equation. The pressure
+      // gradient accelerates the surface; viscous damping removes energy.
+      // Constant 120 Hz integration prevents the rain/boat effect depending
+      // on the display frame rate. A light Laplacian smooths RGBA8 quantization.
+      float v=(h.y+(average-h.x)*.32)*.983;
+      float newH=(mix(h.x,average,.022)+v)*.998;
       vec2 edge=min(vUv,1.0-vUv);
       float edgeFade=smoothstep(0.0,.055,min(edge.x,edge.y));
       outputInfo(newH*edgeFade,v*edgeFade);
@@ -480,6 +508,26 @@
       outputInfo(old.x,old.y+dipole*uStrength*.58);
     }`;
 
+  // Optional gravity/buoyancy test. Evan's sphere writes the difference
+  // between previous and current submerged volume into the heightfield.
+  // This version uses exact spherical cross-sections at the waterline,
+  // with a small strength factor to represent lateral water escape.
+  const simBallFragment = `#version 300 es\n${simCommon}
+    uniform vec2 uCenter;
+    uniform float uRadius,uStrength,uOldHeight,uNewHeight;
+    float columnUnderwater(float h, float radial){
+      float halfH=sqrt(max(0.0,uRadius*uRadius-radial*radial));
+      return clamp(halfH-h,0.0,2.0*halfH);
+    }
+    void main(){
+      vec2 previous=info(ivec2(gl_FragCoord.xy));
+      float radial=length((vUv-uCenter)*24.0);
+      float before=columnUnderwater(uOldHeight,radial);
+      float after=columnUnderwater(uNewHeight,radial);
+      // More submerged volume creates positive displaced pressure.
+      outputInfo(previous.x+(after-before)*uStrength,previous.y);
+    }`;
+
   // Original WebGL Water computes a normal field after each wave update.
   // Here we use a separate RGBA8 normal texture with LINEAR filtering:
   //   R/G = encoded height gradient in world units, B = height for debug.
@@ -536,7 +584,9 @@
     rain:gl.getUniformLocation(program,'uRain'),
     distortion:gl.getUniformLocation(program,'uDistortion'),
     depth:gl.getUniformLocation(program,'uFloodDepth'),
-    wakeBoat:gl.getUniformLocation(program,'uWakeBoat')
+    wakeBoat:gl.getUniformLocation(program,'uWakeBoat'),
+    sun:gl.getUniformLocation(program,'uSunDir'),
+    caustics:gl.getUniformLocation(program,'uCaustics')
   };
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
@@ -555,7 +605,9 @@
       strength:gl.getUniformLocation(p,'uStrength'),
       heading:gl.getUniformLocation(p,'uHeading'),
       pulse:gl.getUniformLocation(p,'uPulse'),
-      motion:gl.getUniformLocation(p,'uMotion')};
+      motion:gl.getUniformLocation(p,'uMotion'),
+      oldHeight:gl.getUniformLocation(p,'uOldHeight'),
+      newHeight:gl.getUniformLocation(p,'uNewHeight')};
   }
   let sim;
   try{
@@ -582,6 +634,7 @@
       drop:createSimulationProgram(simDropFragment),
       wake:createSimulationProgram(simWakeFragment),
       paddle:createSimulationProgram(simPaddleFragment),
+      ball:createSimulationProgram(simBallFragment),
       normals:createSimulationProgram(simNormalFragment)};
     const normalTex=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,normalTex);
@@ -611,12 +664,13 @@
     pendingDrops.length=0;
     pendingWakes.length=0;
     pendingPaddles.length=0;
+    pendingSphere.length=0;
     lastBladeContacts[0]=null;lastBladeContacts[1]=null;
     wakeDistance=0;lastWake=-10;
     foamSpots.length=0;
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   }
-  function simulationPass(effect,center,radius,strength,heading=1,pulse=0,motion=null){
+  function simulationPass(effect,center,radius,strength,heading=1,pulse=0,motion=null,oldHeight=0,newHeight=0){
     gl.disable(gl.DEPTH_TEST);
     const next=1-sim.read;
     gl.bindFramebuffer(gl.FRAMEBUFFER,sim.buffers[next].fb);
@@ -633,6 +687,8 @@
       if(effect.heading)gl.uniform1f(effect.heading,heading);
       if(effect.pulse)gl.uniform1f(effect.pulse,pulse);
       if(effect.motion && motion)gl.uniform2fv(effect.motion,motion);
+      if(effect.oldHeight)gl.uniform1f(effect.oldHeight,oldHeight);
+      if(effect.newHeight)gl.uniform1f(effect.newHeight,newHeight);
     }
     gl.drawArrays(gl.TRIANGLES,0,3);
     sim.read=next;
@@ -652,6 +708,7 @@
   const pendingDrops=[];
   const pendingWakes=[];
   const pendingPaddles=[];
+  const pendingSphere=[];
   const foamSpots=[];
   function addFoam(x,z,amount=.20,radius=.25,lifetime=.50){
     foamSpots.push({x,z,amount,radius,age:0,lifetime});
@@ -1230,7 +1287,8 @@
   canvas.addEventListener('pointercancel',release);
   canvas.addEventListener('wheel',e=>{e.preventDefault();cam.distance=clamp(cam.distance*Math.exp(e.deltaY*.001),1.8,14);},{passive:false});
 
-  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.78,wave:.38,wind:.40,reflections:.40,travel:0,clarity:.88,distortion:.76,depth:3.2};
+  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.78,wave:.38,wind:.40,reflections:.40,travel:0,clarity:.88,distortion:.76,depth:3.2,
+    sunAzimuth:130,sunElevation:54,caustics:.62,gravity:true,sphereVisible:false};
   // Boat motion is an explicit experiment, rather than a perpetual fake wake.
   // This slider is inserted beside the existing wake slider: no HTML/CSS edits.
   const travelLabel=document.createElement('div');
@@ -1308,6 +1366,51 @@
     depthValue.textContent=state.depth.toFixed(1)+' m';
     $('heroDepth').textContent=state.depth.toFixed(1)+' m';
   });
+  // Light controls allow a direct test of Evan's key idea: the same
+  // normals must drive sky reflection, refraction and caustic direction.
+  const lightingPanel=document.createElement('section');
+  lightingPanel.className='section';
+  lightingPanel.innerHTML=`
+    <h3>Sunlight & optical caustics</h3>
+    <p class="note">Move the light to see projected highlights change direction beneath the waves. Studio and Overcast adjust direct-light strength.</p>
+    <div class="slider-label"><label for="sunAzimuth">Light direction (azimuth)</label><output id="sunAzimuthValue">130°</output></div>
+    <input type="range" id="sunAzimuth" min="0" max="360" step="5" value="130">
+    <div class="slider-label"><label for="sunElevation">Light elevation</label><output id="sunElevationValue">54°</output></div>
+    <input type="range" id="sunElevation" min="15" max="85" step="1" value="54">
+    <div class="slider-label"><label for="causticsSlider">Refracted sunlight / caustics</label><output id="causticsSliderValue">62%</output></div>
+    <input type="range" id="causticsSlider" min="0" max="100" step="1" value="62">
+    <h3 class="diagnostic-heading">Optional buoyancy experiment</h3>
+    <p class="note">Drop a sphere, watch gravity and buoyancy find equilibrium, and see its changing submerged volume disturb the GPU heightfield. Not part of the main game.</p>
+    <div class="duo"><button type="button" class="secondary-btn" id="dropSphere">Drop test sphere</button><button type="button" class="secondary-btn" id="hideSphere">Hide sphere</button></div>
+    <label class="check"><input id="sphereGravity" type="checkbox" checked> Enable gravity & buoyancy</label>
+    <p class="note" id="sphereStatus" aria-live="polite">Sphere inactive; boat scene unchanged.</p>`;
+  const rowingSection=$('pauseRowing').closest('section');
+  rowingSection.parentNode.insertBefore(lightingPanel,rowingSection);
+  for(const [id,key,unit] of [
+    ['sunAzimuth','sunAzimuth','°'],['sunElevation','sunElevation','°'],
+    ['causticsSlider','caustics','%']
+  ]){
+    const input=$(id),output=$(id+'Value');
+    const handle=()=>{
+      state[key]=key==='caustics'?Number(input.value)/100:Number(input.value);
+      output.textContent=input.value+unit;
+    };
+    input.addEventListener('input',handle);handle();
+  }
+  const testSphere={x:1.7,z:-1.1,r:.43,y:2.5,vy:0,density:.62};
+  $('dropSphere').addEventListener('click',()=>{
+    testSphere.y=2.35;testSphere.vy=0;state.sphereVisible=true;
+    $('sphereStatus').textContent='Sphere released: density 0.62 × water; observe its bounce and water displacement.';
+  });
+  $('hideSphere').addEventListener('click',()=>{
+    state.sphereVisible=false;testSphere.vy=0;
+    $('sphereStatus').textContent='Sphere inactive; boat scene unchanged.';
+  });
+  $('sphereGravity').addEventListener('change',e=>{
+    state.gravity=e.target.checked;
+    $('sphereStatus').textContent=state.gravity?'Gravity and buoyancy on.':'Gravity and buoyancy off: sphere holds its height.';
+  });
+
   const tempo=$('rowingSpeed'),stroke=$('strokePhase');
   function updatePauseButton(){
     $('pauseRowing').textContent=state.running?'Pause Rowing':'Resume Rowing';
@@ -1472,6 +1575,28 @@
       boatFloatY=.012*Math.sin(seconds*1.65)+.007*state.wind*Math.sin(seconds*2.81);
       const boatDelta=boatX-previousBoatX;
       previousBoatX=boatX;
+      if(state.sphereVisible && state.mode===1 && state.showWater && state.gravity){
+        // Exact spherical-cap submerged volume: V(h)=pi*h*h*(R-h/3).
+        // Archimedes: upward force = displaced fluid weight; sphere density
+        // is .62 the water density. Integrate with a damped fixed-rate step.
+        const n=Math.max(1,Math.ceil(dt/(1/120)));
+        const hdt=dt/n;
+        for(let j=0;j<n;j++){
+          const oldY=testSphere.y;
+          const submerged=clamp(.035-(testSphere.y-testSphere.r),0,2*testSphere.r);
+          const fraction=submerged*submerged*(3*testSphere.r-submerged)/
+            (4*testSphere.r*testSphere.r*testSphere.r);
+          const acceleration=9.81*(fraction/testSphere.density-1.0)-testSphere.vy*1.45;
+          testSphere.vy=clamp(testSphere.vy+acceleration*hdt,-8.0,6.0);
+          testSphere.y+=testSphere.vy*hdt;
+          if(testSphere.y<-.30){testSphere.y=-.30;testSphere.vy=Math.max(0,testSphere.vy);}
+          if(Math.abs(testSphere.y-oldY)>.00005){
+            pendingSphere.push({uv:[testSphere.x/SIM_SPAN+.5,testSphere.z/SIM_SPAN+.5],
+              before:oldY-.035,after:testSphere.y-.035,r:testSphere.r});
+            if(pendingSphere.length>12)pendingSphere.shift();
+          }
+        }
+      }
       // Optical turbulence stops quickly if boat motion stops. The GPU
       // height-field wave itself continues propagating and dissipating.
       const speedNormalized=clamp(Math.abs(actualSpeed)/1.65,0,1);
@@ -1572,8 +1697,12 @@
           const p=pendingPaddles.shift();
           simulationPass(sim.paddle,p.uv,p.radius,p.strength,1,0,p.motion);
         }
+        for(let i=0;i<Math.min(8,pendingSphere.length);i++){
+          const b=pendingSphere.shift();
+          simulationPass(sim.ball,b.uv,b.r,.32,1,0,null,b.before,b.after);
+        }
       } else {
-        pendingDrops.length=0;pendingWakes.length=0;pendingPaddles.length=0;
+        pendingDrops.length=0;pendingWakes.length=0;pendingPaddles.length=0;pendingSphere.length=0;
         wakeDistance=0;
         lastBladeContacts[0]=null;lastBladeContacts[1]=null;
       }
@@ -1608,6 +1737,9 @@
       gl.uniform1f(uni.clarity,state.clarity);
       gl.uniform1f(uni.distortion,state.distortion);
       gl.uniform1f(uni.depth,state.depth);
+      const az=state.sunAzimuth*PI/180,el=state.sunElevation*PI/180;
+      gl.uniform3f(uni.sun,Math.cos(el)*Math.cos(az),Math.sin(el),Math.cos(el)*Math.sin(az));
+      gl.uniform1f(uni.caustics,state.caustics);
       gl.uniform4f(uni.wakeBoat,boatX,0,boatDirection,wakeSpeedVisual*state.wake);
       gl.uniform1f(uni.rain,state.rain);
       gl.clearColor(...(state.lighting===0?[.63,.76,.73,1]:[.52,.63,.68,1]));
@@ -1626,11 +1758,20 @@
       // Dhaka architecture will have its own separate visual lab.
       drawBoat();
       drawMajhi(state.phase,state.showRig);
+      if(state.sphereVisible){
+        // Keep the sphere independent of the boat translation and float offset.
+        const oldOffset=boatOffsetX;
+        boatOffsetX=0;
+        const sphereColor=[.90,.59,.29];
+        ball([testSphere.x,testSphere.y+.145-boatFloatY,testSphere.z],
+          sphereColor,[testSphere.r,testSphere.r,testSphere.r]);
+        boatOffsetX=oldOffset;
+      }
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Water Lab 02.0 ready';
+      status.textContent='WebGL 2 active · Water Lab 02.1 ready';
       requestAnimationFrame(frame);
     } catch(err) {
-      console.error('Water Lab 02.0:',err);
+      console.error('Water Lab 02.1:',err);
       fail('Rendering error: '+err.message);
     }
   }

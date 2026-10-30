@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#081e29">
-  <meta name="description" content="Majhi Jaben?! Water Lab 02.0 — GPU interactive floodwater simulation, tested separately from the main game.">
+  <meta name="description" content="Majhi Jaben?! Water Lab 02.1 — GPU interactive floodwater simulation, tested separately from the main game.">
   <title>Majhi Jaben?! · Water Lab 01</title>
   <link rel="stylesheet" href="./style.css">
-  <script src="./water-test.js?v=200" defer></script>
+  <script src="./water-test.js?v=210" defer></script>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 02.0</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
+      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 02.1</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
       <a class="game-link" href="../index.html">Original game</a>
     </header>
     <main class="layout">
@@ -20,7 +20,7 @@
         <canvas id="scene" tabindex="0">Your browser does not support the 3D preview.</canvas>
         <div class="scene-status"><span class="status-dot"></span><span id="rendererStatus">Starting water simulation...</span></div>
         <div id="errorPanel" class="error-panel" hidden><h2>Renderer unavailable</h2><p id="errorMessage">Could not start WebGL 2.</p></div>
-        <div class="hero"><span class="eyebrow">WATER STUDY 02.0 / REACTIVE HULL + OAR WAVES</span><h2>The water responds to every stroke.</h2><p>The submerged road now sits <strong id="heroDepth">3.2 m</strong> below the surface. Move the boat to leave a smoother, fading V-shaped disturbance. The oar blades create separate ripples only when touching the surface. Stop moving or pause rowing and watch the waves settle; the road remains visible beneath 3.2 m of floodwater.</p></div>
+        <div class="hero"><span class="eyebrow">WATER STUDY 02.1 / REACTIVE HULL + OAR WAVES</span><h2>Light, water and motion in balance.</h2><p>The submerged road now sits <strong id="heroDepth">3.2 m</strong> below the surface. Move the boat to create a fading wake, tilt the sunlight to watch water focus light onto the road, or drop an optional floating sphere to test gravity and displacement. Oar blades disturb the surface only when touching water. Road markings remain visible through the clear-water artistic setting.</p></div>
         <div class="viewer-footer">CLICK WATER TO SPLASH <span>·</span> DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM</div>
       </section>
       <aside class="panel">
@@ -28,7 +28,7 @@
         <section class="section">
           <h3>Water comparison</h3>
           <div class="duo"><button type="button" class="mode-btn active" id="modeSim" aria-pressed="true">New simulated</button><button type="button" class="mode-btn" id="modeClassic" aria-pressed="false">Previous water</button></div>
-          <p class="note" id="modeDescription">GPU water · speed-based hull wake · blade contacts · fading ripples</p>
+          <p class="note" id="modeDescription">GPU heightfield · projected caustics · sphere displacement · boat and oar wakes</p>
           <div class="duo"><button type="button" class="secondary-btn" id="centerDrop">Drop a ripple</button><button type="button" class="secondary-btn" id="resetWater">Clear ripples</button></div>
           <h3 class="diagnostic-heading">Surface diagnostics</h3>
           <div class="diagnostic-grid" role="group" aria-label="Water surface visualization">
