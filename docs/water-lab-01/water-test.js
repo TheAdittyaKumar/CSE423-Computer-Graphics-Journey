@@ -138,13 +138,13 @@
       float seed=hash21(id+vec2(91.17,33.43));
       float lifetime=1.45;
       float age=fract(t/lifetime+seed);
-      float active=step(hash21(id+vec2(31.91,88.41)),uRain);
+      float rainEnabled=step(hash21(id+vec2(31.91,88.41)),uRain);
       vec2 jitter=vec2(hash21(id+vec2(7.2,39.1)),hash21(id+vec2(48.3,17.4)));
       vec2 hit=(id+vec2(.25)+jitter*.5)*1.40;
       vec2 d=world-hit;
       float dist=length(d)+.00001;
       float ringRadius=.08+age*.78;
-      float ring=exp(-pow((dist-ringRadius)/.075,2.0))*active*(1.0-age);
+      float ring=exp(-pow((dist-ringRadius)/.075,2.0))*rainEnabled*(1.0-age);
       grad+=(d/dist)*ring*.29;
       sheen+=ring;
     }
