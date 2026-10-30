@@ -260,7 +260,7 @@
       {x:car.fixed,z:along,angle:forward?90:270,style:car.style};
   }
   function updateSlowCars(dt){
-    // Phase 6: restore the two familiar animated Corolla routes. They move at
+    // Phase 8: retain the two original moving traffic routes. They move at
     // reduced flood speed with visibly submerged wheels, more like vehicles
     // slowly carried/assisted through water than normal dry-street driving.
     // The existing boat/collision footprint and route direction are retained.
@@ -282,6 +282,7 @@
       if(!blocked)S.carProgress[i]=next;
       S.carStopped[i]=blocked;
       return {...carAtProgress(car,S.carProgress[i]),stopped:blocked,
+        progress:S.carProgress[i],wheelFrame:minivanWheelIndex(S.carProgress[i]),
         waterlogged:true,drifting:!blocked};
     });
   }
@@ -1798,116 +1799,176 @@
   // Phase 6: Toyota Noah / minivan-inspired flooded city vehicle. The visible
   // above-water cabin and underwater hull are split into separate meshes so the
   // optical water pass no longer produces a distracting double-ghost look.
+  // Phase 8: open-body minivan, with all glass genuinely EXTERIOR to the
+  // body shell. +X is the forward direction. No solid body faces cross either
+  // the side windows or the windscreen, and top/hull use one shared origin.
   function makeParkedCar(style,part='full'){
     const m=new Mesh();
     const palette=[
-      [.82,.84,.86], // silver
-      [.10,.11,.12], // black
-      [.92,.92,.90], // white ivory
-      [.66,.70,.77], // blue silver
-      [.95,.95,.96]  // pearl white
+      [.75,.80,.86], // silver blue
+      [.10,.13,.15], // graphite
+      [.89,.90,.87], // white
+      [.55,.61,.69], // steel blue
+      [.95,.95,.95]  // pearl white
     ];
-    const paint=palette[style%palette.length],
-      tint=f=>paint.map(c=>clamp(c*f,0.,1.)),
-      glass=[.05,.09,.12],glassLite=[.10,.16,.20],
-      trim=[.08,.10,.11],metal=[.73,.75,.76],
-      red=[.86,.16,.14],clear=[.88,.90,.84],amber=[.94,.64,.20],
-      tire=[.06,.07,.08];
+    const base=palette[style%palette.length],
+      tint=k=>base.map(v=>clamp(v*k,0,1)),
+      glass=[.045,.102,.136],windshield=[.087,.173,.215],
+      trim=[.095,.12,.13],rubber=[.065,.081,.090],
+      chrome=[.71,.76,.75],lamp=[.94,.95,.87],
+      amber=[.97,.60,.16],red=[.83,.16,.13];
     const all=part==='full';
-    function include(kind){return all||part===kind;}
-    function panel(a,b,c,d,color){m.quad(a,b,c,d,color);m.quad(d,c,b,a,color);}
-
-    // Lower flooded hull.
-    if(include('hull')){
-      m.box(-2,12.5,0,106,18,44,tint(.87));
-      m.box(44,14.0,0,16,8,38,tint(.95));     // front lower bumper / nose
-      m.box(-48,14.0,0,10,9,39,tint(.84));    // rear bumper mass
-      m.box(-2,7.0,0,102,7,42,trim);          // lower skirt
+    const doHull=all||part==='hull',doTop=all||part==='top';
+    function face(a,b,c,d,color){m.quad(a,b,c,d,color);m.quad(d,c,b,a,color);}
+    function edge(a,b,r=1.0,color=tint(.86)){citizenLimb(m,a,b,r,color);}
+    if(doHull){
+      // Painted door/body shell STOPS at y=31.5; glass starts at y=34.
+      m.box(0,14.0,0,108,17.5,44,tint(.97));
+      m.box(0,9,0,105,7,42,tint(.77));
+      m.box(48.5,15.0,0,12,14,41,tint(.93));
+      m.box(-50,15.0,0,8,14,40,tint(.83));
       for(const side of [-1,1]){
-        for(const wheelX of [-31,31]){
-          for(let j=0;j<7;j++){
-            const a=j*Math.PI/7,b=(j+1)*Math.PI/7;
-            const arc=t=>[wheelX+13.2*Math.cos(t),10.6+13.2*Math.sin(t),side*22.2];
-            citizenLimb(m,arc(a),arc(b),1.55,tint(.64));
+        const z=side*22.6;
+        edge([-49,31.0,z],[51,31.0,z],.75,tint(1.12));
+        edge([-48,9.5,z],[47,9.5,z],.95,trim);
+        for(const x of [-32,31]){
+          // Wheel-arch outlines only. Actual wheels are separate, rotating meshes.
+          for(let j=0;j<8;j++){
+            const a=j*Math.PI/8,b=(j+1)*Math.PI/8;
+            edge([x+13*Math.cos(a),13+13*Math.sin(a),side*22.7],
+                 [x+13*Math.cos(b),13+13*Math.sin(b),side*22.7],1.3,tint(.69));
           }
-          dhakaWheel(m,wheelX,10.6,side*22.2,11.2);
         }
-        citizenLimb(m,[-46,21.0,side*22.0],[46,21.0,side*22.0],.65,tint(1.08));
-        citizenLimb(m,[-45,8.1,side*22.9],[45,8.1,side*22.9],.85,trim);
       }
-      m.box(-2,5.2,0,96,2,40,tire);
+      // Black bumper inserts remain correctly submerged beneath the water.
+      m.box(54.9,17,0,1.5,6.0,31,rubber);
+      m.box(-54.7,15,0,1.4,6.4,29,tint(.64));
     }
-
-    // Above-water cabin / greenhouse.
-    if(include('top')){
-      // Upper body volume with softer minivan proportions.
-      m.box(-4,30.5,0,94,14,44,tint(.98));
-      // Roof and front roof step.
-      panel([-39,46.6,-18.8],[17,46.6,-18.8],[17,46.6,18.8],[-39,46.6,18.8],tint(1.03));
-      panel([17,43.0,-18.8],[32,43.0,-18.8],[32,43.0,18.8],[17,43.0,18.8],tint(1.02));
-      // Shoulder line below the windows so the van doesn't read as a block.
+    if(doTop){
+      // Door shoulders are BELOW the glazing, never across its middle.
+      m.box(0,25.5,0,107,10.0,43.5,tint(.98)); // door body above water
+      m.box(0,31.2,0,107,3.0,43.5,tint(1.02)); // narrow belt below glazing
+      m.box(50.5,31.0,0,7.5,5.5,43.0,tint(.92)); // front bonnet nose
+      m.box(-50.5,29.1,0,5.8,5.5,42.5,tint(.90));
+      // High but proportionate roof, from rear D-pillar to front A-pillar.
+      face([-50,50,-20.4],[30,50,-20.4],[30,50,20.4],[-50,50,20.4],tint(1.09));
+      m.box(-10,50.6,0,80,2.1,40.7,tint(1.02));
+      // Small roof front/rear strips, no bulky white bars over the windows.
+      edge([-50,49.9,-20.4],[-50,49.9,20.4],1.1,tint(.92));
+      edge([30,49.9,-20.4],[30,49.9,20.4],1.1,tint(.92));
       for(const side of [-1,1]){
         const w=side;
-        citizenLimb(m,[-43,26.5,w*22.1],[43,26.5,w*22.1],.9,tint(1.10));
-        citizenLimb(m,[-44,29.5,w*22.45],[43,29.5,w*22.45],.95,trim);
-
-        // Window band / greenhouse.
-        panel([-44,29.0,w*22.35],[-34,44.2,w*19.1],[16,44.2,w*19.1],[28,29.0,w*22.35],tint(.78));
-        // Rear quarter window
-        panel([-40.5,31.5,w*22.7],[-34.2,42.4,w*19.5],[-22.0,42.4,w*19.7],[-21.5,31.5,w*22.7],glass);
-        // Sliding door window
-        panel([-18.5,31.5,w*22.7],[-18.2,42.4,w*19.9],[-1.0,42.4,w*20.0],[-1.0,31.5,w*22.7],glass);
-        // Front door window
-        panel([2.5,31.5,w*22.8],[2.8,42.4,w*20.0],[15.2,42.4,w*19.8],[24.5,31.5,w*22.8],glassLite);
-        // Front quarter window near A-pillar
-        panel([25.8,31.5,w*22.8],[25.8,40.6,w*20.0],[31.2,40.6,w*19.3],[35.5,31.5,w*22.8],glassLite);
-
-        // Pillars
-        citizenLimb(m,[25.5,30.0,w*22.8],[32.0,41.8,w*19.2],1.25,tint(.84)); // A
-        citizenLimb(m,[1.0,30.0,w*22.8],[1.0,43.0,w*19.9],1.45,tint(.84));   // B
-        citizenLimb(m,[-20.0,30.0,w*22.8],[-20.0,43.0,w*19.8],1.40,tint(.84)); // C
-        citizenLimb(m,[-44.0,29.3,w*22.6],[-34.8,44.2,w*19.2],1.25,tint(.84)); // D
-
-        // Sliding door seams and visible handles.
-        m.box(-20.0,22.0,w*22.9,1.0,16.2,.8,tint(.68));
-        m.box(1.0,22.0,w*22.9,1.0,16.2,.8,tint(.68));
-        for(const x of [-30,-8,12]){
-          m.box(x,24.8,w*23.2,7.0,1.1,1.1,tint(1.14));
-          m.box(x+2.2,24.4,w*24.0,1.8,.8,.9,trim);
+        const bZ=w*23.25,tZ=w*20.55;
+        // Each dark pane is a genuine exterior quadrilateral. A *thin* pillar
+        // separates the panes; no rear-facing white shell intersects them.
+        const quads=[
+          [[-48,34.0,bZ],[-47,47.8,tZ],[-28,47.8,tZ],[-28,34,bZ]],
+          [[-26,34.0,bZ],[-26,47.8,tZ],[-4,47.8,tZ],[-4,34,bZ]],
+          [[-2,34.0,bZ],[-2,47.8,tZ],[19,47.8,tZ],[31,34,bZ]]
+        ];
+        for(let q=0;q<quads.length;q++)face(...quads[q],q===2?windshield:glass);
+        // Slim A-, B-, C- and D-pillars and beltlines.
+        edge([-50,33.4,bZ],[-49,50,tZ],1.65,tint(.89));
+        edge([-27,33.8,bZ],[-27,50,tZ],1.28,tint(.89));
+        edge([-3,33.8,bZ],[-3,50,tZ],1.28,tint(.89));
+        edge([32,33.8,bZ],[30,50,tZ],1.75,tint(.89));
+        edge([-49,34,bZ],[32,34,bZ],.95,trim);
+        edge([-49,49,tZ],[30,49,tZ],1.10,tint(.94));
+        // Functional-looking sliding door outline and handles below glass.
+        for(const x of [-25,-5,17]){
+          m.box(x,29.7,w*22.95,7.0,1.3,1.1,chrome);
+          m.box(x+1.8,29.4,w*23.7,1.6,.9,.8,trim);
         }
-        // Mirrors.
-        m.box(29.5,34.0,w*24.6,6.5,4.6,4.8,tint(.86));
-        m.box(33.0,34.0,w*27.1,3.4,1.7,1.3,glassLite);
+        edge([-25,22,w*22.2],[-25,31.5,w*22.2],.8,tint(.77));
+        edge([-3,22,w*22.2],[-3,31.5,w*22.2],.8,tint(.77));
+        // Mirrors beneath front windows.
+        m.box(31,35,w*25.0,8,5.5,5.8,tint(.84));
+        m.box(34.2,35,w*28.1,3.7,3,1.4,glass);
       }
-
-      // Windshield / rear window.
-      panel([25.5,30.2,-19.4],[25.5,30.2,19.4],[36.0,41.4,17.0],[36.0,41.4,-17.0],glassLite);
-      panel([-29.0,44.2,-17.8],[-29.0,44.2,17.8],[-45.0,31.2,18.8],[-45.0,31.2,-18.8],glass);
-      citizenLimb(m,[25.2,30.4,-18.3],[25.2,30.4,18.3],.95,tint(.74));
-      citizenLimb(m,[26.8,31.0,-13.4],[20.0,33.0,4.8],.55,trim);
-      citizenLimb(m,[26.8,31.0,13.4],[20.0,33.0,-4.8],.55,trim);
-
-      // Front face closer to a Noah: grille, headlights lower and visible.
-      m.box(46.2,24.0,0,4.0,10.5,32,trim);
-      for(let k=0;k<3;k++)m.box(47.8,27.0-k*2.5,0,1.1,.55,25.5,metal);
-      m.box(49.2,18.2,0,1.4,5.0,18,[.10,.10,.11]);
-      m.box(50.5,16.8,0,1.0,4.2,12,clear); // front plate area
+      // Main windshield faces forward (+X) and slopes BACK at its top.
+      // At its bottom x=+54, ahead of the bonnet at +54.25. At the top
+      // x=+30, well ahead of the roof front (+30). This is never inside a box.
+      face([54.7,34.0,-21.4],[54.7,34.0,21.4],
+           [30.5,48.9,19.5],[30.5,48.9,-19.5],windshield);
+      edge([54.8,34.0,-21.4],[30.4,49.7,-19.5],1.7,tint(.91));
+      edge([54.8,34.0,21.4],[30.4,49.7,19.5],1.7,tint(.91));
+      edge([54.8,34.0,-21.4],[54.8,34.0,21.4],1.25,trim);
+      // Wipers lie ON the visible windshield; no white bar across the pane.
+      edge([53.3,34.6,-17.0],[46.4,39.0,2.0],.62,rubber);
+      edge([53.3,34.6,17.0],[46.4,39.0,-2.0],.62,rubber);
+      // Rear hatch glass above a painted tailgate.
+      face([-54.9,34.0,-19.5],[-50.7,48.8,-19],
+           [-50.7,48.8,19],[-54.9,34.0,19],glass);
+      edge([-55,34,-19.5],[-50.5,49,-19],1.4,tint(.90));
+      edge([-55,34,19.5],[-50.5,49,19],1.4,tint(.90));
+      // An actual vehicle face: grille below the windshield and LOW headlamps.
+      m.box(55.9,30.4,0,2.3,6.3,29,rubber);
+      for(const y of [29.3,31.1,32.9])m.box(57.1,y,0,.9,.5,23,chrome);
+      m.box(56.8,24.5,0,1.3,3.4,15,rubber);
+      m.box(58.0,24.1,0,1.0,2.8,12,chrome);
       for(const side of [-1,1]){
-        // More visible headlamp cluster at the front corners.
-        m.box(43.0,26.0,side*16.0,4.2,8.2,10.8,[.90,.92,.88]);
-        m.box(44.8,26.0,side*16.0,1.5,5.4,8.0,[.76,.84,.80]);
-        m.box(43.2,18.8,side*17.7,2.0,2.6,5.8,amber);
-        // Tall rear lamp.
-        m.box(-46.8,29.2,side*17.0,2.4,13.8,9.4,red);
-        m.box(-47.9,31.7,side*16.0,1.0,4.1,7.0,clear);
-        m.box(-47.2,20.0,side*18.8,1.3,2.4,5.6,red);
+        m.box(55.9,34.5,side*16.4,3.6,7.0,10.9,lamp);
+        m.box(58.0,34.5,side*16.4,1.0,4.6,8.3,[.70,.81,.81]);
+        m.box(56.7,29.0,side*19.0,1.5,2.6,6,amber);
+        // Tall Noah-style rear lamps.
+        m.box(-55.9,36.6,side*19.0,2.0,11.8,7.8,red);
+        m.box(-57.0,39.3,side*18.5,.7,3.5,6.0,lamp);
+        m.box(-55.9,29.2,side*18.4,2.2,2.6,7.2,red);
       }
-      // Rear hatch garnish and spoiler.
-      m.box(-46.2,21.0,0,1.4,7.0,15,tint(.76));
-      m.box(-45.4,43.8,0,1.0,3.6,32,tint(.92));
-      m.box(-44.8,34.5,0,1.0,1.8,22,metal);
+      m.box(-56,30,0,1.6,2.6,24,chrome); // rear tailgate garnish
     }
     return m.upload();
+  }
+
+  // A separate, reusable set of wheel frames, animated by DISTANCE travelled
+  // rather than merely by time. The wheels appear in the underwater scene pass
+  // and therefore inherit the Water Lab's refractive distortion.
+  const MINIVAN_WHEEL_RADIUS=11.3, MINIVAN_WHEEL_STEPS=24;
+  function makeMinivanWheel(phase){
+    const m=new Mesh(),r=MINIVAN_WHEEL_RADIUS,
+      tire=[.055,.065,.070],rim=[.72,.76,.78],hub=[.30,.36,.38];
+    const sectors=24;
+    for(const side of [-1,1]){
+      const z=side*2.4;
+      for(let k=0;k<sectors;k++){
+        const a=k*TAU/sectors,b=(k+1)*TAU/sectors;
+        const p=(rr,t)=>[rr*Math.cos(t),rr*Math.sin(t),z];
+        m.quad(p(r-3,a),p(r-3,b),p(r,b),p(r,a),tire);
+        m.tri([0,0,z],p(r-3,a),p(r-3,b),rim);
+      }
+      // Six spokes, phase-rotated inside the stationary tire outline.
+      for(let k=0;k<6;k++){
+        const a=phase+k*TAU/6;
+        citizenLimb(m,[0,0,z+side*.42],
+          [(r-3.3)*Math.cos(a),(r-3.3)*Math.sin(a),z+side*.42],1.0,hub);
+      }
+      m.sphere(0,0,z+side*.5,2.3,hub,3,7);
+    }
+    for(let k=0;k<sectors;k++){
+      const a=k*TAU/sectors,b=(k+1)*TAU/sectors;
+      m.quad([r*Math.cos(a),r*Math.sin(a),-2.4],
+             [r*Math.cos(b),r*Math.sin(b),-2.4],
+             [r*Math.cos(b),r*Math.sin(b),2.4],
+             [r*Math.cos(a),r*Math.sin(a),2.4],tire);
+    }
+    return m.upload();
+  }
+  const minivanWheelFrames=Array.from({length:MINIVAN_WHEEL_STEPS},(_,k)=>
+    makeMinivanWheel(k*TAU/MINIVAN_WHEEL_STEPS));
+  function minivanWheelIndex(distanceTravelled){
+    const angle=((distanceTravelled/MINIVAN_WHEEL_RADIUS)%TAU+TAU)%TAU;
+    return Math.floor(angle/TAU*MINIVAN_WHEEL_STEPS)%MINIVAN_WHEEL_STEPS;
+  }
+  function drawMinivanWheels(car,verticalOffset,spinIndex){
+    // Preserve the same local origin, yaw and scale as the upper/lower chassis.
+    const angle=car.angle*RAD,c=Math.cos(angle),s=Math.sin(angle),scale=.99;
+    for(const side of [-1,1])for(const x of [-32,31]){
+      const localZ=side*22.7;
+      const xx=car.x+(x*c-localZ*s)*scale;
+      const zz=car.z+(x*s+localZ*c)*scale;
+      render(minivanWheelFrames[spinIndex],
+        model(xx,verticalOffset+12.7*scale,zz,car.angle,scale));
+    }
   }
   const parkedDhakaModels={
     car:[0,1,2,3,4].map(i=>makeParkedCar(i,'top')),
@@ -4342,7 +4403,14 @@
     drawModernTrafficSignal();
     // All stations are live 3D cabinets instead of the old baked source blocks.
     drawPowerCabinets();
-    // Three-metre flood: vehicles are drawn behind the optical water surface.
+    // Same y for the submerged chassis and the crisp roof/glass; the previous
+    // two-pass offset pulled the minivan apart and caused a double silhouette.
+    const parkedMinivanY=i=>FLOOD_WATERLINE-22+(i%3===0?.8:-.5)+
+      .40*Math.sin(S.bobTime*1.45+i*2.1);
+    const movingMinivanY=car=>FLOOD_WATERLINE-21.5+
+      .55*Math.sin(S.bobTime*1.6+car.style);
+    // Three-metre flood: underwater vehicle hulls and rotating wheels are
+    // captured behind the optical water; upper cabin glazing is drawn after.
     // Stationary CNG/rickshaw roofs remain visible while chassis refract below.
     // Keep original parked-car collision boxes while changing their visual type.
     for(let i=0;i<parkedCars.length;i++){
@@ -4353,21 +4421,23 @@
         type==='rickshaw'?parkedDhakaModels.rickshaw:parkedDhakaModels.carHull[i%5];
       // Minivan bodies are split: the underwater hull is rendered now and a
       // crisp roof/cabin is drawn after the water pass to avoid a double image.
-      const floatHeight=type==='rickshaw'?FLOOD_WATERLINE-17.2:
-        type==='cng'?FLOOD_WATERLINE-27:
-        FLOOD_WATERLINE-(i%3===0?27.5:30.5);
       const bob=.55*Math.sin(S.bobTime*1.45+i*2.1);
-      render(mesh,model(car.x,floatHeight+bob,car.z,car.angle,.98));
+      const y=type==='rickshaw'?FLOOD_WATERLINE-17.2+bob:
+        type==='cng'?FLOOD_WATERLINE-27+bob:parkedMinivanY(i);
+      render(mesh,model(car.x,y,car.z,car.angle,type==='car'?.99:.98));
+      if(type==='car')drawMinivanWheels(car,y,0);
     }
     // Animated traffic uses a Noah-inspired minivan split into an underwater
     // hull and an above-water roof/cabin, so the scene feels flooded without
     // producing the older ghost-like doubled silhouette.
     for(const car of S.movingCars){
       if(distance(S.x,S.z,car.x,car.z)>1200 && S.mode!=='MENU')continue;
-      const bob=.8*Math.sin(S.bobTime*1.6+car.style);
-      const underWaterBody=FLOOD_WATERLINE-24.5;
+      const y=movingMinivanY(car);
       render(parkedDhakaModels.carHull[(car.style+1)%5],
-        model(car.x,underWaterBody+bob,car.z,car.angle,.99));
+        model(car.x,y,car.z,car.angle,.99));
+      // Progress advances only when the traffic route is not blocked, so
+      // wheels stop rotating during a traffic hold.
+      drawMinivanWheels(car,y,minivanWheelIndex(car.progress));
     }
     for(const i of [1,4]){const car=parkedCars[i],a=car.angle*RAD;
       const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
@@ -4429,15 +4499,13 @@
       const car=parkedCars[i],type=dhakaVehicleType(i);
       if(type!=='car')continue;
       if(distance(S.x,S.z,car.x,car.z)>1200&&S.mode!=='MENU')continue;
-      const bob=.55*Math.sin(S.bobTime*1.45+i*2.1);
-      const roofY=FLOOD_WATERLINE-9.4+(i%3===0?.3:-.3)+bob;
-      render(parkedDhakaModels.car[i%5],model(car.x,roofY,car.z,car.angle,.99),true);
+      render(parkedDhakaModels.car[i%5],
+        model(car.x,parkedMinivanY(i),car.z,car.angle,.99),true);
     }
     for(const car of S.movingCars){
       if(distance(S.x,S.z,car.x,car.z)>1200&&S.mode!=='MENU')continue;
-      const bob=.8*Math.sin(S.bobTime*1.6+car.style);
       render(parkedDhakaModels.car[(car.style+1)%5],
-        model(car.x,FLOOD_WATERLINE-10.2+bob,car.z,car.angle,.99),true);
+        model(car.x,movingMinivanY(car),car.z,car.angle,.99),true);
     }
     // Keep culling disabled for original double-sided OpenGL line/quad geometry.
     // Foreground boat, dynamic light state and localized mission markers.
@@ -4573,9 +4641,10 @@
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
   window.majhiVersion='fidelity21-water-lab021-phase5-3m-traffic';
-  window.majhiWaterDiagnostics=()=>({phase:'5-traffic-corolla-3m',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiWaterDiagnostics=()=>({phase:'8-minivan-windows-wheels-3m',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
+    minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     slowCars:S.movingCars.map(c=>({x:+c.x.toFixed(1),z:+c.z.toFixed(1),stopped:c.stopped})),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
