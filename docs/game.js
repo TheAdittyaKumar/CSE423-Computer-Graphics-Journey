@@ -19,9 +19,9 @@
   }
   const TAU=Math.PI*2,RAD=Math.PI/180, BOUNDS=1650, WATER=0;
   // Storeys are approximately 33 game units: at 12 units/metre the town's
-  // road level y=0 is four metres below the flood surface at y=48.
+  // road level y=0 is three metres below the flood surface at y=36.
   // This is an explicit *visual* scale, independent of boat movement speed.
-  const FLOOD_DEPTH_METERS=4, WORLD_UNITS_PER_METER=12;
+  const FLOOD_DEPTH_METERS=3, WORLD_UNITS_PER_METER=12;
   const FLOOD_WATERLINE=FLOOD_DEPTH_METERS*WORLD_UNITS_PER_METER;
 
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
@@ -64,7 +64,7 @@
   ${lab2?`uniform sampler2D uLabNormals; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled; uniform vec3 uLabEye,uLabSun;`:''}
   void main(){
    // Foreground figures are drawn after the water pass. Cut only their submerged
-   // polygons so legs and wheels cannot float on top of four metres of water.
+   // polygons so legs and wheels cannot float above the flood surface.
    if(uSubmergeMask>.5 && vWorld.y<${FLOOD_WATERLINE.toFixed(1)} &&
       length(vWorld.xz-vec2(0.,1378.))>360.)discard;
    vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
@@ -136,7 +136,7 @@
     // It is narrow and semi-transparent, never a continuous glowing foam stripe.
     float wave=1.30*sin(vWorld.x*.085+vWorld.z*.057-uTime*1.80)
         +.50*sin(vWorld.z*.17-vWorld.x*.06+uTime*2.55);
-    float above=vWorld.y-(48.0+wave);
+    float above=vWorld.y-(${FLOOD_WATERLINE.toFixed(1)}+wave);
     float touch=exp(-pow(above/1.65,2.));
     float stain=(1.-smoothstep(-3.5,2.0,above))*smoothstep(-6.5,-2.5,above);
     float breakup=.50+.50*sin(vWorld.x*.61+vWorld.z*.36+uTime*1.30);
@@ -260,12 +260,29 @@
       {x:car.fixed,z:along,angle:forward?90:270,style:car.style};
   }
   function updateSlowCars(dt){
-    // Phase 4: ordinary road cars are waterlogged in the 4 m flood, not
-    // inexplicably driving beneath the surface. Preserve their mission-safe
-    // positions and collision geometry; rescue vehicles use separate AI.
+    // Phase 5: restore the two familiar animated Corolla routes. They move at
+    // reduced flood speed with visibly submerged wheels, more like vehicles
+    // slowly carried/assisted through water than normal dry-street driving.
+    // The existing boat/collision footprint and route direction are retained.
     S.movingCars=slowCars.map((car,i)=>{
-      S.carStopped[i]=true;
-      return {...carAtProgress(car,S.carProgress[i]),stopped:true,waterlogged:true};
+      const previous=S.carProgress[i];
+      const floodedSpeed=car.speed*(i===0?.78:.83);
+      const next=previous+floodedSpeed*dt;
+      let blocked=false;
+      const steps=Math.max(1,Math.ceil(floodedSpeed*dt/8));
+      for(let j=1;j<=steps;j++){
+        const candidate=carAtProgress(car,previous+(next-previous)*j/steps);
+        if(orientedObjectOverlap(S.x,S.z,candidate.x,candidate.z,candidate.angle,49,25,20)){
+          blocked=true;break;
+        }
+        if(S.aiRickshaws?.some(r=>distance(candidate.x,candidate.z,r.x,r.z)<83)){
+          blocked=true;break;
+        }
+      }
+      if(!blocked)S.carProgress[i]=next;
+      S.carStopped[i]=blocked;
+      return {...carAtProgress(car,S.carProgress[i]),stopped:blocked,
+        waterlogged:true,drifting:!blocked};
     });
   }
   const trees=[[-1552,335,.86],[-1545,120,.76],[-215,875,.93],[402,890,.82],[-1530,-1330,.72],[1562,-959,.86],[-145,852,.91],[1545,-230,.78],[-1260,-1540,.96],[1541,847,.76],[1545,-365,.87],[-1550,-230,.84],[-1545,-420,.70],[1555,100,.74]];
@@ -682,6 +699,15 @@
         }
         const nearbyCar=parkedCars.find(c=>distance(S.x,S.z,c.x,c.z)<265);
         if(nearbyCar){ripple(nearbyCar.x+25,nearbyCar.z,.014,.014);objectWaveCount++;}
+        // A moving sedan gently pushes the heightfield; two local impulses
+        // per 0.29s max, with distance-based culling for stable performance.
+        for(const car of S.movingCars||[]){
+          if(!car.stopped&&distance(S.x,S.z,car.x,car.z)<350){
+            const heading=car.angle*RAD;
+            ripple(car.x+Math.cos(heading)*31,car.z+Math.sin(heading)*31,.023,.014);
+            objectWaveCount++;
+          }
+        }
         const nearbyBoat=(S.aiBoats||[]).find(b=>distance(S.x,S.z,b.x,b.z)<360);
         if(nearbyBoat){ripple(nearbyBoat.x,nearbyBoat.z,.017,.015);objectWaveCount++;}
       }
@@ -753,7 +779,7 @@
                     +0.65*sin(-0.017*p.x+0.029*p.z+uTime*0.83)
                     +0.30*sin(0.080*p.z+0.031*p.x-uTime*1.63);
         float dry=1.0-smoothstep(230.0,365.0,length(p.xz-vec2(0.,1378.)));
-        // Four metres between the *actual* road and floodwater, retaining the
+        // Three metres between the *actual* road and floodwater, retaining the
         // sunlight/dry-zone exemption around BRAC University.
         p.y=${FLOOD_WATERLINE.toFixed(1)}+(.92*swell+13.0*height*locality)*(1.0-.55*dry);
         vWorld=p.xyz;
@@ -864,7 +890,7 @@
         vec3 bodyColor=mix(vec3(.034,.13,.16),vec3(.070,.26,.27),
                            clamp(.52+.25*noise(p*.024),0.,1.));
         // Lab's deliberately transparent aesthetic: retain usable road cues
-        // despite a 4 m world-space gap, with angle-dependent haze.
+        // despite the 3 m world-space gap, with angle-dependent haze.
         float visibility=transmission*mix(.76,1.,uClarity)*(.76+.24*downView);
         vec3 refracted=mix(bodyColor,road,visibility);
         // Approximate physically motivated projected-area caustic focus.
@@ -1400,14 +1426,14 @@
       const bumpAge=stopped?r.quarrelUntil-S.time:0;
       const bob=.5*Math.sin(S.time*4+r.id*2)+(stopped&&bumpAge>5.5?2.1*Math.sin(S.time*22):0);
       render(parkedDhakaModels.rescueRickshaws[r.id],
-        model(r.x,FLOOD_WATERLINE-29+bob,r.z,r.angle,.82),true);
-      render(rickshawPontoons,model(r.x,FLOOD_WATERLINE-4+bob,r.z,r.angle,.82));
+        model(r.x,FLOOD_WATERLINE-14+bob,r.z,r.angle,.82),true);
+      render(rickshawPontoons,model(r.x,FLOOD_WATERLINE-3+bob,r.z,r.angle,.82));
       const a=r.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),sx=-fz,sz=fx;
       const wheelFrame=rickshawWheelFrames[Math.floor((((r.wheelSpin||0)%TAU)+TAU)/TAU*rickshawWheelFrames.length)%rickshawWheelFrames.length];
       for(const [lx,ly,lz] of [[39,14,0],[-29,14,-21],[-29,14,21]]){
         const wx=r.x+(lx*Math.cos(a)-lz*Math.sin(a))*.82;
         const wz=r.z+(lx*Math.sin(a)+lz*Math.cos(a))*.82;
-        render(wheelFrame,model(wx,FLOOD_WATERLINE-29+bob+ly*.82,wz,r.angle,.82),true);
+        render(wheelFrame,model(wx,FLOOD_WATERLINE-14+bob+ly*.82,wz,r.angle,.82),true);
       }
       // Small back-seat figure makes a recently completed rescue visible.
       if(S.time-r.rescuedAt<7&&!stopped){
@@ -1731,25 +1757,101 @@
     citizenLimb(m,[16,48,6],[23,42,9],2.3,[.69,.50,.35]);
     return m.upload();
   }
+  // Phase 5: Corolla-inspired sedan, constructed as ONE static low-poly mesh.
+  // Native .max files require a DCC export; this lightweight model is based on
+  // the supplied front/rear reference images, not an imported 3ds Max asset.
+  // The local +X axis points toward the front bumper, matching game headings.
   function makeParkedCar(style){
-    const m=new Mesh(),body=[[.36,.43,.47],[.47,.30,.31],[.26,.44,.54],[.40,.44,.32]][style%4];
-    m.box(0,14,0,86,20,43,body);
-    m.box(-3,29,0,45,20,36,[.17,.24,.28]);
-    m.box(-4,39.5,0,49,3,38,body);
+    const m=new Mesh();
+    const palette=[
+      [.39,.44,.47], // cool silver
+      [.48,.31,.33], // maroon
+      [.26,.43,.54], // slate blue
+      [.35,.40,.35], // green-grey
+      [.32,.34,.37]  // Corolla reference graphite
+    ];
+    const paint=palette[style%palette.length],
+      tint=f=>paint.map(c=>clamp(c*f,0.,1.)),
+      glass=[.085,.164,.194],frontGlass=[.11,.215,.255],
+      tire=[.062,.071,.078],trim=[.14,.17,.18],
+      metal=[.68,.72,.71],red=[.82,.17,.15];
+    // Two-sided quads ensure both sides of windows are visible under
+    // the game's existing GL back-face culling, without disabling it globally.
+    function panel(a,b,c,d,color){m.quad(a,b,c,d,color);m.quad(d,c,b,a,color);}
+    // Rounded-looking layered sedan silhouette: lower chassis, sculpted doors,
+    // long bonnet, short trunk and distinct greenhouse instead of three boxes.
+    m.box(0,14,0,94,23,43,tint(.88));
+    m.box(0,10.1,0,90,8,41,trim);
+    m.box(31.1,27.5,0,34,5.5,43,tint(1.05)); // bonnet
+    m.box(-35.1,27.1,0,24,6.2,42,tint(.99)); // trunk deck
+    m.box(3.5,24.7,0,61,4,43,tint(.97));
+    // The roof narrows toward the top and slopes to both windscreens.
+    panel([-22,46.3,-16.5],[12,46.3,-16.5],[12,46.3,16.5],[-22,46.3,16.5],tint(1.08));
     for(const side of [-1,1]){
-      m.box(-2,28,side*18.5,43,11,1.5,[.20,.30,.33]);
-      m.box(18,15,side*23,20,2,2,[.79,.79,.75]);
-      m.box(0,20,side*22,4,2,2,[.78,.83,.77]);
-      dhakaWheel(m,-27,10.5,side*20,10);
-      dhakaWheel(m,27,10.5,side*20,10);
+      const w=side;
+      // Greenhouse side window outline (rear door and front door separated).
+      panel([-34,29,w*20.5],[-21.5,44.9,w*16.5],[12,44.9,w*16.5],
+            [29,29,w*20.5],tint(.70));
+      panel([-31,31,w*20.65],[-21.2,42.6,w*16.9],[-5.5,42.6,w*17.1],
+            [-5.1,31,w*20.65],glass);
+      panel([-2.6,31,w*20.7],[-2.2,42.6,w*17.2],[11.0,42.6,w*17.0],
+            [25.4,31,w*20.7],frontGlass);
+      // A, B and C pillars, thin window surrounds and four-door panel seams.
+      citizenLimb(m,[26,29,w*20.7],[12.2,45.3,w*17.0],1.25,tint(.82));
+      citizenLimb(m,[-3.7,29,w*20.7],[-3.4,45.3,w*17.0],1.55,tint(.84));
+      citizenLimb(m,[-34,29,w*20.7],[-22,45.3,w*17.0],1.35,tint(.84));
+      citizenLimb(m,[-33,30,w*21], [26,30,w*21],.9,trim);
+      m.box(-3.7,19,w*22.1,1.3,15,.8,tint(.67)); // door gap
+      for(const x of [-25,8]){
+        m.box(x,25.5,w*22.0,8.5,1.3,1.25,tint(1.18));
+        m.box(x+2.6,24.9,w*22.8,2,1,1,trim);
+      }
+      // Wing mirrors, side indicators and subtly flared wheel arches.
+      m.box(23,34,w*24,8,5.6,5.5,tint(.87));
+      m.box(26,35,w*27.3,4.8,2,1.4,glass);
+      m.box(34,26,w*22,6,1.6,1.3,[.78,.67,.37]);
+      for(const wheelX of [-29,29]){
+        for(let j=0;j<7;j++){
+          const a=j*Math.PI/7,b=(j+1)*Math.PI/7;
+          const arc=t=>[wheelX+12.8*Math.cos(t),11.5+12.8*Math.sin(t),w*22.5];
+          citizenLimb(m,arc(a),arc(b),1.5,tint(.64));
+        }
+        dhakaWheel(m,wheelX,11.5,w*22.5,10.8);
+      }
+      // Side body crease and lower chrome strip.
+      citizenLimb(m,[-44,22.5,w*21.7],[44,22.5,w*21.7],.6,tint(1.12));
+      citizenLimb(m,[-38,8,w*22],[40,8,w*22],.8,trim);
     }
-    m.box(43,16,0,3,7,35,[.17,.20,.22]);
-    m.box(44,21,-13,2,6,9,[.93,.85,.63]);m.box(44,21,13,2,6,9,[.93,.85,.63]);
-    m.box(-44,20,-13,2,6,9,[.80,.17,.16]);m.box(-44,20,13,2,6,9,[.80,.17,.16]);
+    // Broad, sloped windshield and smaller rear window.
+    panel([28,30,-19],[28,30,19],[12,44.4,16.2],[12,44.4,-16.2],frontGlass);
+    panel([-22,44.4,-16.2],[-22,44.4,16.2],[-36,30,19],[-36,30,-19],glass);
+    // Windshield surround and discreet wiper arms.
+    citizenLimb(m,[27.7,30,-18],[27.7,30,18],1.0,tint(.72));
+    citizenLimb(m,[26.7,31,-15],[18,33,3],.6,trim);
+    citizenLimb(m,[26.7,31,15],[19,33,-3],.6,trim);
+    // Corolla-style narrow grille, lower air intake, bumper lip and headlights.
+    m.box(48.1,18.3,0,2.6,8.5,34,trim);
+    m.box(49.7,11.8,0,2.1,5.5,31,[.075,.088,.098]);
+    for(let k=0;k<4;k++)m.box(49.9,16.7-k*1.7,0,1.3,.46,26,metal);
+    m.box(50.7,18,0,1.5,3.5,10,tint(.65));
+    m.box(51.4,14,0,1.1,5,13,[.73,.74,.70]); // front number plate
+    for(const side of [-1,1]){
+      m.box(46.4,22.5,side*17.0,3.4,6.4,9.3,[.87,.89,.79]);
+      m.box(48.4,21.8,side*17.0,1.3,4.4,7.2,[.72,.80,.76]);
+      m.box(47.8,13.4,side*18.9,1.5,2.5,6.3,[.89,.60,.17]);
+      // Clear Corolla-style rear lamp assemblies with white reverse-light inset.
+      m.box(-47.5,23.7,side*16.8,2.5,10.5,10.5,red);
+      m.box(-48.9,22.1,side*15.7,1.0,3.5,8.4,[.89,.87,.75]);
+      m.box(-49,18.6,side*17.8,1.4,2.4,6.6,[.65,.09,.10]);
+    }
+    m.box(-47.8,13,0,3.5,10,38,tint(.76));
+    m.box(-49.6,15,0,1.5,6,15,[.76,.78,.75]);
+    m.box(-48,29,0,1.1,1,32,tint(1.18));
+    m.box(0,7,0,83,2,39,tire);
     return m.upload();
   }
   const parkedDhakaModels={
-    car:[0,1,2,3].map(makeParkedCar),
+    car:[0,1,2,3,4].map(makeParkedCar),
     cng:makeDhakaCNG(),cngAlt:makeDhakaCNG(1),
     rickshaw:makeDhakaRickshaw(),
     rescueRickshaws:[0,1,2].map(makeDhakaRickshaw)
@@ -4180,7 +4282,7 @@
     drawModernTrafficSignal();
     // All stations are live 3D cabinets instead of the old baked source blocks.
     drawPowerCabinets();
-    // Four-metre flood: vehicles are now behind the optical water surface.
+    // Three-metre flood: vehicles are drawn behind the optical water surface.
     // Stationary CNG/rickshaw roofs remain visible while chassis refract below.
     // Keep original parked-car collision boxes while changing their visual type.
     for(let i=0;i<parkedCars.length;i++){
@@ -4192,12 +4294,21 @@
       // Some trapped vehicles retain a visible roof while most of their bodies
       // remain underwater. This is a tethered, slowly bobbing *visual* float;
       // original collision positions/size and mission scripts stay unchanged.
-      const floatHeight=type==='rickshaw'?15:type==='cng'?10:(i%3===0?14:5);
-      const bob=.65*Math.sin(S.bobTime*1.45+i*2.1);
+      const floatHeight=type==='rickshaw'?FLOOD_WATERLINE-18:
+        type==='cng'?FLOOD_WATERLINE-27:
+        FLOOD_WATERLINE-(i%3===0?26:33);
+      const bob=.55*Math.sin(S.bobTime*1.45+i*2.1);
       render(mesh,model(car.x,floatHeight+bob,car.z,car.angle,.97));
     }
-    for(const car of S.movingCars){const mesh=sourceMeshes?.['moving-car-'+(car.style%5)]||carMesh;
-      render(mesh,model(car.x,9+.5*Math.sin(S.bobTime*1.1+car.style),car.z,car.angle,.98));
+    // Animated traffic uses the SAME recognizable sedan silhouettes as parked
+    // cars. Lower body and wheels are below the 3 m water surface; the cabin
+    // stays visible. No per-frame geometry allocations or loading overhead.
+    for(const car of S.movingCars){
+      if(distance(S.x,S.z,car.x,car.z)>1200 && S.mode!=='MENU')continue;
+      const bob=.8*Math.sin(S.bobTime*1.6+car.style);
+      const underWaterBody=FLOOD_WATERLINE-21;
+      render(parkedDhakaModels.car[(car.style+1)%5],
+        model(car.x,underWaterBody+bob,car.z,car.angle,.98));
     }
     for(const i of [1,4]){const car=parkedCars[i],a=car.angle*RAD;
       const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
@@ -4386,14 +4497,16 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity20-water-lab021-phase3-4m-rain';
-  window.majhiWaterDiagnostics=()=>({phase:'4-environment-buoyancy',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='fidelity21-water-lab021-phase5-3m-traffic';
+  window.majhiWaterDiagnostics=()=>({phase:'5-traffic-corolla-3m',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
+    slowCars:S.movingCars.map(c=>({x:+c.x.toFixed(1),z:+c.z.toFixed(1),stopped:c.stopped})),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
     rickshawQuarrels:(S.rickshawQuarrels||[]).length,
     dhakaCatVertices:dhakaCat.length,dhakaLaptopVertices:dhakaLaptop.length,dhakaRickshawVertices:parkedDhakaModels.rickshaw.length,dhakaCNGVertices:parkedDhakaModels.cng.length,
+    corollaModelVertices:parkedDhakaModels.car.map(m=>m.length),
     balconyCitizens:S.cityPeople.filter(p=>p.role==='BALCONY').length,
     shopCitizens:S.cityPeople.filter(p=>p.role==='SHOP').length,shopkeepers:S.cityPeople.filter(p=>p.role==='SHOP').map(p=>({x:p.x,y:p.y,z:p.z})),
     ropeCitizens:S.cityPeople.filter(p=>p.role==='ROPE').length,
