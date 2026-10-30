@@ -1,5 +1,5 @@
 /*
- * MAJHI JABEN?! / WATER LAB 01.8
+ * MAJHI JABEN?! / WATER LAB 01.9
  * Spatially sampled, balanced hull impulses; independent contact-driven
  * paddle dipoles; improved damping and low-energy localized wake detail.
  * Readable Evan-inspired transparent floodwater and 3.2 m road depth remain.
@@ -215,8 +215,10 @@
           vec3 diagnosticN=normalize(vec3(N.x*5.0,max(.15,N.y),N.z*5.0));
           color=diagnosticN*.5+.5;
         }else{
-          // Physically motivated: reflect(-V,N) and refract(-V,N,1/1.333)
-          // form the two rays, then Fresnel selects how much of each to see.
+          // Use the true surface normal for reflection and lighting, while
+          // reducing only the *optical* normal for reading the road below.
+          // A water slope can be real without stretching lane markings into
+          // broken white streaks when the camera looks almost horizontally.
           vec3 V=normalize(uCamera-vWorld);
           float nv=clamp(dot(N,V),0.0,1.0);
           float f0=pow((1.333-1.0)/(1.333+1.0),2.0); // about 2% at normal incidence
@@ -225,12 +227,14 @@
           // The submerged road is an actual optical reference plane 3.2 m
           // below the water by default, not a near-surface road decal.
           // Raise the depth control to simulate deep accumulated flooding.
-          vec3 T=refract(-V,N,1.0/1.333);
+          vec3 opticalN=normalize(mix(vec3(0.0,1.0,0.0),N,
+                                    mix(.23,.47,clamp(uDistortion,0.0,1.0))));
+          vec3 T=refract(-V,opticalN,1.0/1.333);
           float depthToBed=max(.05,uFloodDepth+vWorld.y);
           float distanceToBed=depthToBed/max(.10,-T.y);
           vec2 hit=vWorld.xz+T.xz*distanceToBed;
-          // Water Lab 01.8: the visible wake relies on the simulated height
-          // gradients, with only a tiny local near-stern optical accent.
+          // Water Lab 01.9: the wake is in the GPU heightfield, with only
+          // an extremely subdued near-stern lighting accent.
           // Never render persistent geometrical V lines or foam rectangles.
           float travelSpeed=clamp(uWakeBoat.w,0.0,1.0);
           float behind=(uWakeBoat.x-p.x)*uWakeBoat.z;
@@ -239,7 +243,7 @@
                              (1.0-smoothstep(2.10,3.60,behind));
           float crossSwell=exp(-pow((lateral-(.43+.20*max(behind,0.0)))/.43,2.0));
           float scattered=.40+.60*noise(p*3.2+vec2(uTime*.15,3.4));
-          float wakeShimmer=wakeEnvelope*crossSwell*scattered*travelSpeed*.38;
+          float wakeShimmer=wakeEnvelope*crossSwell*scattered*travelSpeed*.20;
           float bowAhead=(p.x-uWakeBoat.x)*uWakeBoat.z;
           float bowPressure=exp(-pow((bowAhead-1.86)/.35,2.0))*
                             exp(-pow(lateral/.63,2.0))*travelSpeed*.34;
@@ -250,13 +254,13 @@
           // EXTRA bending but preserves the physically refracted ray above.
           // Deeper water gives the refracted ray a longer physical path.
           // Distortion stays local and bounded, so road navigation is readable.
-          vec2 rippleBend=slope*uWaveScale*4.15;
-          vec2 microBend=windSlope*.12+rainSlope*.18;
+          vec2 rippleBend=slope*uWaveScale*1.85;
+          vec2 microBend=windSlope*.07+rainSlope*.11;
           // Wake refraction is driven by actual GPU gradients, not an
           // artificial V-shaped optical displacement on the road.
           vec2 wakeBend=slope*wakeShimmer*.065;
-          vec2 opticalOffset=clamp((rippleBend+microBend)*uDistortion*1.4+
-                                   wakeBend*uDistortion,vec2(-.22),vec2(.22));
+          vec2 opticalOffset=clamp((rippleBend+microBend)*uDistortion*.85+
+                                   wakeBend*uDistortion,vec2(-.12),vec2(.12));
           float downView=smoothstep(.08,.95,nv);
           vec2 refractedHit=hit+opticalOffset*(.50+.50*downView);
           vec3 roadColor=submergedStreet(refractedHit);
@@ -383,12 +387,12 @@
       vec2 h=info(p);
       float average=.25*(info(p+ivec2(1,0)).x+info(p-ivec2(1,0)).x+
                          info(p+ivec2(0,1)).x+info(p-ivec2(0,1)).x);
-      // 01.8: damp momentum more strongly than displacement. Balance
-      // temporal energy loss with a light spatial smoothing term; packets
-      // travel outward for a short time, then settle instead of making a
-      // persistent high-water plateau in the Height diagnostic.
-      float v=(h.y+(average-h.x)*.34)*.978;
-      float newH=(mix(h.x,average,.018)+v)*.997;
+      // 01.9: the near field loses energy a little faster, preventing paddle
+      // packets from expanding into long-lived concentric rings. A small
+      // spatial average removes grid-scale artifacts without blurring the
+      // broad, physically plausible propagating waves.
+      float v=(h.y+(average-h.x)*.31)*.968;
+      float newH=(mix(h.x,average,.026)+v)*.994;
       vec2 edge=min(vUv,1.0-vUv);
       float edgeFade=smoothstep(0.0,.055,min(edge.x,edge.y));
       outputInfo(newH*edgeFade,v*edgeFade);
@@ -405,9 +409,12 @@
       outputInfo(h.x+uStrength*f,h.y);
     }`;
 
-  // Local, zero-bias hull disturbance. Each crest has an adjacent trough;
-  // the pressure is injected into VERTICAL VELOCITY, not a repeatedly raised
-  // heightfield. Spacing is handled in JS by actual distance travelled.
+  // LAB 01.9: moving-hull pressure wake. The pressure pattern is in the
+  // boat's local frame: a compact bow displacement and two weak, tapered
+  // crests spreading *aft*, with paired troughs to avoid net raised water.
+  // The pattern is injected into vertical velocity only while the hull
+  // travels. Once injected, the GPU heightfield propagates/damps it.
+  // This is not a static V painted in the water fragment shader.
   const simWakeFragment = `#version 300 es\n${simCommon}
     uniform vec2 uCenter;
     uniform float uStrength,uHeading,uPulse;
@@ -415,35 +422,37 @@
       ivec2 pixel=ivec2(gl_FragCoord.xy);
       vec2 old=info(pixel);
       vec2 p=(vUv-uCenter)*24.0;
-      float ahead=p.x*uHeading;
-      float stern=-ahead;
-      float lateral=abs(p.y);
-      // Small compression wave at the bow with a compensating trough.
-      float bowCrest=exp(-pow((ahead-1.66)/.23,2.0))*
-                     exp(-pow(lateral/.49,2.0));
-      float bowDip=exp(-pow((ahead-1.28)/.27,2.0))*
-                   exp(-pow(lateral/.49,2.0))*.84;
-      // Port and starboard shoulders generate paired pressure gradients.
-      float shoulder=exp(-pow((ahead+.10)/.52,2.0))*
-        (exp(-pow((lateral-.80)/.17,2.0))-
-         .74*exp(-pow((lateral-.57)/.23,2.0)));
-      // Alternating small packets just aft of the hull (not a V stencil).
-      float sternGate=exp(-pow((stern-1.45)/.40,2.0));
-      float sternPacket=sternGate*(
-         exp(-pow((lateral-.51)/.22,2.0))-
-         .88*exp(-pow((lateral-.24)/.25,2.0)));
-      // Slight lateral variation breaks up repetitive screen-space stripes.
-      float stagger=.88+.12*sin(7.1*stern+uPulse*4.3);
-      float balanced=.50*(bowCrest-bowDip)+
-                     .42*shoulder+.50*sternPacket*stagger;
-      // Velocity-only excitation avoids accumulating a uniform positive
-      // height plateau when the moving boat emits many small impulses.
-      outputInfo(old.x,old.y+balanced*uStrength);
+      float forward=p.x*uHeading;
+      float aft=-forward;
+      float side=abs(p.y);
+      // Bow lifts a little water, immediately balanced by a pressure dip.
+      float bow=exp(-pow((forward-1.53)/.25,2.0)) *
+                exp(-pow(side/.43,2.0));
+      float bowReturn=exp(-pow((forward-1.23)/.30,2.0)) *
+                      exp(-pow(side/.43,2.0));
+      // The hull shoulders displace water out to the side.
+      float shoulder=exp(-pow((forward+.12)/.40,2.0)) *
+        (exp(-pow((side-.68)/.18,2.0)) -
+         .82*exp(-pow((side-.45)/.20,2.0)));
+      // Kelvin-like taper (artist-directed): the arms widen behind the hull.
+      // Neither a long-lived line nor a large hard-edged triangle is drawn.
+      float aftMask=smoothstep(.15,.65,aft)*
+                    (1.0-smoothstep(2.55,3.15,aft));
+      float arm=.56+.205*max(aft,0.0);
+      float outer=exp(-pow((side-arm)/.20,2.0));
+      float inner=exp(-pow((side-(arm-.29))/.27,2.0));
+      float taper=exp(-max(aft,0.0)*.42);
+      float stagger=.94+.06*sin(4.8*aft+uPulse*1.7);
+      float trailing=aftMask*taper*(outer-.81*inner)*stagger;
+      float pressure=.32*(bow-.91*bowReturn)+
+                     .29*shoulder+.31*trailing;
+      outputInfo(old.x,old.y+pressure*uStrength);
     }`;
 
-  // Blade-water interaction is its own compact moving DIPOLE (pressure
-  // rise ahead, suction behind). Its integral is approximately zero, so
-  // rowing while stationary cannot fill the whole simulated pool with water.
+  // A blade only touches the surface on catch/drive. Its narrow pressure
+  // dipole follows relative blade motion, not the mere passage of time.
+  // This is smaller than 01.8; water energy should come primarily from the
+  // actual stroke, not a large round impulse around the oar pivot.
   const simPaddleFragment = `#version 300 es\n${simCommon}
     uniform vec2 uCenter,uMotion;
     uniform float uStrength,uRadius;
@@ -452,15 +461,14 @@
       vec2 old=info(pixel);
       vec2 p=(vUv-uCenter)*24.0;
       vec2 dir=normalize(uMotion+vec2(.000001,0.0));
-      vec2 sideways=vec2(-dir.y,dir.x);
-      float a=dot(p,dir),b=dot(p,sideways);
-      float lengthScale=max(.11,uRadius);
-      float ahead=exp(-pow((a-lengthScale*.83)/(lengthScale*.75),2.0));
-      float behind=exp(-pow((a+lengthScale*.83)/(lengthScale*.75),2.0));
-      float across=exp(-pow(b/(lengthScale*.83),2.0));
-      float dipole=(ahead-behind)*across;
-      outputInfo(old.x+dipole*uStrength*.07,
-                 old.y+dipole*uStrength*.80);
+      vec2 side=vec2(-dir.y,dir.x);
+      float along=dot(p,dir),across=dot(p,side);
+      float blade=max(.10,uRadius);
+      float push=exp(-pow((along-blade*.51)/(blade*.67),2.0));
+      float pull=exp(-pow((along+blade*.51)/(blade*.67),2.0));
+      float width=exp(-pow(across/(blade*.72),2.0));
+      float dipole=(push-pull)*width;
+      outputInfo(old.x,old.y+dipole*uStrength*.55);
     }`;
 
   // Original WebGL Water computes a normal field after each wave update.
@@ -1362,7 +1370,7 @@
     $('modeSim').setAttribute('aria-pressed',String(state.mode===1));
     $('modeClassic').setAttribute('aria-pressed',String(state.mode===0));
     $('modeDescription').textContent=state.mode===1
-      ? 'GPU height and velocity ripples · paddle splashes · hull wake · rain'
+      ? 'GPU water · directional hull wake · stroke-timed paddles · rain'
       : 'Previous noise-based water for an immediate side-by-side comparison';
   }
   $('modeSim').addEventListener('click',()=>{state.mode=1;updateMode();});
@@ -1470,19 +1478,19 @@
             const bladeVelocity=previousContact&&dt>.001?
               Math.hypot(...deltaBlade)/dt:.55*state.speed;
             const energy=clamp((.38+bladeVelocity*.34)*state.speed,.24,1.32);
-            const interval=justEntered?0:.115;
+            const interval=justEntered?0:.18;
             if(seconds-lastBladeSparks[idx]>=interval){
               lastBladeSparks[idx]=seconds;
               const motion=Math.hypot(...deltaBlade)>.0001?
                 deltaBlade:[-1,side*.10];
               pendingPaddles.push({uv:[x/SIM_SPAN+.5,z/SIM_SPAN+.5],
-                motion,strength:(justEntered?.135:.095)*energy*(.7+state.wave),
-                radius:justEntered?.18:.23});
+                motion,strength:(justEntered?.054:.037)*energy*(.65+state.wave),
+                radius:justEntered?.125:.16});
               if(pendingPaddles.length>16)pendingPaddles.shift();
               // A tiny transient glint identifies actual blade contact, not
               // a broad foam ribbon that could obscure the submerged street.
-              addFoam(x,z,(justEntered?.37:.24)*energy,
-                      justEntered?.17:.15,justEntered?.38:.30);
+              addFoam(x,z,(justEntered?.27:.17)*energy,
+                      justEntered?.13:.12,justEntered?.30:.23);
             }
           }
         }else{
@@ -1496,19 +1504,19 @@
         if(heading!==lastWakeDirection){wakeDistance=0;lastWakeDirection=heading;}
         if(Math.abs(actualSpeed)>.055 && state.wake>.005){
           wakeDistance+=Math.abs(boatDelta);
-          if(wakeDistance>=.25 && seconds-lastWake>.12){
+          if(wakeDistance>=.33 && seconds-lastWake>.17){
             wakeDistance=0;lastWake=seconds;
             const intensity=clamp(Math.abs(actualSpeed)/1.65,0,1);
             pendingWakes.push({center:[boatX/SIM_SPAN+.5,.5],
               heading,pulse:seconds,
-              strength:(.088+.030*intensity)*state.wake*intensity});
+              strength:(.067+.022*intensity)*state.wake*intensity*intensity});
             if(pendingWakes.length>8)pendingWakes.shift();
             for(const side of [-1,1]){
               const jitter=Math.sin(seconds*7.91+side*3.0)*.045;
-              addFoam(boatX-heading*1.54,side*(.52+jitter),
-                      .30*intensity,.19,.34);
+              addFoam(boatX-heading*1.43,side*(.50+jitter),
+                      .20*intensity,.15,.27);
             }
-            addFoam(boatX+heading*1.66,0,.12*intensity,.15,.23);
+            addFoam(boatX+heading*1.63,0,.07*intensity,.12,.19);
           }
         }else wakeDistance=0;
         if(state.rain>.005){
@@ -1597,7 +1605,7 @@
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Water Lab 01.8 ready';
+      status.textContent='WebGL 2 active · Water Lab 01.9 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);

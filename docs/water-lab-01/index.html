@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#081e29">
-  <meta name="description" content="Majhi Jaben?! Water Lab 01.8 — GPU interactive floodwater simulation, tested separately from the main game.">
+  <meta name="description" content="Majhi Jaben?! Water Lab 01.9 — GPU interactive floodwater simulation, tested separately from the main game.">
   <title>Majhi Jaben?! · Water Lab 01</title>
   <link rel="stylesheet" href="./style.css">
-  <script src="./water-test.js?v=180" defer></script>
+  <script src="./water-test.js?v=190" defer></script>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 01.8</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
+      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 01.9</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
       <a class="game-link" href="../index.html">Original game</a>
     </header>
     <main class="layout">
@@ -20,7 +20,7 @@
         <canvas id="scene" tabindex="0">Your browser does not support the 3D preview.</canvas>
         <div class="scene-status"><span class="status-dot"></span><span id="rendererStatus">Starting water simulation...</span></div>
         <div id="errorPanel" class="error-panel" hidden><h2>Renderer unavailable</h2><p id="errorMessage">Could not start WebGL 2.</p></div>
-        <div class="hero"><span class="eyebrow">WATER STUDY 01.8 / BALANCED HULL + PADDLE WAVES</span><h2>The wake stays in balance.</h2><p>The submerged road now sits <strong id="heroDepth">3.2 m</strong> below the surface. Move the boat for a compact, fading hull wake. The oars create separate pressure ripples on contact; the submerged road stays visible beneath the water.</p></div>
+        <div class="hero"><span class="eyebrow">WATER STUDY 01.9 / DIRECTIONAL HULL WAKE + STROKE TIMING</span><h2>The wake follows the boat.</h2><p>The submerged road now sits <strong id="heroDepth">3.2 m</strong> below the surface. Move the boat to reveal a narrow, fading wake behind the hull. Each oar disturbs the surface during its actual water-contact phase. Pause rowing or stop the boat to isolate each effect; road markings remain visible beneath the flood.</p></div>
         <div class="viewer-footer">CLICK WATER TO SPLASH <span>·</span> DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM</div>
       </section>
       <aside class="panel">
@@ -28,7 +28,7 @@
         <section class="section">
           <h3>Water comparison</h3>
           <div class="duo"><button type="button" class="mode-btn active" id="modeSim" aria-pressed="true">New simulated</button><button type="button" class="mode-btn" id="modeClassic" aria-pressed="false">Previous water</button></div>
-          <p class="note" id="modeDescription">GPU height and velocity ripples · paddle splashes · hull wake · rain</p>
+          <p class="note" id="modeDescription">GPU water · directional hull wake · stroke-timed paddles · rain</p>
           <div class="duo"><button type="button" class="secondary-btn" id="centerDrop">Drop a ripple</button><button type="button" class="secondary-btn" id="resetWater">Clear ripples</button></div>
           <h3 class="diagnostic-heading">Surface diagnostics</h3>
           <div class="diagnostic-grid" role="group" aria-label="Water surface visualization">
