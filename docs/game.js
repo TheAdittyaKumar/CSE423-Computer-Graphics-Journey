@@ -2567,7 +2567,7 @@
     paintShopLabel(x,z-53.7,81.5,subtitle,110,5.5,[.89,.93,.79]);
   }
   shopSigns.upload();
-  const cityFacadeDetails=new Mesh(),cityFacadeLights=new Mesh(),storeCanopies=new Mesh(),cityPosterDecor=new Mesh();
+  const cityFacadeDetails=new Mesh(),cityFacadeLights=new Mesh(),storeCanopies=new Mesh();
   const utilityPoles=new Mesh(),overheadWires=new Mesh();
   const dhakaWallBands=[[.86,.78,.73],[.82,.74,.80],[.88,.80,.68],[.76,.82,.80],[.84,.74,.66],[.90,.76,.76]];
   const dhakaAccents=[[.76,.36,.28],[.36,.54,.77],[.51,.67,.42],[.88,.64,.22],[.58,.40,.72],[.52,.37,.30]];
@@ -2617,149 +2617,6 @@
     cityFacadeDetails.box(rx,cy+2.4,cz+span*.5-.9,.9,5.6,1.0,grillMetal);
     for(let k=-2;k<=2;k++)cityFacadeDetails.box(rx,cy+2.3,cz+k*(span/5.4),.72,5.1,.85,[.72,.75,.78]);
   }
-  function addPosterPanelZ(cx,cy,wallZ,dir,w,h,base,accent){
-    const z=wallZ+dir*1.5;
-    cityPosterDecor.box(cx,cy,z,w,h,.55,[.92,.90,.84]);
-    cityPosterDecor.box(cx,cy,z+.02*dir,w-2,h-2,.35,base);
-    cityPosterDecor.box(cx,cy+h*.22,z+.05*dir,w-5,2.6,.26,[.95,.95,.90]);
-    cityPosterDecor.box(cx-w*.18,cy-.8,z+.08*dir,w*.16,h*.48,.22,accent);
-    cityPosterDecor.box(cx+w*.08,cy-.8,z+.08*dir,w*.26,h*.48,.22,accent.map(v=>Math.min(1,v*1.18)));
-    cityPosterDecor.box(cx,cy-h*.28,z+.08*dir,w*.54,2.1,.24,[.18,.20,.22]);
-  }
-  function addPosterPanelX(wallX,cy,cz,dir,w,h,base,accent){
-    const x=wallX+dir*1.5;
-    cityPosterDecor.box(x,cy,cz,.55,h,w,[.92,.90,.84]);
-    cityPosterDecor.box(x+.02*dir,cy,cz,.35,h-2,w-2,base);
-    cityPosterDecor.box(x+.05*dir,cy+h*.22,cz,.26,2.6,w-5,[.95,.95,.90]);
-    cityPosterDecor.box(x+.08*dir,cy-.8,cz-w*.18,.22,h*.48,w*.16,accent);
-    cityPosterDecor.box(x+.08*dir,cy-.8,cz+w*.08,.22,h*.48,w*.26,accent.map(v=>Math.min(1,v*1.18)));
-    cityPosterDecor.box(x+.08*dir,cy-h*.28,cz,.24,2.1,w*.54,[.18,.20,.22]);
-  }
-  function addRoadBannerX(x1,x2,y,z,base,accent){
-    const cx=(x1+x2)*.5,w=Math.abs(x2-x1);
-    citizenLimb(cityPosterDecor,[x1,y+6,z],[x2,y+5,z],.18,[.26,.26,.27]);
-    cityPosterDecor.box(cx,y,z,w,16,.55,base);
-    cityPosterDecor.box(cx,y+3.0,z,w-5,2.4,.3,[.94,.94,.88]);
-    cityPosterDecor.box(cx-w*.18,y-1.4,z,w*.16,7.8,.26,accent);
-    cityPosterDecor.box(cx+w*.16,y-1.2,z,w*.18,7.8,.26,accent.map(v=>Math.min(1,v*1.15)));
-  }
-  function addRoadBannerZ(x,z1,z2,y,base,accent){
-    const cz=(z1+z2)*.5,w=Math.abs(z2-z1);
-    citizenLimb(cityPosterDecor,[x,y+6,z1],[x,y+5,z2],.18,[.26,.26,.27]);
-    cityPosterDecor.box(x,y,cz,.55,16,w,base);
-    cityPosterDecor.box(x,y+3.0,cz,.3,2.4,w-5,[.94,.94,.88]);
-    cityPosterDecor.box(x,y-1.4,cz-w*.18,.26,7.8,w*.16,accent);
-    cityPosterDecor.box(x,y-1.2,cz+w*.16,.26,7.8,w*.18,accent.map(v=>Math.min(1,v*1.15)));
-  }
-
-  function posterTextZ(value,cx,top,z,step,color){
-    const width=value.length*6*step,x0=cx-width*.5;
-    for(let i=0;i<value.length;i++){
-      const glyph=signGlyphs[value[i]]; if(!glyph)continue;
-      for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(glyph[row][col]==='1'){
-        const l=x0+(i*6+col)*step,r=l+step*.84,t=top-row*step,b=t-step*.88;
-        cityPosterDecor.quad([l,b,z],[r,b,z],[r,t,z],[l,t,z],color);
-      }
-    }
-  }
-  function posterTextX(value,x,top,cz,step,color){
-    const width=value.length*6*step,z0=cz-width*.5;
-    for(let i=0;i<value.length;i++){
-      const glyph=signGlyphs[value[i]]; if(!glyph)continue;
-      for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(glyph[row][col]==='1'){
-        const l=z0+(i*6+col)*step,r=l+step*.84,t=top-row*step,b=t-step*.88;
-        cityPosterDecor.quad([x,b,l],[x,b,r],[x,t,r],[x,t,l],color);
-      }
-    }
-  }
-  function banglaMotifZ(cx,cy,z,width,color){
-    cityPosterDecor.box(cx,cy+2.8,z,width,1.0,.18,color);
-    const xs=[-.34,-.12,.10,.31];
-    xs.forEach((t,i)=>{
-      const px=cx+width*t;
-      cityPosterDecor.box(px,cy, z, .8, 4.8, .18, color);
-      cityPosterDecor.box(px+1.4,cy-1.5,z,2.8,1.0,.18,color);
-      if(i%2===0)cityPosterDecor.box(px-1.1,cy+0.5,z,1.0,1.0,.18,color);
-    });
-  }
-  function banglaMotifX(x,cy,cz,width,color){
-    cityPosterDecor.box(x,cy+2.8,cz,.18,1.0,width,color);
-    const xs=[-.34,-.12,.10,.31];
-    xs.forEach((t,i)=>{
-      const pz=cz+width*t;
-      cityPosterDecor.box(x,cy,pz,.18,4.8,.8,color);
-      cityPosterDecor.box(x,cy-1.5,pz+1.4,.18,1.0,2.8,color);
-      if(i%2===0)cityPosterDecor.box(x,cy+0.5,pz-1.1,.18,1.0,1.0,color);
-    });
-  }
-  function moviePosterZ(cx,cy,wallZ,dir,w,h,base,accent){
-    addPosterPanelZ(cx,cy,wallZ,dir,w,h,base,accent);
-    const z=wallZ+dir*1.74;
-    posterTextZ('DHAKA STAR',cx,cy+h*.38,z,Math.min(1.1,w/72),[.98,.97,.93]);
-    banglaMotifZ(cx,cy+h*.11,z,w*.48,[.96,.90,.28]);
-    cityPosterDecor.box(cx-w*.23,cy-.8,z,w*.18,h*.40,.20,[.84,.38,.32]);
-    cityPosterDecor.box(cx,cy-.8,z,w*.20,h*.40,.20,[.31,.47,.70]);
-    cityPosterDecor.box(cx+w*.22,cy-.8,z,w*.18,h*.40,.20,[.89,.62,.18]);
-    posterTextZ('SUPER HIT',cx,cy-h*.27,z,Math.min(1.0,w/82),[.11,.16,.20]);
-  }
-  function moviePosterX(wallX,cy,cz,dir,w,h,base,accent){
-    addPosterPanelX(wallX,cy,cz,dir,w,h,base,accent);
-    const x=wallX+dir*1.74;
-    posterTextX('DHAKA STAR',x,cy+h*.38,cz,Math.min(1.1,w/72),[.98,.97,.93]);
-    banglaMotifX(x,cy+h*.11,cz,w*.48,[.96,.90,.28]);
-    cityPosterDecor.box(x,cy-.8,cz-w*.23,.20,h*.40,w*.18,[.84,.38,.32]);
-    cityPosterDecor.box(x,cy-.8,cz,.20,h*.40,w*.20,[.31,.47,.70]);
-    cityPosterDecor.box(x,cy-.8,cz+w*.22,.20,h*.40,w*.18,[.89,.62,.18]);
-    posterTextX('SUPER HIT',x,cy-h*.27,cz,Math.min(1.0,w/82),[.11,.16,.20]);
-  }
-  function coachingPosterZ(cx,cy,wallZ,dir,w,h,base,accent){
-    addPosterPanelZ(cx,cy,wallZ,dir,w,h,base,accent);
-    const z=wallZ+dir*1.74;
-    posterTextZ('A PLUS COACHING',cx,cy+h*.36,z,Math.min(.84,w/96),[.98,.97,.93]);
-    posterTextZ('ADMISSION OPEN',cx,cy+h*.17,z,Math.min(.72,w/108),[.10,.15,.18]);
-    banglaMotifZ(cx,cy-h*.04,z,w*.56,[.97,.94,.90]);
-    posterTextZ('HSC  SSC  IELTS',cx,cy-h*.26,z,Math.min(.62,w/116),[.97,.92,.33]);
-    cityPosterDecor.box(cx-w*.20,cy-.5,z,w*.14,h*.28,.20,accent);
-    cityPosterDecor.box(cx+w*.20,cy-.5,z,w*.14,h*.28,.20,accent.map(v=>Math.min(1,v*1.18)));
-  }
-  function coachingPosterX(wallX,cy,cz,dir,w,h,base,accent){
-    addPosterPanelX(wallX,cy,cz,dir,w,h,base,accent);
-    const x=wallX+dir*1.74;
-    posterTextX('A PLUS COACHING',x,cy+h*.36,cz,Math.min(.84,w/96),[.98,.97,.93]);
-    posterTextX('ADMISSION OPEN',x,cy+h*.17,cz,Math.min(.72,w/108),[.10,.15,.18]);
-    banglaMotifX(x,cy-h*.04,cz,w*.56,[.97,.94,.90]);
-    posterTextX('HSC  SSC  IELTS',x,cy-h*.26,cz,Math.min(.62,w/116),[.97,.92,.33]);
-    cityPosterDecor.box(x,cy-.5,cz-w*.20,.20,h*.28,w*.14,accent);
-    cityPosterDecor.box(x,cy-.5,cz+w*.20,.20,h*.28,w*.14,accent.map(v=>Math.min(1,v*1.18)));
-  }
-  function addMovieBannerX(x1,x2,y,z,base,accent){
-    addRoadBannerX(x1,x2,y,z,base,accent);
-    const cx=(x1+x2)*.5, zz=z+.32;
-    posterTextZ('CITY CINEMA',cx,y+4.0,zz,1.0,[.98,.97,.90]);
-    banglaMotifZ(cx,y-.5,zz,44,[.96,.90,.28]);
-    posterTextZ('NEW SHOW',cx,y-5.2,zz,.82,[.14,.16,.18]);
-  }
-  function addMovieBannerZ(x,z1,z2,y,base,accent){
-    addRoadBannerZ(x,z1,z2,y,base,accent);
-    const cz=(z1+z2)*.5, xx=x+.32;
-    posterTextX('CITY CINEMA',xx,y+4.0,cz,1.0,[.98,.97,.90]);
-    banglaMotifX(xx,y-.5,cz,44,[.96,.90,.28]);
-    posterTextX('NEW SHOW',xx,y-5.2,cz,.82,[.14,.16,.18]);
-  }
-  function addCoachingBannerX(x1,x2,y,z,base,accent){
-    addRoadBannerX(x1,x2,y,z,base,accent);
-    const cx=(x1+x2)*.5, zz=z+.32;
-    posterTextZ('BRIGHT COACHING',cx,y+4.0,zz,.88,[.98,.97,.90]);
-    banglaMotifZ(cx,y-.5,zz,46,[.97,.94,.90]);
-    posterTextZ('ADMISSION',cx,y-5.2,zz,.92,[.14,.16,.18]);
-  }
-  function addCoachingBannerZ(x,z1,z2,y,base,accent){
-    addRoadBannerZ(x,z1,z2,y,base,accent);
-    const cz=(z1+z2)*.5, xx=x+.32;
-    posterTextX('BRIGHT COACHING',xx,y+4.0,cz,.88,[.98,.97,.90]);
-    banglaMotifX(xx,y-.5,cz,46,[.97,.94,.90]);
-    posterTextX('ADMISSION',xx,y-5.2,cz,.92,[.14,.16,.18]);
-  }
   function addSagWire(a,b,sag=11,segments=10,radius=.66){
     let prev=[a.x,a.y,a.z];
     for(let i=1;i<=segments;i++){
@@ -2769,15 +2626,11 @@
       prev=p;
     }
   }
-  const posterBases=[[.70,.25,.22],[.18,.43,.69],[.89,.58,.18],[.31,.56,.34],[.58,.33,.68]];
   for(const b of buildings){
     const wall=dhakaWallBands[b.idx%dhakaWallBands.length],accent=dhakaAccents[b.idx%dhakaAccents.length],tile=dhakaTiles[b.idx%dhakaTiles.length];
-    const posterBase=posterBases[b.idx%posterBases.length];
     const floors=Math.max(4,Math.floor((b.h-30)/34));
     const frontZ=b.z-b.hd-2.8,backZ=b.z+b.hd+2.8,leftX=b.x-b.hw-2.8,rightX=b.x+b.hw+2.8;
     const useBalconies=b.idx%3!==1, roundedStack=b.idx%4===1;
-    const spawnFacing=b.z===-1375 && Math.abs(b.x)<=275;
-    const posterStyle=b.idx%5, hasWallPoster=spawnFacing||(b.idx%3===0||b.idx%5===2), hasRoadsideBanner=spawnFacing||(b.idx%8===3);
     const rightWinZ=b.z-b.hd*.18,leftWinZ=b.z+b.hd*.20;
     // Street-level Dhaka-style gates and tiled podiums.
     cityFacadeDetails.box(b.x,10,frontZ,Math.min(b.hw*1.30,154),22,4.0,tile);
@@ -2826,27 +2679,6 @@
         cityFacadeDetails.box(b.x+b.hw*.36, y-1.0, frontZ-6.2, 12,2,2,[.32,.36,.39]);
       }
     }
-    // Posters / banners like in Dhaka: visible around gameplay routes, especially near spawn.
-    if(hasWallPoster){
-      if(spawnFacing){
-        moviePosterZ(b.x-b.hw*.22,64,frontZ,-1,30,36,posterBase,accent);
-        coachingPosterZ(b.x+b.hw*.20,64,frontZ,-1,30,36,posterBase.map(v=>Math.min(1,v*1.06)),accent);
-        if(b.x<0)coachingPosterX(leftX,58,b.z+b.hd*.04,-1,24,30,posterBase,accent);
-        else moviePosterX(rightX,58,b.z-b.hd*.04,1,24,30,posterBase,accent);
-      }else{
-        if(posterStyle<2)moviePosterZ(b.x-b.hw*.20,58,frontZ,-1,26,30,posterBase,accent);
-        else coachingPosterZ(b.x+b.hw*.18,72,frontZ,-1,34,42,posterBase,accent);
-        if(b.idx%4===0)coachingPosterX(leftX,54,b.z+b.hd*.05,-1,22,28,posterBase.map(v=>Math.min(1,v*1.08)),accent);
-        if(b.idx%6===1)moviePosterX(rightX,84,b.z-b.hd*.08,1,22,28,posterBase,accent);
-      }
-    }
-    if(hasRoadsideBanner){
-      if(spawnFacing){
-        if(b.x<0)addMovieBannerX(b.x-b.hw-18,b.x+b.hw+10,116,frontZ-18,posterBase,accent);
-        else addCoachingBannerX(b.x-b.hw-10,b.x+b.hw+18,116,frontZ-18,posterBase.map(v=>Math.min(1,v*1.04)),accent);
-      }else if(b.idx%2===0)addMovieBannerX(b.x-b.hw-34,b.x+b.hw+34,118,frontZ-24,posterBase,accent);
-      else addCoachingBannerZ(rightX+22,b.z-b.hd-26,b.z+b.hd+26,116,posterBase,accent);
-    }
     // Rooftop tanks, a stair head-room and parapet details are common in Dhaka.
     cityFacadeDetails.box(b.x-b.hw*.16,b.h+10,b.z+b.hd*.10,36,20,32,[.29,.34,.36]);
     cityFacadeDetails.cylinder(b.x+b.hw*.27,b.h+18,b.z-b.hd*.16,8.5,18,[.18,.22,.24],8);
@@ -2865,7 +2697,9 @@
   function pushPole(x,z,h=130,type=0){const pole={x,z,h,type}; utilityPoleData.push(pole); return pole;}
   // Random-looking Dhaka utility clusters: not everywhere, but in selective messy pockets.
   const poleGroupDefs=[
-    {dir:'x',count:2,start:[-180,-1265],step:360},
+    // Three visible near-spawn poles: both sides of the road and one farther ahead.
+    // Avoid the building volumes (their inner faces can reach x=+-136).
+    {dir:'spawn',count:3,positions:[[-149,-1335],[149,-1310],[-149,-1070]]},
     {dir:'x',count:3,start:[-760,-610],step:225},
     {dir:'x',count:2,start:[360,-40],step:255},
     {dir:'x',count:4,start:[-210,520],step:195},
@@ -2878,8 +2712,9 @@
   poleGroupDefs.forEach((g,gi)=>{
     const group=[];
     for(let i=0;i<g.count;i++){
-      const x=g.start[0]+(g.dir==='x'?i*g.step:0), z=g.start[1]+(g.dir==='z'?i*g.step:0);
-      group.push(pushPole(x,z,126+((gi+i)%3)*6,(gi+i)%3===0?1:0));
+      const x=g.positions?g.positions[i][0]:g.start[0]+(g.dir==='x'?i*g.step:0),
+            z=g.positions?g.positions[i][1]:g.start[1]+(g.dir==='z'?i*g.step:0);
+      group.push(pushPole(x,z,(g.dir==='spawn'?155:126)+((gi+i)%3)*6,g.dir==='spawn'||(gi+i)%3===0?1:0));
     }
     utilityPoleGroups.push(group);
   });
@@ -2909,16 +2744,27 @@
       if((gi+i)%2===0)addSagWire({x:a.x+px*8,y:a.h-36,z:a.z+pz*8},{x:b.x-px*8,y:b.h-39,z:b.z-pz*8},17,9,.32);
     }
   });
-  // Immediate neighborhood clutter near the starting corridor so the player sees poles, posters and banners right away.
-  addMovieBannerX(-180,180,115,-1265,[.70,.22,.20],[.95,.80,.35]);
-  moviePosterZ(-355,64,-1502,-1,30,36,[.68,.24,.21],[.86,.62,.20]);
-  coachingPosterZ(355,64,-1502,-1,30,36,[.24,.46,.69],[.93,.92,.84]);
-  // A few extra hanging street banners / poster strings, but not everywhere.
-  addMovieBannerX(-650,-330,114,-610,[.67,.23,.20],[.93,.81,.36]);
-  addCoachingBannerX(-115,165,118,520,[.33,.55,.36],[.94,.92,.84]);
-  addMovieBannerZ(540,-690,-470,116,[.25,.44,.68],[.90,.58,.18]);
-  addCoachingBannerZ(1080,60,305,114,[.55,.31,.63],[.92,.90,.84]);
-  cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();cityPosterDecor.upload();utilityPoles.upload();overheadWires.upload();
+  // Physical feeder cables: a repaired switchboard really is wired to a nearby pole.
+  // The animated electrical current below follows these exact same sag curves.
+  const powerFeedRoutes=power.map((station,i)=>{
+    const nearest=utilityPoleData.slice().sort((a,b)=>
+      distance(station.x,station.z,a.x,a.z)-distance(station.x,station.z,b.x,b.z))[0];
+    const start={x:station.x+11,y:115,z:station.z},
+          end={x:nearest.x,y:nearest.h-23,z:nearest.z},sag=12;
+    addSagWire(start,end,sag,15,.64);
+    return {start,end,sag};
+  });
+  // Visible tangle at the first three poles, confined to these poles only.
+  const spawnPoles=utilityPoleGroups[0];
+  for(const pole of spawnPoles){
+    for(let j=0;j<3;j++){
+      const cx=pole.x+(j-1)*5,cy=pole.h-27-j*5;
+      overheadWires.ring(cx,cy,pole.z+2,4.5+j*1.2,.73,wireColor,12);
+    }
+    utilityPoles.box(pole.x,pole.h-16,pole.z,54,3.8,7,[.33,.29,.25]);
+    for(const off of [-18,0,18])utilityPoles.cylinder(pole.x+off,pole.h-11,pole.z,3.0,10,[.65,.64,.57],8);
+  }
+  cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();utilityPoles.upload();overheadWires.upload();
   // Detailed, source-independent flood-damaged electrical cabinets. The legacy
   // baked powerboxes mesh is intentionally not drawn, to avoid overlapping models.
   // Every part is generated once; only light state and tiny spark meshes animate.
@@ -3063,6 +2909,34 @@
   const powerRepairPulse=new Mesh();
   powerRepairPulse.ring(0,0,0,29,4,[.32,1,.57],32);powerRepairPulse.upload();
   const powerVisual={repairedIndex:-1,repairedAt:-999};
+  const POWER_ACTIVATION_SECONDS=3.8, POWER_ARC_FRAMES=16;
+  // Tiny lightning bursts follow the same feeder cable as the real dark wire.
+  // Pre-baked once: no geometry allocations in the render loop.
+  const powerArcFrames=powerFeedRoutes.map((route,station)=>{
+    const frames=[];
+    for(let f=0;f<POWER_ARC_FRAMES;f++){
+      const m=new Mesh(),count=17,front=(f+1)/POWER_ARC_FRAMES;
+      const at=t=>{
+        const wiggle=Math.sin(t*19+f*.85+station)*1.4;
+        return [lerp(route.start.x,route.end.x,t)+wiggle,
+          lerp(route.start.y,route.end.y,t)-Math.sin(Math.PI*t)*route.sag+Math.sin(t*35+f)*1.4,
+          lerp(route.start.z,route.end.z,t)-wiggle*.65];
+      };
+      for(let j=0;j<count;j++){
+        const t=j/count, t2=(j+1)/count;
+        if(Math.abs(t-front)>.24)continue;
+        const glow=Math.max(0,1-Math.abs(t-front)/.25),col=[.25+.60*glow,.66+.32*glow,1];
+        citizenLimb(m,at(t),at(t2),.9+2*glow,col);
+      }
+      // Short cracks on the machine terminals, not an all-screen effect.
+      for(let j=0;j<5;j++){
+        const x=route.start.x+(j-2)*3.8,y=79+j*7;
+        citizenLimb(m,[x,y,route.start.z-25],[x+(j%2?6:-6),y+7,route.start.z-30],1.5,[.63,.94,1]);
+      }
+      frames.push(m.upload());
+    }
+    return frames;
+  });
 
   // OPEN STOREFRONTS: In the earlier version the metal shutter was translated
   // up by only 27 units. Its lower slats remained directly in the window, and
@@ -3115,7 +2989,8 @@
       const p=power[i],mat=model(p.x,0,p.z),d=distance(S.x,S.z,p.x,p.z);
       if(S.mode!=='MENU'&&d>1250)continue;
       const offline=S.powerOff&&S.powerIndex===i;
-      const justRepaired=powerVisual.repairedIndex===i&&S.time-powerVisual.repairedAt<2.5;
+      const repairAge=S.time-powerVisual.repairedAt;
+      const justRepaired=powerVisual.repairedIndex===i&&repairAge>=0&&repairAge<POWER_ACTIVATION_SECONDS;
       const blink=Math.sin(S.bobTime*7.1+i*1.7)>.05;
       render(powerCabinets[i],mat);
       render(powerBeaconBase,mat);
@@ -3124,7 +2999,12 @@
         if(blink){render(powerLedRed,mat);render(powerBeaconRed,mat);}
       }else{
         render(powerLedGreen,mat); // Steady green means the station is energized.
-        if(justRepaired)render(powerBeaconGreen,mat);
+        if(justRepaired){
+          render(powerBeaconGreen,mat);
+          const arcFrame=Math.floor(repairAge*9)%POWER_ARC_FRAMES;
+          render(powerArcFrames[i][arcFrame]);
+          if(Math.sin(repairAge*31)>-.25)render(powerSparks,mat);
+        }
       }
       // Tiny, intermittent flashes from the active fault (no permanent sparks).
       const sparkPhase=(S.bobTime+i*.7)%4.7;
@@ -3137,7 +3017,7 @@
       if(d>750)continue;
       const offline=S.powerOff&&S.powerIndex===i;
       const age=S.time-powerVisual.repairedAt;
-      const justRepaired=powerVisual.repairedIndex===i&&age>=0&&age<2.5;
+      const justRepaired=powerVisual.repairedIndex===i&&age>=0&&age<POWER_ACTIVATION_SECONDS;
       const flashing=offline&&Math.sin(S.bobTime*7.1+i*1.7)>.05;
       if(flashing)render(powerGlowRed,model(p.x,0,p.z));
       if(justRepaired){
@@ -3147,7 +3027,7 @@
       }
     }
   }
-  const S={guideDismissed:false,cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0};
+  const S={guideDismissed:false,cityPeople:CITY_PEOPLE.map((p,i)=>({...p,uid:i})),cityPersonId:CITY_PEOPLE.length,aiBoats:createRescueFleet(),aiRespawnQueue:[],aiRescueCount:0,waveStrength:0,waveSplashClock:0,waveSplashes:[],impactSplashes:[],strokeTime:0,rowing:false,mode:'MENU',time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,strokeTime:0,rowing:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debris:[],debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],bobTime:0,missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,bonusRewardQueue:[],lastBonusReward:null,quality:'HIGH',frameProfile:false,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0};
 
   // Each named student owns one voice identity from request -> boarding -> boat -> campus gate.
   // Never put "chat_*" in random chatter: chat clips are only used as fully
@@ -3650,11 +3530,11 @@
          done:()=>play('meme_sad_trombone',{x:r.x,z:r.z,volume:.52,cooldown:0,key:`trombone-${key}`})});
       if(quarrelsSeen.size>50)quarrelsSeen.clear();
     }
-    function showReward(points){
+    function showReward(points,title='MISSION PASSED!'){
       play('meme_mission_passed',{ignoreDistance:true,volume:.84,key:`mission-${S.time}`,cooldown:0});
       const id='majhi-group-reward';let el=document.getElementById(id);
       if(!el){el=document.createElement('div');el.id=id;el.style.cssText='position:fixed;left:50%;top:20%;transform:translateX(-50%);z-index:2147481000;pointer-events:none;text-align:center;opacity:0;transition:opacity .22s;color:#fce9ab;font:900 clamp(18px,4vw,46px) system-ui;text-shadow:0 3px 12px #081b20,0 5px 20px #000';document.body.appendChild(el);}
-      el.innerHTML=`MISSION PASSED!<div style="font-size:.62em;color:#99e4b5">RESPECT +</div><div style="font-size:.45em;color:#faf4e6">SCORE +${Math.round(points)}</div>`;
+      el.innerHTML=`${title}<div style="font-size:.62em;color:#99e4b5">RESPECT +</div><div style="font-size:.45em;color:#faf4e6">SCORE +${Math.round(points)}</div>`;
       el.style.opacity='1';rewardShownUntil=performance.now()+3200;
       return buffers.meme_mission_passed?.duration||3.2;
     }
@@ -3818,6 +3698,7 @@
         // The powerIndex is still the district just repaired when this runs.
         if(S.powerIndex===KUDDUS_STALL.district)kuddusDistrictRepaired=true;
         play('power_restore',{ignoreDistance:true,volume:.8});
+        return buffers.power_restore?.duration||2.8;
       },
       impact(power){play('impact_'+(1+(Math.floor(S.time*3)%2)),{ignoreDistance:true,volume:.75*power});},
       getState(){return {started,ready,on,voices:speech,captions:captionsOn,
@@ -3908,7 +3789,7 @@
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();dhakaWater?.reset(0,-1450);Object.assign(S,{mode:'PLAYING',guideDismissed:false,time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();dhakaWater?.reset(0,-1450);Object.assign(S,{mode:'PLAYING',guideDismissed:false,time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,bonusRewardQueue:[],lastBonusReward:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0});
     S.cityPeople=CITY_PEOPLE.map((p,i)=>({...p,uid:i}));S.cityPersonId=CITY_PEOPLE.length;
     S.aiRickshaws=createRickshawFleet();S.rickshawRescueCount=0;S.rickshawCrashCount=0;S.rickshawQuarrels=[];
     S.aiBoats=createRescueFleet();S.aiRespawnQueue=[];S.aiRescueCount=0;
@@ -3936,11 +3817,17 @@
     if(distance(S.x,S.z,825,1080)>125){notify('Move onto the orange landmark photo ring first.');return;}
     const target=Math.atan2(1350-S.z,825-S.x)/RAD,delta=Math.abs(((S.angle-target+540)%360)-180);
     if(delta>30){notify('Face Shaheed Minar, then press P.');return;}
-    S.photo=true;S.flash=.25;S.score+=70;S.photoTime=8;notify('Shaheed Minar photographed! +70 points',4);const info=$('photo-info');if(info){info.classList.remove('hidden');}}
+    S.photo=true;S.flash=.25;S.score+=70;S.photoTime=8;
+    S.bonusRewardQueue.push({kind:'PHOTO',points:70,at:S.time+8.25,title:'MONUMENT CAPTURED!'});
+    notify('Shaheed Minar photographed! +70 points',4);const info=$('photo-info');if(info){info.classList.remove('hidden');}}
   function repair(){if(S.mode!=='PLAYING')return;if(!S.powerOff){notify('No power outage currently.');return;}
     const p=power[S.powerIndex];if(distance(S.x,S.z,p.x,p.z)>130){notify(`Move closer to the ${p.name} power repair box.`);return;}
-    S.score+=100;S.powerOff=false;S.powerClock=0;gameAudio.repair();
+    S.score+=100;S.powerOff=false;S.powerClock=0;
+    const restoreSoundSeconds=gameAudio.repair();
     powerVisual.repairedIndex=S.powerIndex;powerVisual.repairedAt=S.time;
+    S.bonusRewardQueue.push({kind:'POWER',points:100,
+      at:S.time+Math.max(POWER_ACTIVATION_SECONDS+.25,restoreSoundSeconds+.35),
+      title:'POWER RESTORED!'});
     S.powerIndex=(S.powerIndex+1)%power.length;notify(`${p.name} power restored! Lights coming back street by street! +100`,4);}
   function nextModal(type){S.mode=type==='HELP'&&S.mode==='MENU'?'MENU':S.mode;
     $('modal').classList.remove('hidden');$('modal-secondary').classList.add('hidden');
@@ -4077,7 +3964,18 @@
     if(S.wiperDirection>0&&S.wiperAngle>=158){S.wiperAngle=158;S.wiperDirection=-1;}
     else if(S.wiperDirection<0&&S.wiperAngle<=18){S.wiperAngle=18;S.wiperDirection=1;S.wiperActive=false;}
   }
-  function step(dt){if(S.campusQueue.length)S.gatePausedTime+=dt;S.time+=dt;S.bobTime+=dt;updateWorldRain(dt);S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
+  function processBonusRewards(){
+    if(!S.bonusRewardQueue.length||S.mode!=='PLAYING')return;
+    if(S.campusGateScene||S.gateRewardGroups.some(r=>!r.played))return;
+    if(S.time<(S.rewardUntil||0))return;
+    const event=S.bonusRewardQueue[0];
+    if(S.time<event.at)return;
+    S.bonusRewardQueue.shift();
+    const songLength=gameAudio.showReward(event.points,event.title);
+    S.lastBonusReward={kind:event.kind,points:event.points,shownAt:S.time};
+    S.rewardUntil=Math.max(S.rewardUntil||0,S.time+Math.max(3.2,songLength+.2));
+  }
+  function step(dt){if(S.campusQueue.length)S.gatePausedTime+=dt;S.time+=dt;S.bobTime+=dt;updateWorldRain(dt);S.notificationTime=Math.max(0,S.notificationTime-dt);S.flash=Math.max(0,S.flash-dt);S.photoTime=Math.max(0,S.photoTime-dt);if(S.photoTime<=0){$('photo-info')?.classList.add('hidden');}processBonusRewards();S.wiperTime=Math.max(0,S.wiperTime-dt);updateWindshield(dt);
     S.boost=clamp(S.boost+(S.boostOn?-30:15)*dt,0,100);if(S.boost<=0)S.boostOn=false;
     updateImpactShake(dt);
     const forward=(keys.has('w')||keys.has('arrowup')?1:0)-(keys.has('s')||keys.has('arrowdown')?1:0);
@@ -5026,7 +4924,7 @@
       // Rebuilt parked vehicles are drawn separately below, allowing CNGs and
       // the colorful rickshaw to REPLACE, not overlap, the baked source cars.
       // Omit the old solid-color traffic beacon; draw a realistic signal below.
-      render(campusLettering);render(teaSignBoard);render(shopSigns);render(storeCanopies);render(cityFacadeDetails);render(cityPosterDecor);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);render(utilityPoles);render(overheadWires);
+      render(campusLettering);render(teaSignBoard);render(shopSigns);render(storeCanopies);render(cityFacadeDetails);if(!S.powerOff||S.time-powerVisual.repairedAt<3.8)render(cityFacadeLights);render(utilityPoles);render(overheadWires);
     } else if(!sourceLoadError){
       // While original geometry downloads, render no incorrect placeholder city.
     }
@@ -5269,11 +5167,11 @@
 
     }
   }
-  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='phase16-visible-posters-banners-start-poles';
-  window.majhiWaterDiagnostics=()=>({phase:'16-visible-posters-banners-start-poles',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,photo,processBonusRewards,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
+  window.majhiVersion='phase17-clean-streets-three-poles-power-rewards';
+  window.majhiWaterDiagnostics=()=>({phase:'17-clean-streets-three-poles-power-rewards',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
-  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
+  window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,posterBannerVertices:0,spawnPoleCount:spawnPoles.length,spawnPolePositions:spawnPoles.map(p=>({x:p.x,z:p.z})),powerArcFrames:POWER_ARC_FRAMES,pendingBonusRewards:S.bonusRewardQueue.map(e=>e.kind),lastBonusReward:S.lastBonusReward,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
     minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatCruiseSpeed:245,boatReverseSpeed:165,boatSinglePassOars:true,boatWetGeometryDraws:0,firstPersonTorsoHidden:true,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     slowCars:S.movingCars.map(c=>({x:+c.x.toFixed(1),z:+c.z.toFixed(1),stopped:c.stopped})),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
