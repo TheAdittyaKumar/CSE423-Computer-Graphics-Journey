@@ -1,6 +1,7 @@
 /*
- * MAJHI JABEN?! / VISUAL LAB 02
- * Water Lab 01.3: refraction & absorption, contact-scale oars, directional wakes, visual rain.
+ * MAJHI JABEN?! / WATER LAB 01.4
+ * Transparent floodwater study: clearer submerged street, smarter angle-based
+ * reflections/refraction, contact-scale oars, directional wakes, and visual rain.
  * No dependencies, downloads, build step, or changes to the main game.
  */
 (() => {
@@ -150,18 +151,24 @@
     }
     return vec3(grad,sheen);
   }
-  // World-space shallow submerged street. Evan's demo sees tiled pool walls;
-  // ours shows rain-darkened road paint and paving only when clarity permits.
+  // World-space shallow submerged street. We keep it readable on purpose so the
+  // experiment behaves like an attractive optical study rather than pure realism.
   vec3 submergedStreet(vec2 at){
-    float grain=noise(at*2.6)*.60+noise(at*7.7+vec2(9.4,1.7))*.40;
-    vec3 road=mix(vec3(.105,.145,.124),vec3(.19,.205,.158),grain);
-    float paintedLine=1.0-smoothstep(.11,.20,abs(abs(at.y)-2.55));
-    float interrupted=step(.26,fract(at.x*.24));
-    road=mix(road,vec3(.58,.56,.36),paintedLine*interrupted*.72);
+    float grain=noise(at*2.2)*.55+noise(at*6.4+vec2(9.4,1.7))*.45;
+    vec3 road=mix(vec3(.10,.142,.118),vec3(.195,.214,.165),grain);
+    // Central broken lane markers.
+    float laneCore=1.0-smoothstep(.08,.16,abs(abs(at.y)-2.55));
+    float laneDash=step(.24,fract(at.x*.22));
+    road=mix(road,vec3(.70,.69,.49),laneCore*laneDash*.92);
+    // Secondary fainter divider to make perspective easier to read.
+    float laneSoft=1.0-smoothstep(.09,.19,abs(abs(at.y)-5.15));
+    road=mix(road,vec3(.42,.44,.33),laneSoft*laneDash*.35);
+    // Very soft curb / sidewalk shoulders.
+    float curb=1.0-smoothstep(.18,.55,abs(abs(at.y)-7.9));
+    road=mix(road,vec3(.23,.25,.20),curb*.55);
     vec2 manhole=(at-vec2(2.15,-.85));
     float ring=length(manhole);
-    road=mix(road,vec3(.075,.11,.095),
-             (1.0-smoothstep(.50,.56,ring))*.48);
+    road=mix(road,vec3(.075,.11,.095),(1.0-smoothstep(.50,.56,ring))*.48);
     road+=vec3(.025,.036,.022)*(noise(at*18.3)-.5);
     return road;
   }
@@ -217,23 +224,33 @@
           float distanceToBed=(-1.20-vWorld.y)/min(-.075,T.y);
           vec2 hit=vWorld.xz+T.xz*max(0.0,distanceToBed);
           vec3 roadColor=submergedStreet(hit);
-          // Beer-Lambert-inspired attenuation: opaque murky water at low
-          // clarity, clearer water for studying refraction at high clarity.
           float clarity=clamp(uClarity,0.0,1.0);
-          float absorption=mix(3.0,.18,pow(clarity,1.70));
-          float transmission=exp(-absorption*1.20/max(.20,-T.y));
-          vec3 depthColor=mix(vec3(.035,.165,.174),vec3(.068,.246,.230),
+          // We keep the water artistically transparent like Evan's study, but
+          // still make it view-dependent so the street is clearest when looking
+          // down and more reflective toward the horizon.
+          float viewThrough=smoothstep(.16,.92,nv);
+          float absorption=mix(1.55,.06,pow(clarity,1.35));
+          float transmission=exp(-absorption*1.08/max(.18,-T.y));
+          float streetVisibility=clamp(mix(.32,1.0,clarity)*(0.55+0.45*viewThrough),0.0,1.0);
+          vec3 depthColor=mix(vec3(.034,.158,.168),vec3(.072,.258,.238),
                               clamp(.48+(n1-.5)*.28+(n2-.5)*.16,0.0,1.0));
-          vec3 refracted=mix(depthColor,roadColor,transmission);
-          // Keep 0.02 base Fresnel but allow art-directed strength for our
-          // overcast environment. Preserve dark, readable near-water detail.
-          float reflectAmount=clamp(fresnel*mix(.45,1.65,uReflect)+.025*uReflect,.0,.78);
-          color=mix(refracted,reflection,reflectAmount);
+          // Soft caustic-like modulation on the submerged road for attractive
+          // readability. It is stylized, not a claim of strict realism.
+          float caustic=pow(max(0.0,dot(normalize(vec3(-N.x*.95,1.0,-N.z*.95)),sun)),7.0);
+          roadColor+=vec3(.12,.20,.18)*caustic*(0.25+0.75*clarity);
+          vec3 refracted=mix(depthColor,roadColor,transmission*streetVisibility);
+          vec3 waterBody=mix(refracted,refracted+vec3(.016,.055,.052),0.22);
+          // Reflection remains physically motivated by Fresnel, but is art-
+          // directed so the surface stays readable instead of turning milky.
+          float reflectAmount=clamp(mix(fresnel*.55,fresnel*1.35,clamp(uReflect,0.0,1.0))
+                                    *mix(.80,1.08,1.0-viewThrough)
+                                    +0.012*uReflect, .0, .66);
+          color=mix(waterBody,reflection,reflectAmount);
           // Narrow glints follow the actually computed normal; the old wide
           // additive gradient was creating cloudy pale blotches around oars.
           float shine=pow(max(dot(reflect(-sun,N),V),0.0),145.0);
-          color+=vec3(.75,.77,.65)*shine*(uLighting==0?.32:.12);
-          color+=vec3(.22,.30,.29)*clamp(rainData.z,0.0,.6)*.095;
+          color+=vec3(.75,.77,.65)*shine*(uLighting==0?.28:.10);
+          color+=vec3(.22,.30,.29)*clamp(rainData.z,0.0,.6)*.082;
           // Brief, subdued foam/sheen where an actual oar blade contacts water
           // or a moving hull displaces it. No tiled circular white decals.
           float foam=0.0;
@@ -1007,13 +1024,14 @@
     ]);
   }
   const presets={
-    threequarter:{yaw:.58,pitch:.29,distance:4.5,target:[0,1.10,0]},
-    front:{yaw:0,pitch:.19,distance:4.2,target:[0,1.10,0]},
-    side:{yaw:PI/2,pitch:.14,distance:4.2,target:[0,1.06,0]},
-    rear:{yaw:PI,pitch:.15,distance:4.2,target:[0,1.10,0]},
-    top:{yaw:.50,pitch:1.10,distance:5.25,target:[0,.88,0]},
-    closeup:{yaw:.36,pitch:.12,distance:2.55,target:[-.45,1.55,0]},
-    surface:{yaw:.60,pitch:.82,distance:7.8,target:[1.35,.035,1.4]}
+    threequarter:{yaw:.56,pitch:.25,distance:4.35,target:[0,.98,0]},
+    front:{yaw:0,pitch:.18,distance:4.15,target:[0,1.02,0]},
+    side:{yaw:PI/2,pitch:.13,distance:4.15,target:[0,.98,0]},
+    rear:{yaw:PI,pitch:.14,distance:4.15,target:[0,1.02,0]},
+    top:{yaw:.50,pitch:1.04,distance:5.10,target:[0,.70,0]},
+    closeup:{yaw:.34,pitch:.10,distance:2.45,target:[-.42,1.44,0]},
+    // Water view now favors readable submerged-road inspection.
+    surface:{yaw:.58,pitch:.54,distance:6.6,target:[1.05,.10,1.15]}
   };
   const cam={...presets.threequarter,target:[...presets.threequarter.target]};
   function selectView(name){
@@ -1072,7 +1090,7 @@
   canvas.addEventListener('pointercancel',release);
   canvas.addEventListener('wheel',e=>{e.preventDefault();cam.distance=clamp(cam.distance*Math.exp(e.deltaY*.001),1.8,14);},{passive:false});
 
-  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.72,wave:.38,wind:.52,reflections:.85,travel:0,clarity:.25};
+  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.72,wave:.38,wind:.54,reflections:.52,travel:0,clarity:.55};
   // Boat motion is an explicit experiment, rather than a perpetual fake wake.
   // This slider is inserted beside the existing wake slider: no HTML/CSS edits.
   const travelLabel=document.createElement('div');
@@ -1102,11 +1120,11 @@
   clarityTitle.htmlFor='claritySlider';
   clarityTitle.textContent='Water clarity (refraction test)';
   const clarityValue=document.createElement('output');
-  clarityValue.id='claritySliderValue';clarityValue.textContent='25% (murky)';
+  clarityValue.id='claritySliderValue';clarityValue.textContent='55%';
   clarityLabel.append(clarityTitle,clarityValue);
   const claritySlider=document.createElement('input');
   claritySlider.type='range';claritySlider.id='claritySlider';
-  claritySlider.min='0';claritySlider.max='100';claritySlider.value='25';
+  claritySlider.min='0';claritySlider.max='100';claritySlider.value='55';
   $('reflectionSlider').after(clarityLabel,claritySlider);
   claritySlider.addEventListener('input',()=>{
     state.clarity=Number(claritySlider.value)/100;
@@ -1354,7 +1372,7 @@
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Water Lab 01.3 ready';
+      status.textContent='WebGL 2 active · Water Lab 01.4 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);
