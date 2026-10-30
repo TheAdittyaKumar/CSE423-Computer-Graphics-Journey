@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#081e29">
+  <meta name="description" content="Majhi Jaben?! Water Lab 01 — GPU interactive floodwater simulation, tested separately from the main game.">
+  <title>Majhi Jaben?! · Water Lab 01</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./water-test.js?v=1" defer></script>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 01</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
+      <a class="game-link" href="../index.html">Original game</a>
+    </header>
+    <main class="layout">
+      <section class="viewer" aria-label="Interactive 3D floodwater and boat demonstration">
+        <canvas id="scene" tabindex="0">Your browser does not support the 3D preview.</canvas>
+        <div class="scene-status"><span class="status-dot"></span><span id="rendererStatus">Starting water simulation...</span></div>
+        <div id="errorPanel" class="error-panel" hidden><h2>Renderer unavailable</h2><p id="errorMessage">Could not start WebGL 2.</p></div>
+        <div class="hero"><span class="eyebrow">WATER STUDY 01 / SEPARATE FROM MAIN GAME</span><h2>Ripples, not tiles.</h2><p>Click the water to create a ripple. Drag to orbit, scroll to zoom. Compare the original noise water against the new simulated surface.</p></div>
+        <div class="viewer-footer">CLICK WATER TO SPLASH <span>·</span> DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM</div>
+      </section>
+      <aside class="panel">
+        <div class="section intro"><span class="eyebrow">EXPERIMENT CONTROLS</span><h2>Inspect the water</h2><p>Test how floodwater responds to the boat, oars and rain. No live game files are changed.</p></div>
+        <section class="section">
+          <h3>Water comparison</h3>
+          <div class="duo"><button type="button" class="mode-btn active" id="modeSim" aria-pressed="true">New simulated</button><button type="button" class="mode-btn" id="modeClassic" aria-pressed="false">Previous water</button></div>
+          <p class="note" id="modeDescription">GPU height and velocity ripples · paddle splashes · hull wake · rain</p>
+          <div class="duo"><button type="button" class="secondary-btn" id="centerDrop">Drop a ripple</button><button type="button" class="secondary-btn" id="resetWater">Clear ripples</button></div>
+        </section>
+        <section class="section">
+          <h3>Water behavior</h3>
+          <div class="slider-label"><label for="rainSlider">Rain frequency</label><output id="rainSliderValue">22%</output></div><input type="range" id="rainSlider" min="0" max="100" value="22">
+          <div class="slider-label"><label for="wakeSlider">Boat wake</label><output id="wakeSliderValue">72%</output></div><input type="range" id="wakeSlider" min="0" max="100" value="72">
+          <div class="slider-label"><label for="waveSlider">Ripple height</label><output id="waveSliderValue">26%</output></div><input type="range" id="waveSlider" min="0" max="100" value="26">
+          <div class="slider-label"><label for="windSlider">Wind surface detail</label><output id="windSliderValue">52%</output></div><input type="range" id="windSlider" min="0" max="100" value="52">
+          <div class="slider-label"><label for="reflectionSlider">View-angle reflections</label><output id="reflectionSliderValue">85%</output></div><input type="range" id="reflectionSlider" min="0" max="100" value="85">
+        </section>
+        <section class="section">
+          <h3>Camera</h3>
+          <div class="camera-grid" role="group" aria-label="Camera presets">
+            <button class="view-btn active" data-view="threequarter" type="button" aria-pressed="true">3/4</button>
+            <button class="view-btn" data-view="front" type="button" aria-pressed="false">Front</button>
+            <button class="view-btn" data-view="side" type="button" aria-pressed="false">Side</button>
+            <button class="view-btn" data-view="rear" type="button" aria-pressed="false">Rear</button>
+            <button class="view-btn" data-view="top" type="button" aria-pressed="false">Top</button>
+            <button class="view-btn" data-view="closeup" type="button" aria-pressed="false">Close-up</button>
+          </div><button id="resetCamera" type="button" class="secondary-btn wide">Reset camera</button>
+        </section>
+        <section class="section">
+          <h3>Rowing, lighting & debug</h3>
+          <button id="pauseRowing" type="button" class="primary-btn" aria-pressed="false">Pause rowing</button>
+          <div class="slider-label"><label for="rowingSpeed">Rowing speed</label><output id="speedValue">1.0x</output></div><input type="range" id="rowingSpeed" min="0.3" max="2" step="0.1" value="1">
+          <div class="slider-label"><label for="strokePhase">Stroke position</label><output id="phaseValue">0%</output></div><input type="range" id="strokePhase" min="0" max="100" step="1" value="0">
+          <div class="phase-card"><span class="eyebrow">CURRENT STROKE</span><strong id="phaseName">Catch</strong><p id="phaseDescription">The blades rotate down to engage the water.</p></div>
+          <div class="duo lighting-options" role="group" aria-label="Lighting presets"><button class="light-btn active" data-light="studio" aria-pressed="true" type="button">Studio</button><button class="light-btn" data-light="overcast" aria-pressed="false" type="button">Overcast</button></div>
+          <label class="check"><input id="showRig" type="checkbox"> Show oar pivots and hand grips</label>
+          <label class="check"><input id="showWater" type="checkbox" checked> Show water</label>
+          <div class="debug-data"><div><small>RENDERER</small><strong>WebGL 2</strong></div><div><small>PERFORMANCE</small><strong id="fpsValue">-- FPS</strong></div><div><small>ROWING</small><strong id="animationStatus">Running</strong></div></div>
+        </section>
+        <div class="prototype-notice"><strong>A safe visual experiment</strong><p>These files live only in <code>docs/water-lab-01/</code>. The original playable game, voices, missions, and existing Visual Lab 02 are not modified.</p></div>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>
