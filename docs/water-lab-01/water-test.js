@@ -1,6 +1,6 @@
 /*
  * MAJHI JABEN?! / VISUAL LAB 02
- * Water Lab 01.2: motion-linked wakes, paddle entry ripples, calibrated optics.
+ * Water Lab 01.3: refraction & absorption, contact-scale oars, directional wakes, visual rain.
  * No dependencies, downloads, build step, or changes to the main game.
  */
 (() => {
@@ -90,7 +90,7 @@
   in vec3 vNormal,vWorld;
   in float vDistance,vWave;
   uniform vec3 uTint,uCamera;
-  uniform float uTime,uReflect,uWind,uWaveScale;
+  uniform float uTime,uReflect,uWind,uWaveScale,uClarity,uRain;
   uniform highp int uType,uWaterMode;
   uniform int uLighting,uDebug;
   uniform sampler2D uSurfaceNormalTex;
@@ -125,6 +125,46 @@
     sky+=vec3(.65,.50,.25)*sunGlow*(uLighting==0?.29:.07);
     return sky;
   }
+  // A cheap fragment-only rainfall layer avoids dozens of extra GPU simulation
+  // passes per frame. Four neighboring, jittered cells contribute fine ripples.
+  // This is supplementary shading, NOT a claim of full hydrodynamics.
+  vec3 rainfallRipples(vec2 world, float t){
+    vec2 grid=world/1.40;
+    vec2 cell=floor(grid);
+    vec2 grad=vec2(0.0);
+    float sheen=0.0;
+    for(int yy=0;yy<2;yy++)for(int xx=0;xx<2;xx++){
+      vec2 id=cell+vec2(float(xx),float(yy));
+      float seed=hash21(id+vec2(91.17,33.43));
+      float lifetime=1.45;
+      float age=fract(t/lifetime+seed);
+      float active=step(hash21(id+vec2(31.91,88.41)),uRain);
+      vec2 jitter=vec2(hash21(id+vec2(7.2,39.1)),hash21(id+vec2(48.3,17.4)));
+      vec2 hit=(id+vec2(.25)+jitter*.5)*1.40;
+      vec2 d=world-hit;
+      float dist=length(d)+.00001;
+      float ringRadius=.08+age*.78;
+      float ring=exp(-pow((dist-ringRadius)/.075,2.0))*active*(1.0-age);
+      grad+=(d/dist)*ring*.29;
+      sheen+=ring;
+    }
+    return vec3(grad,sheen);
+  }
+  // World-space shallow submerged street. Evan's demo sees tiled pool walls;
+  // ours shows rain-darkened road paint and paving only when clarity permits.
+  vec3 submergedStreet(vec2 at){
+    float grain=noise(at*2.6)*.60+noise(at*7.7+vec2(9.4,1.7))*.40;
+    vec3 road=mix(vec3(.105,.145,.124),vec3(.19,.205,.158),grain);
+    float paintedLine=1.0-smoothstep(.11,.20,abs(abs(at.y)-2.55));
+    float interrupted=step(.26,fract(at.x*.24));
+    road=mix(road,vec3(.58,.56,.36),paintedLine*interrupted*.72);
+    vec2 manhole=(at-vec2(2.15,-.85));
+    float ring=length(manhole);
+    road=mix(road,vec3(.075,.11,.095),
+             (1.0-smoothstep(.50,.56,ring))*.48);
+    road+=vec3(.025,.036,.022)*(noise(at*18.3)-.5);
+    return road;
+  }
   void main(){
     vec3 sun=normalize(uLighting==0?vec3(-.6,1.0,.9):vec3(-.35,1.0,.2));
     vec3 color=uTint;
@@ -146,10 +186,12 @@
         float w2=dot(p,vec2(-.37,.83))+uTime*.48;
         vec2 windSlope=(vec2(.58,.34)*cos(w1)*.15+
                         vec2(-.37,.83)*cos(w2)*.12)*uWind;
-        vec2 noiseSlope=vec2(n1-n2,n3-n1)*.092*uWind;
-        vec3 N=normalize(vec3(-(slope.x*(.10+uWaveScale*1.8)+windSlope.x+noiseSlope.x),
+        vec2 noiseSlope=vec2(n1-n2,n3-n1)*.075*uWind;
+        vec3 rainData=rainfallRipples(p,uTime);
+        vec2 rainSlope=rainData.xy*.23;
+        vec3 N=normalize(vec3(-(slope.x*(.10+uWaveScale*1.8)+windSlope.x+noiseSlope.x+rainSlope.x),
                                1.0,
-                               -(slope.y*(.10+uWaveScale*1.8)+windSlope.y+noiseSlope.y)));
+                               -(slope.y*(.10+uWaveScale*1.8)+windSlope.y+noiseSlope.y+rainSlope.y)));
         if(uDebug==1){
           // Warm red = crest, deep blue = trough, neutral grey = flat.
           float h=clamp(height*13.0,-1.,1.);
@@ -163,24 +205,35 @@
           vec3 diagnosticN=normalize(vec3(N.x*5.0,max(.15,N.y),N.z*5.0));
           color=diagnosticN*.5+.5;
         }else{
+          // Physically motivated: reflect(-V,N) and refract(-V,N,1/1.333)
+          // form the two rays, then Fresnel selects how much of each to see.
           vec3 V=normalize(uCamera-vWorld);
-          float nv=clamp(dot(N,V),0.,1.);
-          float fresnel=.025+.975*pow(1.0-nv,5.0);
-          vec3 R=reflect(-V,N);
-          vec3 reflected=skyColor(R);
-          float tiny=(n1-.5)*.055+(n2-.5)*.030+(n3-.5)*.012;
-          vec3 deep=vec3(.040,.176,.185);
-          vec3 bright=vec3(.085,.295,.289);
-          color=mix(deep,bright,clamp(.48+tiny*5.0+height*.09,0.,1.));
-          // Schlick Fresnel with some base reflection so it remains legible
-          // even when viewed from above (unlike the first lab).
-          // Keep glancing reflections but prevent a broad blown-out horizon.
-          float reflectAmount=clamp((.055+.51*fresnel)*uReflect,0.,.48);
-          color=mix(color,reflected,reflectAmount);
-          float shine=pow(max(dot(reflect(-sun,N),V),0.),75.0);
-          color+=vec3(.73,.76,.64)*shine*(uLighting==0?.42:.16);
-          float rippleGradient=length(slope)*(.10+uWaveScale);
-          color+=vec3(.075,.11,.10)*smoothstep(.14,.65,rippleGradient)*.18;
+          float nv=clamp(dot(N,V),0.0,1.0);
+          float f0=pow((1.333-1.0)/(1.333+1.0),2.0); // about 2% at normal incidence
+          float fresnel=f0+(1.0-f0)*pow(1.0-nv,5.0);
+          vec3 reflection=skyColor(reflect(-V,N));
+          // Ray intersected with a shallow flooded road, not bright pool tiles.
+          vec3 T=refract(-V,N,1.0/1.333);
+          float distanceToBed=(-1.20-vWorld.y)/min(-.075,T.y);
+          vec2 hit=vWorld.xz+T.xz*max(0.0,distanceToBed);
+          vec3 roadColor=submergedStreet(hit);
+          // Beer-Lambert-inspired attenuation: opaque murky water at low
+          // clarity, clearer water for studying refraction at high clarity.
+          float clarity=clamp(uClarity,0.0,1.0);
+          float absorption=mix(3.0,.18,pow(clarity,1.70));
+          float transmission=exp(-absorption*1.20/max(.20,-T.y));
+          vec3 depthColor=mix(vec3(.035,.165,.174),vec3(.068,.246,.230),
+                              clamp(.48+(n1-.5)*.28+(n2-.5)*.16,0.0,1.0));
+          vec3 refracted=mix(depthColor,roadColor,transmission);
+          // Keep 0.02 base Fresnel but allow art-directed strength for our
+          // overcast environment. Preserve dark, readable near-water detail.
+          float reflectAmount=clamp(fresnel*mix(.45,1.65,uReflect)+.025*uReflect,.0,.78);
+          color=mix(refracted,reflection,reflectAmount);
+          // Narrow glints follow the actually computed normal; the old wide
+          // additive gradient was creating cloudy pale blotches around oars.
+          float shine=pow(max(dot(reflect(-sun,N),V),0.0),145.0);
+          color+=vec3(.75,.77,.65)*shine*(uLighting==0?.32:.12);
+          color+=vec3(.22,.30,.29)*clamp(rainData.z,0.0,.6)*.095;
           // Brief, subdued foam/sheen where an actual oar blade contacts water
           // or a moving hull displaces it. No tiled circular white decals.
           float foam=0.0;
@@ -191,7 +244,7 @@
             float randomEdge=noise(p*8.3+float(i)*13.1);
             foam+=f.z*exp(-2.4*r*r)*(.55+.45*randomEdge);
           }
-          color=mix(color,vec3(.59,.75,.69),clamp(foam*.34,0.,.23));
+          color=mix(color,vec3(.51,.64,.57),clamp(foam*.23,0.,.13));
         }
       }else{
         // A/B baseline from Water Lab 01 (do not alter its texture pattern).
@@ -271,6 +324,26 @@
       outputInfo(h.x+uStrength*f,h.y);
     }`;
 
+  // An oriented Kelvin-style V approximation. Unlike independent circular
+  // drops, the injected heightfield is narrow along two trailing arms, with
+  // strength proportional to actual hull speed and no wake when stationary.
+  const simWakeFragment = `#version 300 es\n${simCommon}
+    uniform vec2 uCenter;
+    uniform float uStrength,uHeading;
+    void main(){
+      ivec2 pixel=ivec2(gl_FragCoord.xy);
+      vec2 old=info(pixel);
+      vec2 p=(vUv-uCenter)*24.0;
+      float behind=-p.x*uHeading;
+      float zDistance=abs(p.y);
+      float vee=abs(zDistance-(.24+behind*.48));
+      float arm=exp(-pow(vee/.12,2.0));
+      float longitudinal=smoothstep(-.12,.21,behind)*(1.0-smoothstep(1.15,1.85,behind));
+      float central=exp(-pow(zDistance/.19,2.0))*exp(-pow((behind-.28)/.62,2.0))*.19;
+      float crest=clamp(arm*longitudinal+central,0.0,1.0);
+      outputInfo(old.x+crest*uStrength,old.y);
+    }`;
+
   // Original WebGL Water computes a normal field after each wave update.
   // Here we use a separate RGBA8 normal texture with LINEAR filtering:
   //   R/G = encoded height gradient in world units, B = height for debug.
@@ -314,7 +387,9 @@
     normal:gl.getUniformLocation(program,'uSurfaceNormalTex'),
     debug:gl.getUniformLocation(program,'uDebug'),
     foam:gl.getUniformLocation(program,'uFoam[0]'),
-    foamCount:gl.getUniformLocation(program,'uFoamCount')
+    foamCount:gl.getUniformLocation(program,'uFoamCount'),
+    clarity:gl.getUniformLocation(program,'uClarity'),
+    rain:gl.getUniformLocation(program,'uRain')
   };
   gl.enable(gl.DEPTH_TEST);
   gl.depthFunc(gl.LEQUAL);
@@ -330,7 +405,8 @@
     if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
     return {program:p,previous:gl.getUniformLocation(p,'uPrevious'),
       center:gl.getUniformLocation(p,'uCenter'),radius:gl.getUniformLocation(p,'uRadius'),
-      strength:gl.getUniformLocation(p,'uStrength')};
+      strength:gl.getUniformLocation(p,'uStrength'),
+      heading:gl.getUniformLocation(p,'uHeading')};
   }
   let sim;
   try{
@@ -355,6 +431,7 @@
     sim={buffers,read:0,blank,quad:gl.createVertexArray(),
       update:createSimulationProgram(simUpdateFragment),
       drop:createSimulationProgram(simDropFragment),
+      wake:createSimulationProgram(simWakeFragment),
       normals:createSimulationProgram(simNormalFragment)};
     const normalTex=gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D,normalTex);
@@ -382,10 +459,11 @@
     }
     sim.read=0;
     pendingDrops.length=0;
+    pendingWakes.length=0;
     foamSpots.length=0;
     gl.bindFramebuffer(gl.FRAMEBUFFER,null);
   }
-  function simulationPass(effect,center,radius,strength){
+  function simulationPass(effect,center,radius,strength,heading=1){
     gl.disable(gl.DEPTH_TEST);
     const next=1-sim.read;
     gl.bindFramebuffer(gl.FRAMEBUFFER,sim.buffers[next].fb);
@@ -399,6 +477,7 @@
       gl.uniform2fv(effect.center,center);
       gl.uniform1f(effect.radius,radius);
       gl.uniform1f(effect.strength,strength);
+      if(effect.heading)gl.uniform1f(effect.heading,heading);
     }
     gl.drawArrays(gl.TRIANGLES,0,3);
     sim.read=next;
@@ -416,6 +495,7 @@
   }
 
   const pendingDrops=[];
+  const pendingWakes=[];
   const foamSpots=[];
   function addFoam(x,z,amount=.20,radius=.25){
     foamSpots.push({x,z,amount,radius,age:0,lifetime:.55});
@@ -992,7 +1072,7 @@
   canvas.addEventListener('pointercancel',release);
   canvas.addEventListener('wheel',e=>{e.preventDefault();cam.distance=clamp(cam.distance*Math.exp(e.deltaY*.001),1.8,14);},{passive:false});
 
-  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.72,wave:.38,wind:.52,reflections:.85,travel:0};
+  const state={phase:0,speed:1,running:true,lighting:0,showRig:false,showWater:true,mode:1,debug:0,rain:.22,wake:.72,wave:.38,wind:.52,reflections:.85,travel:0,clarity:.25};
   // Boat motion is an explicit experiment, rather than a perpetual fake wake.
   // This slider is inserted beside the existing wake slider: no HTML/CSS edits.
   const travelLabel=document.createElement('div');
@@ -1012,6 +1092,25 @@
   travelSlider.addEventListener('input',()=>{
     state.travel=Number(travelSlider.value)/100;
     travelValue.textContent=state.travel===0?'0% (still)':travelSlider.value+'%';
+  });
+  // Floodwater clarity is a material-study slider: the default is murky.
+  // 100% deliberately reveals the submerged street to demonstrate refraction
+  // and explain why Evan's pool is so readable, not to suggest Dhaka is clear.
+  const clarityLabel=document.createElement('div');
+  clarityLabel.className='slider-label';
+  const clarityTitle=document.createElement('label');
+  clarityTitle.htmlFor='claritySlider';
+  clarityTitle.textContent='Water clarity (refraction test)';
+  const clarityValue=document.createElement('output');
+  clarityValue.id='claritySliderValue';clarityValue.textContent='25% (murky)';
+  clarityLabel.append(clarityTitle,clarityValue);
+  const claritySlider=document.createElement('input');
+  claritySlider.type='range';claritySlider.id='claritySlider';
+  claritySlider.min='0';claritySlider.max='100';claritySlider.value='25';
+  $('reflectionSlider').after(clarityLabel,claritySlider);
+  claritySlider.addEventListener('input',()=>{
+    state.clarity=Number(claritySlider.value)/100;
+    clarityValue.textContent=claritySlider.value+'%'+(state.clarity<.4?' (murky)':'');
   });
   const tempo=$('rowingSpeed'),stroke=$('strokePhase');
   function updatePauseButton(){
@@ -1142,7 +1241,7 @@
         fpsClock=0;fpsFrames=0;
       }
       let actualSpeed=0;
-      if(state.running && state.travel>.001){
+      if(state.travel>.001){
         // Demonstration travel: move for real, then reverse within the GPU
         // simulation area. The directional wake changes sides on reversal.
         const speed=1.65*state.travel;
@@ -1161,32 +1260,33 @@
             const contact=paddleContact(oarPose(state.phase,side));
             if(contact){
               const [x,z]=contact;
-              splashAt(x,z,.028+.040*state.wave,.0085);
-              addFoam(x,z,.29,.19);
+              splashAt(x,z,.017+.026*state.wave,.0065);
+              addFoam(x,z,.15,.12);
             }
           }
         }
-        // Wake only while physically moving, attached to the back corners.
+        // Wake only when the hull moves through water. Two converging
+        // arms are injected in one GPU pass (not concentric circular drops).
+        // The moving object continues even when its rowing pose is paused.
         if(Math.abs(actualSpeed)>.04 && state.wake>.005 &&
-           seconds-lastWake>.115){
+           seconds-lastWake>.095){
           lastWake=seconds;
-          const behind=actualSpeed>0?-1:1;
-          const intensity=Math.abs(actualSpeed)/1.65;
-          for(const side of [-1,1]){
-            const x=boatX+behind*(1.15+(Math.random()-.5)*.12);
-            const z=side*(.23+.08*Math.random());
-            splashAt(x,z,(.018+.040*intensity)*state.wake,.009);
-            addFoam(x,z,.13*intensity*state.wake,.22);
-          }
+          const heading=Math.sign(actualSpeed);
+          const intensity=clamp(Math.abs(actualSpeed)/1.65,0.0,1.0);
+          const center=[boatX/24+.5,.5];
+          // Deferred until after normal simulation steps.
+          pendingWakes.push({center,heading,strength:(.011+.015*intensity)*state.wake*intensity});
+          addFoam(boatX-heading*1.13,-.31,.065*intensity,.12);
+          addFoam(boatX-heading*1.13,.31,.065*intensity,.12);
         }
         if(state.rain>.005){
-          rainAccumulator+=dt*(1.0+19.0*state.rain);
+          rainAccumulator+=dt*(.8+8.0*state.rain);
           let count=0;
           while(rainAccumulator>=1 && count++<3){
             rainAccumulator-=1;
             splashAt((Math.random()-.5)*SIM_SPAN*.80,
                      (Math.random()-.5)*SIM_SPAN*.80,
-                     .018+state.rain*.025,.005);
+                     .006+state.rain*.012,.004);
           }
         }
         // Fixed-rate ping-pong steps: consistent ripple propagation at 30,
@@ -1198,9 +1298,13 @@
           simulationPass(sim.update);
           simAccumulator-=1/60;
         }
-        for(let i=0;i<Math.min(8,pendingDrops.length);i++){
+        for(let i=0;i<Math.min(6,pendingDrops.length);i++){
           const d=pendingDrops.shift();
           simulationPass(sim.drop,d.uv,d.radius,d.strength);
+        }
+        for(let i=0;i<Math.min(2,pendingWakes.length);i++){
+          const w=pendingWakes.shift();
+          simulationPass(sim.wake,w.center,0,w.strength,w.heading);
         }
       } else if(pendingDrops.length>30)pendingDrops.splice(0,pendingDrops.length-30);
       for(let i=foamSpots.length-1;i>=0;i--){
@@ -1231,6 +1335,8 @@
       gl.uniform1f(uni.waveScale,state.wave*.55);
       gl.uniform1f(uni.wind,state.wind);
       gl.uniform1f(uni.reflections,state.reflections);
+      gl.uniform1f(uni.clarity,state.clarity);
+      gl.uniform1f(uni.rain,state.rain);
       gl.clearColor(...(state.lighting===0?[.63,.76,.73,1]:[.52,.63,.68,1]));
       gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
       gl.useProgram(program);
@@ -1248,7 +1354,7 @@
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Water Lab 01.2 ready';
+      status.textContent='WebGL 2 active · Water Lab 01.3 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);
