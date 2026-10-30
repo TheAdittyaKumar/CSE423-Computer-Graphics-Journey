@@ -514,8 +514,13 @@
         }
         // Paddle contact is stroke-phase driven. Idle, pause and coasting
         // don't spawn new rings. Both blades perturb distinct contact points.
-        if(S.rowing){const stroke=Math.floor(S.time/.65*2);
-          if(stroke!==lastStroke){lastStroke=stroke;
+        if(S.rowing){
+          // The original character has a 0.65 s rowing cycle. Contact with
+          // water belongs to catch/drive, not release or airborne recovery.
+          const phase=S.strokeTime/.65;
+          const inWater=phase>=.10&&phase<=.53;
+          const stroke=Math.floor(S.time/.65*3);
+          if(inWater&&stroke!==lastStroke){lastStroke=stroke;
             for(const side of [-1,1]){
               const px=S.x+fx*18-fz*side*49,pz=S.z+fz*18+fx*side*49;
               run(effects.paddle,{center:uv(px,pz),motion:[fx,fz],strength:.075});
@@ -543,12 +548,12 @@
       }
       // Rain impacts: a bounded, deterministic density, disabled in the
       // university courtyard and during menu/pause.
-      if(S.mode==='PLAYING'&&elapsed-lastSplash>.055){
+      if(S.mode==='PLAYING'&&elapsed-lastSplash>.065){
         lastSplash=elapsed;
         const rain=campusRainWeight(S.x,S.z);
-        if(Math.random()<.25*clamp(rain,0,1)){
+        if(Math.random()<.78*clamp(rain,0,1)){
           const px=S.x+(Math.random()-.5)*550,pz=S.z+(Math.random()-.5)*550;
-          if(distance(px,pz,0,1378)>355)ripple(px,pz,.032,.008);
+          if(distance(px,pz,0,1378)>365)ripple(px,pz,.046,.007);
         }
       }
       run(effects.normals);
@@ -567,6 +572,255 @@
   let dhakaWater=null,waterIntegrationError=null;
   if(lab2){try{dhakaWater=createDhakaWaterLab();}
     catch(err){waterIntegrationError=String(err);console.warn('Water integration fallback:',err);}}
+  // Phase 2: WATER LAB 02.1 OPTICAL PASS. This program does not replace the
+  // original town geometry, rescue systems, boat or voice engine. We capture
+  // the actual opaque town into a screen texture, then ray-bend that texture
+  // through the simulated surface (rather than merely blending teal over it).
+  function createOpticalWaterRenderer(){
+    if(!dhakaWater || !webgl2Context) return null;
+    const vertex=`precision highp float;
+      attribute vec3 aPos;
+      uniform mat4 uModel,uView,uProj;
+      uniform sampler2D uField;
+      uniform vec2 uCenter;
+      uniform float uSpan,uTime;
+      varying highp vec3 vWorld;
+      varying highp vec2 vSimUV;
+      void main(){
+        vec4 p=uModel*vec4(aPos,1.0);
+        vSimUV=(p.xz-uCenter)/uSpan+0.5;
+        vec2 cell=clamp(vSimUV,vec2(0.0),vec2(1.0));
+        vec4 samples=texture2D(uField,cell);
+        float height=2.0*dot(samples.rg,vec2(65280.0,255.0))/65535.0-1.0;
+        float edge=max(abs(vSimUV.x-0.5),abs(vSimUV.y-0.5));
+        float locality=1.0-smoothstep(0.38,0.495,edge);
+        float swell=1.10*sin(0.027*p.x+0.013*p.z-uTime*1.18)
+                    +0.65*sin(-0.017*p.x+0.029*p.z+uTime*0.83)
+                    +0.30*sin(0.080*p.z+0.031*p.x-uTime*1.63);
+        float dry=1.0-smoothstep(230.0,365.0,length(p.xz-vec2(0.,1378.)));
+        // Road source geometry lies around y=0; water has genuine separation.
+        // 13.7 world units is a safe physical baseline for the original boat rig.
+        p.y=13.7+(.92*swell+13.0*height*locality)*(1.0-.55*dry);
+        vWorld=p.xyz;
+        vec4 eye=uView*p;
+        gl_Position=uProj*eye;
+        gl_Position.x=-gl_Position.x; // game source-geometry handedness
+      }`;
+    const fragment=`precision highp float;
+      varying highp vec3 vWorld;
+      varying highp vec2 vSimUV;
+      uniform sampler2D uSurface,uScene;
+      uniform mat4 uView,uProj;
+      uniform vec3 uEye,uSun;
+      uniform vec2 uResolution;
+      uniform float uTime,uFloodFloor,uRain,uWind,uClarity,uRipple;
+      uniform float uReflect,uDistort,uCaustic;
+      float hash21(vec2 p){p=fract(p*vec2(123.34,345.45));p+=dot(p,p+34.345);return fract(p.x*p.y);}
+      float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+        return mix(mix(hash21(i),hash21(i+vec2(1.,0.)),f.x),
+                   mix(hash21(i+vec2(0.,1.)),hash21(i+vec2(1.,1.)),f.x),f.y);}
+      vec3 sky(vec3 dir,float sunny){
+        float y=clamp(dir.y,-1.,1.);
+        vec3 overcast=mix(vec3(.27,.36,.42),vec3(.14,.23,.32),smoothstep(-.05,.88,y));
+        vec3 bright=mix(vec3(.59,.73,.72),vec3(.24,.42,.54),smoothstep(-.05,.88,y));
+        vec3 c=mix(overcast,bright,sunny);
+        vec2 uv=dir.xz/max(.32,dir.y+.62);
+        float cloud=.65*noise(uv*1.8+vec2(uTime*.006,0.))+.35*noise(uv*4.4+vec2(19.2,7.8));
+        c=mix(c,vec3(.73,.77,.76),smoothstep(.51,.77,cloud)*(.14+.26*sunny));
+        c+=vec3(.70,.52,.30)*pow(max(0.,dot(dir,normalize(uSun))),180.)*(.025+.31*sunny);
+        return c;
+      }
+      // World-anchored subpixel rainfall rings: cheap shader detail on TOP of
+      // the GPU rain impulses. No visible tiled foam or permanent rings.
+      vec3 rainfall(vec2 world,float t){
+        vec2 grid=world/23.0,base=floor(grid);vec2 grad=vec2(0.);float highlights=0.;
+        for(int yy=0;yy<2;yy++)for(int xx=0;xx<2;xx++){
+          vec2 id=base+vec2(float(xx),float(yy));
+          float seed=hash21(id+vec2(19.3,49.2));
+          float active=step(hash21(id+vec2(93.,17.)),uRain);
+          float age=fract(t/1.38+seed),radius=2.1+age*10.6;
+          vec2 center=(id+vec2(.12)+vec2(hash21(id+vec2(5.,7.)),hash21(id+vec2(3.,9.)))*.72)*23.;
+          vec2 d=world-center;float r=length(d)+.0001;
+          float ring=exp(-pow((r-radius)/1.7,2.0))*active*(1.-age);
+          grad+=d/r*ring*.19;highlights+=ring;
+        }
+        return vec3(grad,highlights);
+      }
+      vec2 projectUV(vec3 point){
+        vec4 clip=uProj*uView*vec4(point,1.);
+        return vec2(-clip.x,clip.y)/max(.001,clip.w)*.5+.5;
+      }
+      void main(){
+        float campusDist=length(vWorld.xz-vec2(0.,1378.));
+        float campusDry=1.-smoothstep(235.,365.,campusDist);
+        if(campusDist<237.)discard;
+        float sunny=1.-smoothstep(300.,640.,campusDist);
+        vec2 uv=clamp(vSimUV,vec2(.002),vec2(.998));
+        float boundary=max(abs(vSimUV.x-.5),abs(vSimUV.y-.5));
+        float patchWeight=1.-smoothstep(.36,.495,boundary);
+        vec4 field=texture2D(uSurface,uv);
+        vec2 slope=(field.rg*2.-1.)*3.0*patchWeight;
+        // Three wave scales, plus optical micro-waves. GPU normals control
+        // boat/wake/impact distortion; independent ripples make rain readable.
+        vec2 p=vWorld.xz;
+        float w1=dot(p,vec2(.033,.022))-uTime*1.13;
+        float w2=dot(p,vec2(-.017,.035))+uTime*.73;
+        vec2 windSlope=(vec2(.033,.022)*cos(w1)*3.3+
+                        vec2(-.017,.035)*cos(w2)*2.6)*uWind;
+        vec2 noiseSlope=vec2(noise(p*.044+vec2(uTime*.05,0.))-noise(p*.053),
+                              noise(p*.059)-noise(p*.037+vec2(0.,uTime*.05)))*.060*uWind;
+        vec3 rain=rainfall(p,uTime);
+        vec2 rainSlope=rain.xy*.31*(1.-campusDry);
+        vec3 N=normalize(vec3(-(slope.x*(.18+uRipple*1.7)+windSlope.x+noiseSlope.x+rainSlope.x),
+                               1.,
+                              -(slope.y*(.18+uRipple*1.7)+windSlope.y+noiseSlope.y+rainSlope.y)));
+        vec3 V=normalize(uEye-vWorld);
+        float nv=clamp(dot(N,V),0.,1.);
+        float f0=pow((1.333-1.)/(1.333+1.),2.);
+        float fresnel=f0+(1.-f0)*pow(1.-nv,5.);
+        // Real air-to-water refraction direction and ray/road-plane intersection.
+        // Optical normals are limited to avoid shredding readable road markings.
+        vec3 opticalNormal=normalize(mix(vec3(0.,1.,0.),N,.28+.19*uDistort));
+        vec3 through=refract(-V,opticalNormal,1./1.333);
+        float depth=max(.2,vWorld.y-uFloodFloor);
+        vec3 floorHit=vWorld+through*(depth/max(.19,-through.y));
+        vec2 opticalUV=projectUV(floorHit);
+        vec2 originalUV=gl_FragCoord.xy/uResolution;
+        // The captured scene is geometrically correct for the current camera:
+        // sampling the projected refracted hit shows ORIGINAL road/buildings.
+        vec2 delta=clamp(opticalUV-originalUV,vec2(-.075),vec2(.075));
+        vec2 extra=clamp((slope*.0017*uRipple+rainSlope*.0013*uDistort),vec2(-.014),vec2(.014));
+        vec2 sampleUV=clamp(originalUV+(delta+extra)*uDistort,vec2(.002),vec2(.998));
+        float within=step(.004,opticalUV.x)*step(opticalUV.x,.996)*step(.004,opticalUV.y)*step(opticalUV.y,.996);
+        sampleUV=mix(originalUV,sampleUV,within);
+        vec3 road=texture2D(uScene,sampleUV).rgb;
+        // Clarity deliberately follows Water Lab 02.1: even deep water stays
+        // transparent enough for navigation and the original mission markers.
+        float absorption=mix(.045,.0055,pow(uClarity,1.4));
+        float transmission=exp(-absorption*depth/max(.28,-through.y));
+        float downView=smoothstep(.10,.88,nv);
+        vec3 bodyColor=mix(vec3(.034,.13,.16),vec3(.070,.26,.27),
+                           clamp(.52+.25*noise(p*.024),0.,1.));
+        float visibility=transmission*mix(.74,1.,uClarity)*(.72+.28*downView);
+        vec3 refracted=mix(bodyColor,road,visibility);
+        // Approximate physically motivated projected-area caustic focus.
+        // Under storm cloud cover caustics are subtle; the dry campus receives
+        // no underwater pattern. Separate street shader handles large props.
+        if(uCaustic>.001){
+          vec2 eps=vec2(1.5/256.,0.);
+          vec2 gx=(texture2D(uSurface,clamp(uv+eps.xy,vec2(.002),vec2(.998))).rg*2.-1.)*3.*patchWeight;
+          vec2 gz=(texture2D(uSurface,clamp(uv+eps.yx,vec2(.002),vec2(.998))).rg*2.-1.)*3.*patchWeight;
+          vec3 r0=refract(-normalize(uSun),normalize(vec3(-slope.x,1.,-slope.y)),1./1.333);
+          vec3 rx=refract(-normalize(uSun),normalize(vec3(-gx.x,1.,-gx.y)),1./1.333);
+          vec3 rz=refract(-normalize(uSun),normalize(vec3(-gz.x,1.,-gz.y)),1./1.333);
+          vec2 ax=vec2(1.,0.)+(rx.xz/max(.24,-rx.y)-r0.xz/max(.24,-r0.y))*depth/6.;
+          vec2 az=vec2(0.,1.)+(rz.xz/max(.24,-rz.y)-r0.xz/max(.24,-r0.y))*depth/6.;
+          float area=abs(ax.x*az.y-ax.y*az.x);
+          float focused=smoothstep(1.04,1.75,clamp(1./max(.3,area),.3,2.6));
+          refracted+=vec3(.13,.16,.12)*focused*uCaustic*mix(.18,.82,sunny)*patchWeight*visibility;
+        }
+        vec3 reflection=sky(reflect(-V,N),sunny);
+        float reflectAmount=clamp(fresnel*mix(.67,1.12,uReflect)+.009*uReflect,0.,.76);
+        vec3 color=mix(refracted,reflection,reflectAmount);
+        float glint=pow(max(0.,dot(reflect(-normalize(uSun),N),V)),105.);
+        color+=vec3(.65,.68,.57)*glint*(.055+.16*sunny);
+        color+=vec3(.12,.18,.17)*rain.z*.055;
+        // Water is optically composed against an already rendered scene;
+        // opacity controls only the smooth DRY edge around BRAC University.
+        gl_FragColor=vec4(color,1.-campusDry);
+      }`;
+    // Keep shader constructor independent from the main program and allow fallback.
+    const vs=shader(gl.VERTEX_SHADER,vertex);
+    // Some GLSL ES implementations reserve a few identifiers. Compile fully,
+    // so unsupported GPUs fall back to the original water without crashing.
+    const fs=shader(gl.FRAGMENT_SHADER,fragment);
+    const waterProgram=gl.createProgram();gl.attachShader(waterProgram,vs);gl.attachShader(waterProgram,fs);
+    gl.linkProgram(waterProgram);gl.deleteShader(vs);gl.deleteShader(fs);
+    if(!gl.getProgramParameter(waterProgram,gl.LINK_STATUS))throw Error('Water optics shader: '+gl.getProgramInfoLog(waterProgram));
+    const at=gl.getAttribLocation(waterProgram,'aPos');
+    const locations={};
+    for(const name of ['uModel','uView','uProj','uField','uSurface','uScene','uCenter','uSpan','uTime','uEye','uSun','uResolution','uFloodFloor','uRain','uWind','uClarity','uRipple','uReflect','uDistort','uCaustic'])
+      locations[name]=gl.getUniformLocation(waterProgram,name);
+    const scene=gl.createTexture();let width=0,height=0;gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D,scene);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.activeTexture(gl.TEXTURE0);
+    const look={rain:.85,wind:.40,clarity:.88,ripple:.64,reflection:.43,
+      distortion:.68,caustics:.72};
+    // Read-only by default; explicit tuning is exposed for matching Water Lab
+    // screenshots without changing gameplay, collision or animation state.
+    window.majhiWaterTuning={
+      get:()=>({...look}),
+      set:(parameter,value)=>{
+        if(!Object.prototype.hasOwnProperty.call(look,parameter))return false;
+        if(!Number.isFinite(Number(value)))return false;
+        look[parameter]=clamp(Number(value),0,1);
+        return {...look};
+      },
+      reset:()=>Object.assign(look,{rain:.85,wind:.40,clarity:.88,ripple:.64,
+        reflection:.43,distortion:.68,caustics:.72})
+    };
+    let frames=0;
+    function renderOpticalWater(view,projection,eye,clock){
+      const w=canvas.width,h=canvas.height;
+      if(w!==width||h!==height){
+        width=w;height=h;gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D,scene);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      }
+      // Opaque original city already drawn; do not read back to the CPU.
+      gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,scene);
+      gl.copyTexSubImage2D(gl.TEXTURE_2D,0,0,0,0,0,w,h);
+      gl.useProgram(waterProgram);
+      gl.uniformMatrix4fv(locations.uModel,false,ID);
+      gl.uniformMatrix4fv(locations.uView,false,view);
+      gl.uniformMatrix4fv(locations.uProj,false,projection);
+      gl.uniform2fv(locations.uCenter,dhakaWater.center);
+      gl.uniform1f(locations.uSpan,dhakaWater.SPAN);
+      gl.uniform1f(locations.uTime,clock);
+      gl.uniform3fv(locations.uEye,eye);
+      gl.uniform3f(locations.uSun,.41,.82,.39);
+      gl.uniform2f(locations.uResolution,w,h);
+      gl.uniform1f(locations.uFloodFloor,-.3);
+      // Match the expressive Water Lab 02.1 default settings. Controls may be
+      // tuned independently later without touching gameplay variables.
+      gl.uniform1f(locations.uRain,S.mode==='PLAYING'?look.rain:.10);
+      gl.uniform1f(locations.uWind,look.wind);
+      gl.uniform1f(locations.uClarity,look.clarity);
+      gl.uniform1f(locations.uRipple,look.ripple);
+      gl.uniform1f(locations.uReflect,look.reflection);
+      gl.uniform1f(locations.uDistort,look.distortion);
+      gl.uniform1f(locations.uCaustic,S.quality==='BALANCED'?look.caustics*.35:look.caustics);
+      gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,dhakaWater.height);
+      gl.uniform1i(locations.uField,2);
+      gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,dhakaWater.normal);
+      gl.uniform1i(locations.uSurface,3);
+      gl.activeTexture(gl.TEXTURE4);gl.bindTexture(gl.TEXTURE_2D,scene);
+      gl.uniform1i(locations.uScene,4);
+      gl.bindBuffer(gl.ARRAY_BUFFER,waterMesh.buffer);
+      // Always set vertex pointers in both programs. Shader attribute indices
+      // are not guaranteed to coincide across GPU drivers.
+      gl.enableVertexAttribArray(at);
+      gl.vertexAttribPointer(at,3,gl.FLOAT,false,28,0);
+      gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      gl.drawArrays(gl.TRIANGLES,0,waterMesh.length);
+      gl.depthMask(true);
+      gl.useProgram(prog);
+      // Don't accidentally disable the main program's position attribute.
+      for(const k of Object.values(attrs))gl.enableVertexAttribArray(k);
+      gl.activeTexture(gl.TEXTURE0);
+      frames++;
+      return frames;
+    }
+    return {render:renderOpticalWater,get frames(){return frames;},get captureSize(){return [width,height];},get look(){return {...look};}};
+  }
+  let opticalWater=null,opticalWaterError=null;
+  if(dhakaWater){try{opticalWater=createOpticalWaterRenderer();}
+    catch(error){opticalWaterError=String(error);console.warn('Water Lab optical renderer unavailable, retaining legacy water:',error);}}
   gl.useProgram(prog);
   // Local meshes drawn with per-instance transforms.
   // OFFLINE EXPORTED SOURCE GEOMETRY. The binary comes from the original
@@ -3654,7 +3908,7 @@
     const currentRoll=S.waveStrength*Math.sin(S.bobTime*3.7+S.x*.014)*7.2;
     const boatPitch=clamp(boatImpact.pitch+currentPitch,-17,17);
     const boatRoll=clamp(boatImpact.roll+currentRoll,-19,19);
-    const boatY=12+Math.sin(S.bobTime*2.8)*1.3+
+    const boatY=(opticalWater?14.0:12)+Math.sin(S.bobTime*2.8)*1.3+
       S.waveStrength*Math.sin(S.bobTime*4.1+S.x*.01)*3.1+boatImpact.heave;
     const lerp=((S.angle-S.heading+540)%360)-180;S.heading=(S.heading+lerp*.16+360)%360;
     const ca=S.camera3?S.heading*RAD:a;
@@ -3742,7 +3996,13 @@
     // Semi-transparent animated water is drawn AFTER the original flooded
     // road textures, so lane markings remain visible underneath the surface.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
-    render(waterMesh);
+    if(opticalWater&&dhakaWater){
+      gl.depthMask(true);gl.disable(gl.BLEND);
+      try{opticalWater.render(comicView,comicProj,eye,S.bobTime*.85);}
+      catch(error){opticalWaterError=String(error);console.warn('Water optics runtime fallback:',error);opticalWater=null;}
+      gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
+    }
+    if(!opticalWater)render(waterMesh);
     render(currentArrows);
     render(campusGround);
     render(sunshineAura);render(sunshineSun);
@@ -3935,8 +4195,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity18-water-lab021-phase1-reliability-fix';
-  window.majhiWaterDiagnostics=()=>({webgl2:webgl2Context,enabled:!!dhakaWater,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='fidelity19-water-lab021-phase2-optical-refraction';
+  window.majhiWaterDiagnostics=()=>({webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
