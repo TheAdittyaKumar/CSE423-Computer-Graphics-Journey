@@ -48,8 +48,8 @@
    ${lab2?`if(uLabEnabled>.5){
      vec2 uv=(p.xz-uLabCenter)/uLabSpan+.5;
      float labPatchWeight=(1.0-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5))));
-     vec4 packed=texture2D(uLabField,clamp(uv,vec2(0.),vec2(1.)));
-     float h=2.*dot(packed.rg,vec2(65280.,255.))/65535.-1.;
+     vec4 packedHeight = texture2D(uLabField, clamp(uv, vec2(0.), vec2(1.)));
+     float h = 2.*dot(packedHeight.rg, vec2(65280.,255.))/65535.-1.;
      p.y+=h*13.0*labPatchWeight;
    }`:''}
    }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
