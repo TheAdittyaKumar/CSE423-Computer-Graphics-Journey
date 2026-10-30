@@ -4,15 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#081e29">
-  <meta name="description" content="Majhi Jaben?! Water Lab 01.4 — GPU interactive floodwater simulation, tested separately from the main game.">
+  <meta name="description" content="Majhi Jaben?! Water Lab 01.5 — GPU interactive floodwater simulation, tested separately from the main game.">
   <title>Majhi Jaben?! · Water Lab 01</title>
   <link rel="stylesheet" href="./style.css">
-  <script src="./water-test.js?v=140" defer></script>
+  <script src="./water-test.js?v=150" defer></script>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 01.3</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
+      <div class="brand"><span class="eyebrow">MAJHI JABEN?! / WATER LAB 01.5</span><h1>Water That Responds</h1><p>WebGL 2 ripple simulation · Independent visual experiment</p></div>
       <a class="game-link" href="../index.html">Original game</a>
     </header>
     <main class="layout">
@@ -20,7 +20,7 @@
         <canvas id="scene" tabindex="0">Your browser does not support the 3D preview.</canvas>
         <div class="scene-status"><span class="status-dot"></span><span id="rendererStatus">Starting water simulation...</span></div>
         <div id="errorPanel" class="error-panel" hidden><h2>Renderer unavailable</h2><p id="errorMessage">Could not start WebGL 2.</p></div>
-        <div class="hero"><span class="eyebrow">WATER STUDY 01.4 / TRANSPARENT FLOODWATER</span><h2>See through the water.</h2><p>Keep the street readable like Evan's WebGL water while still getting live ripples, directional wakes, rain response, and angle-based reflections.</p></div>
+        <div class="hero"><span class="eyebrow">WATER STUDY 01.5 / RIPPLE-DRIVEN REFRACTION</span><h2>Watch the road bend.</h2><p>Water Lab 01.5 links GPU ripples to what you see under the surface. Test the new Ripple refraction slider, then move the boat and watch its wake.</p></div>
         <div class="viewer-footer">CLICK WATER TO SPLASH <span>·</span> DRAG TO ORBIT <span>·</span> SCROLL TO ZOOM</div>
       </section>
       <aside class="panel">
@@ -41,10 +41,10 @@
         <section class="section">
           <h3>Water behavior</h3>
           <div class="slider-label"><label for="rainSlider">Rain frequency</label><output id="rainSliderValue">22%</output></div><input type="range" id="rainSlider" min="0" max="100" value="22">
-          <div class="slider-label"><label for="wakeSlider">Boat wake</label><output id="wakeSliderValue">72%</output></div><input type="range" id="wakeSlider" min="0" max="100" value="72">
-          <div class="slider-label"><label for="waveSlider">Ripple height</label><output id="waveSliderValue">38%</output></div><input type="range" id="waveSlider" min="0" max="100" value="38">
-          <div class="slider-label"><label for="windSlider">Wind surface detail</label><output id="windSliderValue">52%</output></div><input type="range" id="windSlider" min="0" max="100" value="52">
-          <div class="slider-label"><label for="reflectionSlider">View-angle reflections</label><output id="reflectionSliderValue">52%</output></div><input type="range" id="reflectionSlider" min="0" max="100" value="52">
+          <div class="slider-label"><label for="wakeSlider">Boat wake</label><output id="wakeSliderValue">65%</output></div><input type="range" id="wakeSlider" min="0" max="100" value="65">
+          <div class="slider-label"><label for="waveSlider">Ripple height</label><output id="waveSliderValue">35%</output></div><input type="range" id="waveSlider" min="0" max="100" value="35">
+          <div class="slider-label"><label for="windSlider">Wind surface detail</label><output id="windSliderValue">40%</output></div><input type="range" id="windSlider" min="0" max="100" value="40">
+          <div class="slider-label"><label for="reflectionSlider">View-angle reflections</label><output id="reflectionSliderValue">40%</output></div><input type="range" id="reflectionSlider" min="0" max="100" value="40">
         </section>
         <section class="section">
           <h3>Camera</h3>
