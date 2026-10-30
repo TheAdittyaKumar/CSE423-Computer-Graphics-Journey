@@ -1,6 +1,6 @@
 /*
  * MAJHI JABEN?! / VISUAL LAB 02
- * Visual Lab 02.1: custom curved 3D mesh + inverse-kinematic rowing.
+ * Visual Lab 02.2: tapered, continuous hull + inverse-kinematic rowing.
  * No dependencies, downloads, build step, or changes to the main game.
  */
 (() => {
@@ -225,7 +225,7 @@
   };
 
   // --------------------------------------------------------------------
-  // VISUAL LAB 02.1 — HAND-CRAFTED GEOMETRY + MECHANICAL ROWING
+  // VISUAL LAB 02.2 — CLOSED HULL + MECHANICAL ROWING
   // Geometry is generated once. Camera and stroke controls from Lab 02 stay.
   // Local +X is the bow; local +/-Z is port/starboard.
   // --------------------------------------------------------------------
@@ -251,43 +251,52 @@
     return g.upload();
   }
 
-  // Proper boat hull: curved chines, inward upper walls, raised narrow ends.
-  // Its lower gunwales no longer resemble the tall sides of a metal bucket.
-const BOAT_LENGTH = 1.94;
-
-const hullWidth = x => {
-  const u = clamp(Math.abs(x) / BOAT_LENGTH, 0, 1);
-  const body = Math.pow(Math.max(0, 1 - Math.pow(u, 2.45)), 0.72);
-  const tipFade = Math.pow(Math.max(0, 1 - u), 0.38);
-  return 0.82 * body * tipFade;
-};
-
-const hullTop = x => .805 + .24 * Math.pow(Math.abs(x) / BOAT_LENGTH, 2.2);
+  // Visual Lab 02.2 — Closed, tapered sampan hull.
+  // The hull is modeled as a continuous surface, NOT sealed with vertical posts.
+  // The two ends meet at a single point in 3D; the bottom, sides and inner
+  // floor all rise together so there is no bow/stern slot or upright wall.
+  const BOAT_LENGTH=1.94;
+  const hullFraction=x=>clamp(Math.abs(x)/BOAT_LENGTH,0,1);
+  const hullWidth=x=>{
+    const u=hullFraction(x);
+    return .82*Math.pow(Math.max(0,1-Math.pow(u,2.65)),.72);
+  };
+  const hullTop=x=>.805+.24*Math.pow(hullFraction(x),2.2);
+  // Bottom rises gently in midship, faster approaching the raised tips.
+  const hullRise=x=>Math.pow(hullFraction(x),3.25);
+  function hullSection(x,side){
+    const u=hullFraction(x),lift=hullRise(x),top=hullTop(x),w=hullWidth(x);
+    const rising=y=>mix(y,top,lift);
+    const keelY=rising(.185),chineY=rising(.285),shoulderY=rising(.545);
+    const floorY=rising(.415);
+    return {
+      upper:[x,top,side*w],
+      shoulder:[x,shoulderY,side*w*.95],
+      chine:[x,chineY,side*w*.63],
+      keel:[x,keelY,side*w*.18],
+      bottomCenter:[x,keelY-.027*(1-lift),0],
+      innerTop:[x,top-.050*(1-lift),side*w*.90],
+      innerFloor:[x,floorY,side*w*.69],
+      floorCenter:[x,floorY+.006*(1-lift),0]
+    };
+  }
   function makeHull(){
     const outer=new Geometry(),inside=new Geometry(),floor=new Geometry();
-    const N=56;
+    const N=80;
     for(let i=0;i<N;i++){
       const x0=-BOAT_LENGTH+2*BOAT_LENGTH*i/N;
       const x1=-BOAT_LENGTH+2*BOAT_LENGTH*(i+1)/N;
       for(const side of [-1,1]){
-        const make=(x)=>{
-          const w=hullWidth(x),e=Math.pow(Math.abs(x)/BOAT_LENGTH,2);
-          return {
-            upper:[x,hullTop(x),side*w],
-            shoulder:[x,.51+.08*e,side*w*.96],
-            chine:[x,.26+.08*e,side*w*.61],
-            keel:[x,.20+.07*e,side*w*.18],
-            innerTop:[x,hullTop(x)-.042,side*w*.91],
-            innerFloor:[x,.39+.05*e,side*w*.69]
-          };
-        };
-        const a=make(x0),b=make(x1);
+        const a=hullSection(x0,side),b=hullSection(x1,side);
+        // Smooth multi-chine exterior, including a continuous underside.
         outer.quad(a.upper,b.upper,b.shoulder,a.shoulder);
         outer.quad(a.shoulder,b.shoulder,b.chine,a.chine);
         outer.quad(a.chine,b.chine,b.keel,a.keel);
+        outer.quad(a.keel,b.keel,b.bottomCenter,a.bottomCenter);
+        // Continuous hollow interior with an inward-wrapped rim.
         inside.quad(a.innerTop,b.innerTop,b.innerFloor,a.innerFloor);
         inside.quad(a.upper,b.upper,b.innerTop,a.innerTop);
-        floor.quad([x0,.39,0],[x1,.39,0],b.innerFloor,a.innerFloor);
+        floor.quad(a.floorCenter,b.floorCenter,b.innerFloor,a.innerFloor);
       }
     }
     return {outer:outer.upload(),inside:inside.upload(),floor:floor.upload()};
@@ -391,25 +400,11 @@ const hullTop = x => .805 + .24 * Math.pow(Math.abs(x) / BOAT_LENGTH, 2.2);
       box([x,.49,0],wood.rib,[.075,.12,w*1.47]);
       for(const side of [-1,1])bone([x,.49,side*w*.66],[x,hullTop(x)-.13,side*w*.91],.028,wood.rib);
     }
-    // Bound bow/stern rim and small prow rail protect curved tips.
-// Closed bow / stern rim caps so the boat does not look split open.
-for (const end of [-1, 1]) {
-  const xMid = end * 1.66;
-  const xTip = end * 1.92;
-  const yMid = hullTop(xMid);
-  const yTip = hullTop(xTip) - 0.01;
-
-  // top rim closure
-  bone([xMid, yMid, -0.18], [xTip, yTip, 0], .052, wood.edge);
-  bone([xTip, yTip, 0], [xMid, yMid, 0.18], .052, wood.edge);
-
-  // vertical center post to visually seal the opening
-  bone([xTip, 0.47, 0], [xTip, yTip, 0], .036, wood.rib);
-
-  // lower inner closure
-  bone([xMid, 0.46, -0.05], [xTip, 0.46, 0], .052, wood.rib);
-  bone([xTip, 0.46, 0], [xMid, 0.46, 0.05], .052, wood.rib);
-}
+    // Small rounded tip caps where the existing gunwale rails converge.
+    // These are NOT hull-closure posts: the 3D hull itself is watertight.
+    for(const end of [-1,1]){
+      ball([end*BOAT_LENGTH,hullTop(end*BOAT_LENGTH),0],wood.edge,[.042,.043,.046]);
+    }
 
     // Gunwale-mounted oarlocks are stationary and are distinct from hands.
     for(const side of [-1,1]){
@@ -680,7 +675,7 @@ for (const end of [-1, 1]) {
       drawBoat();
       drawMajhi(state.phase,state.showRig);
       gl.bindVertexArray(null);
-      status.textContent='WebGL 2 active · Rowing 02.1 ready';
+      status.textContent='WebGL 2 active · Hull 02.2 ready';
       requestAnimationFrame(frame);
     } catch(err) {
       console.error('Visual Lab 02:',err);
