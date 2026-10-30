@@ -1,6 +1,6 @@
 /* Majhi Jaben?! — source-geometry browser port of the CSE423 PyOpenGL game.
  * Static geometry and character meshes exported from ORIGINAL Python rendering functions.
- * WebGL 1, no external packages or servers.
+ * WebGL 2 Water Lab 02.1 GPU integration, with legacy WebGL 1 fallback.
  * Original project: https://github.com/TheAdittyaKumar/CSE423-Computer-Graphics-Journey
  */
 (() => {
@@ -8,7 +8,10 @@
   const $ = id => document.getElementById(id);
   const canvas=$('world'), weather=$('weather'), wx=weather.getContext('2d');
   const options={antialias:true,alpha:true,depth:true,powerPreference:'high-performance'};
-  const gl=canvas.getContext('webgl',options)||canvas.getContext('experimental-webgl',options);
+  // Prefer WebGL 2 for the proven Water Lab 02.1 GPU heightfield. If unavailable,
+  // the original WebGL 1 game (including all missions and graphics) still runs.
+  const gl=canvas.getContext('webgl2',options)||canvas.getContext('webgl',options)||canvas.getContext('experimental-webgl',options);
+  const lab2=!!gl&&typeof gl.createVertexArray==='function';
   if(!gl){
     window.majhiStartupError?.('WebGL unavailable', 'Enable graphics acceleration or try Chrome, Edge, or Firefox on a computer that supports WebGL.');
     return;
@@ -23,6 +26,7 @@
   const sharedPrecision=precisionSupport&&precisionSupport.precision>0?'highp':'mediump';
   const VERT=`attribute vec3 aPos; attribute vec3 aColor; attribute float aKind;
   uniform mat4 uView,uProj,uModel;uniform ${sharedPrecision} float uTime;
+  ${lab2?'uniform sampler2D uLabField; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled;':''}
   varying ${sharedPrecision} vec3 vColor,vWorld;varying ${sharedPrecision} float vKind,vDist;
   void main(){vec4 p=uModel*vec4(aPos,1.);if(aKind>.5&&aKind<1.5){
   float mainWave=sin(.032*(p.z+.18*p.x)-1.80*uTime);
@@ -40,13 +44,58 @@
    float east=smoothstep(410.,475.,p.x)*(1.-smoothstep(635.,700.,p.x))*smoothstep(130.,195.,p.z)*(1.-smoothstep(805.,870.,p.z));
    float north=smoothstep(-720.,-655.,p.x)*(1.-smoothstep(-435.,-370.,p.x))*smoothstep(690.,755.,p.z)*(1.-smoothstep(1105.,1170.,p.z));
    float rough=clamp(west+center+east+north,0.,1.);
-   p.y+=rough*(4.5*sin(.037*p.x+.023*p.z-uTime*3.8)+2.7*sin(.028*p.z-.032*p.x+uTime*4.5));
-  }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
+   p.y+=rough*(2.6*sin(.037*p.x+.023*p.z-uTime*3.8)+1.5*sin(.028*p.z-.032*p.x+uTime*4.5));
+   ${lab2?`if(uLabEnabled>.5){
+     vec2 uv=(p.xz-uLabCenter)/uLabSpan+.5;
+     float active=(1.0-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5))));
+     vec4 packed=texture2D(uLabField,clamp(uv,vec2(0.),vec2(1.)));
+     float h=2.*dot(packed.rg,vec2(65280.,255.))/65535.-1.;
+     p.y+=h*13.0*active;
+   }`:''}
+   }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
   const FRAG=`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
+  ${lab2?'uniform sampler2D uLabNormals; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled; uniform vec3 uLabEye,uLabSun;':''}
   void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
     opacity=mix(.53,.12,daylight);c=mix(c,vec3(.24,.31,.30),.55*daylight);float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
     float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
-    c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
+     c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
+     ${lab2?`if(uLabEnabled>.5){
+       vec2 uv=(vWorld.xz-uLabCenter)/uLabSpan+.5;
+       float patch=1.-smoothstep(.40,.49,max(abs(uv.x-.5),abs(uv.y-.5)));
+       vec4 info=texture2D(uLabNormals,clamp(uv,vec2(.003),vec2(.997)));
+       vec2 slope=(info.rg*2.-1.)*8.*patch;
+       vec3 N=normalize(vec3(-slope.x,1.,-slope.y));
+       vec3 V=normalize(uLabEye-vWorld);
+       vec3 L=normalize(uLabSun);
+       float facing=clamp(dot(N,V),0.,1.);
+       float fresnel=.0204+.9796*pow(1.-facing,5.);
+       float diffuse=max(0.,dot(N,L));
+       vec3 H=normalize(V+L);
+       float spec=pow(max(dot(N,H),0.),85.)*.39;
+       float shimmer=pow(max(0.,sin(vWorld.x*.12+vWorld.z*.09+uTime*1.3)),22.)*.024;
+       float waveEnergy=min(1.0,length(slope)*.60);
+       // Artistic water: reflective at grazing angles, readable street overhead.
+       c=mix(c,vec3(.075,.265,.31),.16+fresnel*.17);
+       c+=vec3(.25,.34,.30)*spec+vec3(.018,.05,.064)*(diffuse*.75+shimmer);
+       c+=vec3(.025,.070,.078)*waveEnergy;
+       float campusDry=1.-smoothstep(235.,345.,length(vec2(vWorld.x,vWorld.z-1378.)));
+       opacity=clamp(.23+.37*fresnel+.025*waveEnergy, .19, .63);
+       opacity*=1.-.89*campusDry;
+     }`:''}
+   }else if(vKind<.5&&vWorld.y<3.0){
+    ${lab2?`if(uLabEnabled>.5){
+      // Subtle, artistic refracted-light focus on REAL source-road geometry.
+      // Sample near the bottom, not a painted road overlay.
+      vec2 at=vWorld.xz-uLabSun.xz/max(.2,uLabSun.y)*11.;
+      vec2 uv=(at-uLabCenter)/uLabSpan+.5;
+      float local=1.-smoothstep(.39,.49,max(abs(uv.x-.5),abs(uv.y-.5)));
+      vec2 slope=(texture2D(uLabNormals,clamp(uv,vec2(.003),vec2(.997))).rg*2.-1.)*9.;
+      float focus=sin((at.x+19.*slope.x)*.052+uTime*.55)*
+                  sin((at.y+19.*slope.y)*.047-uTime*.39);
+      float rippleFocus=pow(max(0.,focus),7.);
+      float campusDry=1.-smoothstep(230.,355.,length(vec2(vWorld.x,vWorld.z-1378.)));
+      c+=vec3(.07,.12,.11)*rippleFocus*local*(1.-campusDry);
+    }`:''}
   }else if(vKind>3.5&&vKind<4.5){
     // Warm streetlight halo: its shell is translucent, while its bulb is the
     // original static source geometry and never has to be re-drawn.
@@ -78,7 +127,10 @@
   if(!gl.getProgramParameter(prog,gl.LINK_STATUS)){throw Error(gl.getProgramInfoLog(prog));}
   gl.useProgram(prog);
   const attrs={pos:gl.getAttribLocation(prog,'aPos'),color:gl.getAttribLocation(prog,'aColor'),kind:gl.getAttribLocation(prog,'aKind')};
-  const uniforms={view:gl.getUniformLocation(prog,'uView'),proj:gl.getUniformLocation(prog,'uProj'),model:gl.getUniformLocation(prog,'uModel'),time:gl.getUniformLocation(prog,'uTime')};
+  const uniforms={view:gl.getUniformLocation(prog,'uView'),proj:gl.getUniformLocation(prog,'uProj'),model:gl.getUniformLocation(prog,'uModel'),time:gl.getUniformLocation(prog,'uTime'),
+    labField:gl.getUniformLocation(prog,'uLabField'),labNormal:gl.getUniformLocation(prog,'uLabNormals'),
+    labCenter:gl.getUniformLocation(prog,'uLabCenter'),labSpan:gl.getUniformLocation(prog,'uLabSpan'),
+    labEnabled:gl.getUniformLocation(prog,'uLabEnabled'),labEye:gl.getUniformLocation(prog,'uLabEye'),labSun:gl.getUniformLocation(prog,'uLabSun')};
   gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
   function perspective(fovy,aspect,near,far){const f=1/Math.tan(fovy*.5),nf=1/(near-far);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]);}
   function norm(a){const m=Math.hypot(...a)||1;return a.map(x=>x/m);}
@@ -264,8 +316,214 @@
   city.box(0,1,-170,205,.8,8,[.96,.80,.39]);
   city.cylinder(145,49,-55,5,102,[.56,.55,.47],8);city.box(145,106,-55,22,52,21,[.23,.29,.28]);
   city.upload();
-  const waterMesh=new Mesh(), SIZE=1700,STEP=48;
+  const waterMesh=new Mesh(), SIZE=1700,STEP=lab2?28:48;
   for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){const c=[.061+(.008*Math.sin(x*.01+z*.03)),.187,.252];waterMesh.quad([x,8,z],[x+STEP,8,z],[x+STEP,8,z+STEP],[x,8,z+STEP],c,1);}waterMesh.upload();
+  // WATER INTEGRATION 01: adapt the Water Lab 02.1 ping-pong heightfield to
+  // the ORIGINAL CITY. The patch follows the rescue boat in WORLD coordinates;
+  // a GPU scroll pass preserves old wakes rather than having them follow camera.
+  // RG = signed 16-bit water height, BA = signed 16-bit velocity, RGBA8 portable.
+  // No external library, server request or new art assets.
+  function createDhakaWaterLab(){
+    if(!lab2)return null;
+    const N=256, SPAN=1024, PIXEL=SPAN/N;
+    const vert=`#version 300 es
+    precision highp float;out vec2 vUv;
+    void main(){vec2 p=vec2((gl_VertexID<<1)&2,gl_VertexID&2);vUv=p;gl_Position=vec4(p*2.-1.,0.,1.);}`;
+    const common=`precision highp float;precision highp int;in vec2 vUv;
+    uniform sampler2D uPrevious;out vec4 fragColor;
+    vec2 pack16(float v){float n=floor((clamp(v,-1.,1.)*.5+.5)*65535.+.5);
+      return vec2(floor(n/256.),mod(n,256.))/255.;}
+    float signed16(vec2 b){return 2.*dot(b,vec2(65280.,255.))/65535.-1.;}
+    vec2 field(ivec2 p){vec4 q=texelFetch(uPrevious,clamp(p,ivec2(0),ivec2(255)),0);
+      return vec2(signed16(q.rg),signed16(q.ba));}
+    void writeField(float h,float v){fragColor=vec4(pack16(h),pack16(v));}`;
+    const updateShader=`#version 300 es\n${common}
+    void main(){ivec2 p=ivec2(gl_FragCoord.xy);vec2 h=field(p);
+      float avg=.25*(field(p+ivec2(1,0)).x+field(p-ivec2(1,0)).x+
+        field(p+ivec2(0,1)).x+field(p-ivec2(0,1)).x);
+      float velocity=(h.y+(avg-h.x)*.32)*.983;
+      float height=(mix(h.x,avg,.022)+velocity)*.998;
+      vec2 e=min(vUv,1.-vUv);float fade=smoothstep(0.,.046,min(e.x,e.y));
+      writeField(height*fade,velocity*fade);}`;
+    const drops=`#version 300 es\n${common}
+      uniform vec2 uCenter;uniform float uRadius,uStrength;
+      void main(){vec2 h=field(ivec2(gl_FragCoord.xy));
+        float d=distance(vUv,uCenter)/max(uRadius,.00001);float f=clamp(1.-d,0.,1.);
+        f=f*f*(3.-2.*f);writeField(h.x+f*uStrength,h.y);}`;
+    const wake=`#version 300 es\n${common}
+      uniform vec2 uCenter,uForward;uniform float uStrength;
+      void main(){vec2 h=field(ivec2(gl_FragCoord.xy));
+        vec2 xy=(vUv-uCenter)*1024.;float front=dot(xy,uForward);
+        float sideways=abs(dot(xy,vec2(-uForward.y,uForward.x)));
+        float aft=-front;
+        // Scale Water Lab 02.1's balanced bow pressure and Kelvin-style wake
+        // to the original ~220-unit-long hull. This is NOT a Navier-Stokes solver.
+        float bow=exp(-pow((front-90.)/26.,2.))*exp(-pow(sideways/38.,2.));
+        float bowDip=exp(-pow((front-66.)/28.,2.))*exp(-pow(sideways/44.,2.));
+        float shoulder=exp(-pow((front-0.)/47.,2.))*(
+          exp(-pow((sideways-51.)/20.,2.))-.8*exp(-pow((sideways-33.)/22.,2.)));
+        float visible=smoothstep(20.,48.,aft)*(1.-smoothstep(210.,315.,aft));
+        float arm=42.+.24*max(aft,0.);
+        float crest=exp(-pow((sideways-arm)/19.,2.));
+        float trough=exp(-pow((sideways-arm+25.)/23.,2.));
+        float trail=visible*exp(-max(aft,0.)/170.)*(crest-.88*trough);
+        float pressure=.35*(bow-.93*bowDip)+.40*shoulder+.39*trail;
+        writeField(h.x,h.y+pressure*uStrength);}`;
+    const paddle=`#version 300 es\n${common}
+      uniform vec2 uCenter,uMotion;uniform float uStrength;
+      void main(){vec2 h=field(ivec2(gl_FragCoord.xy));
+        vec2 xy=(vUv-uCenter)*1024.;vec2 dir=normalize(uMotion+vec2(.000001,0.));
+        vec2 side=vec2(-dir.y,dir.x);float along=dot(xy,dir),across=dot(xy,side);
+        float push=exp(-pow((along-10.)/15.,2.));
+        float pull=exp(-pow((along+10.)/15.,2.));
+        float dipole=(push-pull)*exp(-pow(across/13.,2.));
+        writeField(h.x,h.y+dipole*uStrength*.55);}`;
+    const scroll=`#version 300 es\n${common}
+      uniform ivec2 uShift;
+      void main(){ivec2 pos=ivec2(gl_FragCoord.xy)+uShift;
+        if(any(lessThan(pos,ivec2(0)))||any(greaterThanEqual(pos,ivec2(256))))
+          writeField(0.,0.);
+        else {vec2 h=field(pos);writeField(h.x,h.y);}}`;
+    const normals=`#version 300 es\n${common}
+      void main(){ivec2 p=ivec2(gl_FragCoord.xy);float h=field(p).x;
+        float hxx=(field(p+ivec2(1,0)).x-field(p-ivec2(1,0)).x)*.75+
+                  (field(p+ivec2(2,0)).x-field(p-ivec2(2,0)).x)*.125;
+        float hzz=(field(p+ivec2(0,1)).x-field(p-ivec2(0,1)).x)*.75+
+                  (field(p+ivec2(0,2)).x-field(p-ivec2(0,2)).x)*.125;
+        // Encode scaled slopes; the main water shader handles view angle.
+        vec2 grad=vec2(hxx,hzz)*256./(2.*1024.)*13.;
+        fragColor=vec4(clamp(grad*.5+.5,0.,1.),clamp(h*.5+.5,0.,1.),1.);}`;
+    function compile(kind,source){const s=gl.createShader(kind);gl.shaderSource(s,source);
+      gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))
+        throw Error('GPU Water shader: '+gl.getShaderInfoLog(s));return s;}
+    const vs=compile(gl.VERTEX_SHADER,vert);
+    function passProgram(fragment){const p=gl.createProgram();gl.attachShader(p,vs);
+      gl.attachShader(p,compile(gl.FRAGMENT_SHADER,fragment));gl.linkProgram(p);
+      if(!gl.getProgramParameter(p,gl.LINK_STATUS))throw Error(gl.getProgramInfoLog(p));
+      return {p,prev:gl.getUniformLocation(p,'uPrevious'),center:gl.getUniformLocation(p,'uCenter'),
+        radius:gl.getUniformLocation(p,'uRadius'),strength:gl.getUniformLocation(p,'uStrength'),
+        forward:gl.getUniformLocation(p,'uForward'),motion:gl.getUniformLocation(p,'uMotion'),
+        shift:gl.getUniformLocation(p,'uShift')};}
+    const effects={update:passProgram(updateShader),drop:passProgram(drops),
+      wake:passProgram(wake),paddle:passProgram(paddle),scroll:passProgram(scroll),
+      normals:passProgram(normals)};
+    const blank=new Uint8Array(N*N*4);
+    for(let i=0;i<blank.length;i+=4){blank[i]=128;blank[i+2]=128;}
+    function buffer(filtered){const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,filtered?gl.LINEAR:gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,filtered?gl.LINEAR:gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,N,N,0,gl.RGBA,gl.UNSIGNED_BYTE,filtered?null:blank);
+      const fb=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);
+      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)
+        throw Error('Water heightfield framebuffer incomplete');return {texture,fb};}
+    const buffers=[buffer(false),buffer(false)], normal=buffer(true);
+    const vao=gl.createVertexArray();let read=0;
+    let cx=0,cz=-1450,active=false,elapsed=0,lastX=0,lastZ=0,stepAccumulator=0;
+    let lastSplash=0,lastStroke=-1,travelDistance=0,wakeCount=0;
+    let seenImpacts=new WeakSet(),seenRain=new WeakSet();
+    function run(effect,args={}){gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);
+      const destination=effect===effects.normals?normal:buffers[1-read];
+      gl.bindFramebuffer(gl.FRAMEBUFFER,destination.fb);gl.viewport(0,0,N,N);
+      gl.useProgram(effect.p);gl.bindVertexArray(vao);
+      gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,buffers[read].texture);
+      gl.uniform1i(effect.prev,0);
+      if(effect.center)gl.uniform2fv(effect.center,args.center||[.5,.5]);
+      if(effect.radius)gl.uniform1f(effect.radius,args.radius||.01);
+      if(effect.strength)gl.uniform1f(effect.strength,args.strength||0);
+      if(effect.forward)gl.uniform2fv(effect.forward,args.forward||[1,0]);
+      if(effect.motion)gl.uniform2fv(effect.motion,args.motion||[1,0]);
+      if(effect.shift)gl.uniform2iv(effect.shift,args.shift||[0,0]);
+      gl.drawArrays(gl.TRIANGLES,0,3);
+      if(effect!==effects.normals)read=1-read;
+    }
+    function uv(x,z){return [(x-cx)/SPAN+.5,(z-cz)/SPAN+.5];}
+    function reset(x=0,z=-1450){cx=x;cz=z;lastX=x;lastZ=z;active=true;
+      elapsed=0;lastSplash=0;lastStroke=-1;travelDistance=0;stepAccumulator=0;
+      seenImpacts=new WeakSet();seenRain=new WeakSet();wakeCount=0;
+      for(const b of buffers){gl.bindTexture(gl.TEXTURE_2D,b.texture);
+        gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,N,N,gl.RGBA,gl.UNSIGNED_BYTE,blank);}
+      read=0;gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindVertexArray(null);gl.useProgram(prog);
+    }
+    function ripple(x,z,strength=.04,radius=.018){const center=uv(x,z);
+      if(center[0]<.05||center[0]>.95||center[1]<.05||center[1]>.95)return;
+      run(effects.drop,{center,strength,radius});}
+    function update(dt){if(!active)reset(S.x,S.z);
+      if(!dt){return;}
+      elapsed+=dt;
+      // Scroll the moving local simulation in integer texels to retain
+      // pre-existing waves in WORLD space. Avoid sampling a shifted wake.
+      const sx=Math.trunc((S.x-cx)/PIXEL),sz=Math.trunc((S.z-cz)/PIXEL);
+      if(sx||sz){run(effects.scroll,{shift:[sx,sz]});cx+=sx*PIXEL;cz+=sz*PIXEL;}
+      const dx=S.x-lastX,dz=S.z-lastZ,dist=Math.hypot(dx,dz);
+      const fx=Math.cos(S.angle*RAD),fz=Math.sin(S.angle*RAD);
+      const speed=clamp(dist/Math.max(.0001,dt)/310,0,1.5);
+      if(S.mode==='PLAYING'&&dist>.1&&distance(S.x,S.z,0,1378)>360){
+        travelDistance+=dist;
+        if(travelDistance>=17){
+          travelDistance=travelDistance%17;
+          // Disturbance follows hull motion, never a persistent painted V line.
+          run(effects.wake,{center:uv(S.x,S.z),forward:[fx,fz],strength:.05*Math.min(1.3,speed)});
+          wakeCount++;
+        }
+        // Paddle contact is stroke-phase driven. Idle, pause and coasting
+        // don't spawn new rings. Both blades perturb distinct contact points.
+        if(S.rowing){const stroke=Math.floor(S.time/.65*2);
+          if(stroke!==lastStroke){lastStroke=stroke;
+            for(const side of [-1,1]){
+              const px=S.x+fx*18-fz*side*49,pz=S.z+fz*18+fx*side*49;
+              run(effects.paddle,{center:uv(px,pz),motion:[fx,fz],strength:.075});
+            }
+          }
+        }
+      }
+      // Add short-lived impact/rain disturbances from the EXISTING game
+      // events; don't alter rescue missions, NPCs or collision mechanics.
+      for(const hit of S.impactSplashes){
+        if(!seenImpacts.has(hit)){seenImpacts.add(hit);
+          ripple(hit.x,hit.z,.10*Math.min(1.5,hit.power||1),.025);
+        }
+      }
+      for(const hit of S.rainSplashes){
+        if(!seenRain.has(hit)){seenRain.add(hit);
+          ripple(hit.x,hit.z,.023,.008);
+        }
+      }
+      lastX=S.x;lastZ=S.z;
+      // 120 Hz numerical integration, bounded to 6 substeps per animation frame.
+      stepAccumulator=Math.min(.060,stepAccumulator+dt);
+      let steps=0;while(stepAccumulator>=1/120&&steps<6){
+        run(effects.update);stepAccumulator-=1/120;steps++;
+      }
+      // Rain impacts: a bounded, deterministic density, disabled in the
+      // university courtyard and during menu/pause.
+      if(S.mode==='PLAYING'&&elapsed-lastSplash>.055){
+        lastSplash=elapsed;
+        const rain=campusRainWeight(S.x,S.z);
+        if(Math.random()<.25*clamp(rain,0,1)){
+          const px=S.x+(Math.random()-.5)*550,pz=S.z+(Math.random()-.5)*550;
+          if(distance(px,pz,0,1378)>355)ripple(px,pz,.032,.008);
+        }
+      }
+      run(effects.normals);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
+      gl.bindVertexArray(null);gl.useProgram(prog);gl.enable(gl.DEPTH_TEST);
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindVertexArray(null);
+    gl.useProgram(prog);
+    reset();
+    return {update,reset,ripple,normal:normal.texture,
+      get height(){return buffers[read].texture;},
+      get center(){return [cx,cz];},SPAN,
+      get diagnostics(){return {running:active,localSpan:SPAN,texels:N,
+        worldCenter:[cx,cz],wavesInjected:wakeCount,shader:'GPU RGBA8 height/velocity + normals'};}};
+  }
+  let dhakaWater=null,waterIntegrationError=null;
+  if(lab2){try{dhakaWater=createDhakaWaterLab();}
+    catch(err){waterIntegrationError=String(err);console.warn('Water integration fallback:',err);}}
+  gl.useProgram(prog);
   // Local meshes drawn with per-instance transforms.
   // OFFLINE EXPORTED SOURCE GEOMETRY. The binary comes from the original
   // renderSingleBuildingGeometry, renderBRACUStaticGeometry, drawCityTree,
@@ -2358,7 +2616,7 @@
   function notify(msg,sec=3){S.notification=msg;S.notificationTime=sec;}
   const seated=()=>S.rides.filter(r=>r.state==='ONBOARD');
   const formatTime=t=>`${String(Math.floor(Math.max(0,t)/60)).padStart(2,'0')}:${String(Math.floor(Math.max(0,t)%60)).padStart(2,'0')}`;
-  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();Object.assign(S,{mode:'PLAYING',guideDismissed:false,time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0});
+  function reset(){if(!sourceMeshes){const message=sourceLoadError||'Original game geometry is still loading. Please wait.';const status=$('engine-status');if(status){status.textContent=message;status.style.color='#ffbc9c';}return;}keys.clear();dhakaWater?.reset(0,-1450);Object.assign(S,{mode:'PLAYING',guideDismissed:false,time:0,x:0,z:-1450,angle:90,camera3:true,heading:90,score:0,delivered:0,failed:0,rescued:0,boost:100,boostOn:false,lastMove:-99,request:null,requestLeft:0,spawnClock:0,requestId:0,rides:[],dock:0,dockId:-1,notification:'',notificationTime:0,traffic:'GREEN',trafficClock:0,wasTraffic:false,trafficSafe:[0,-1450],violations:0,powerIndex:0,powerOff:true,powerClock:0,photo:false,photoTime:0,flash:0,wiperTime:0,wiperActive:false,wiperAngle:18,wiperDirection:1,screenDrops:[],screenSpawn:0,debrisCooldown:0,gameOverReason:'',current:'',movingCars:[],missedEffects:[],deliveryEffects:[],pickupEffects:[],rainSplashes:[],carProgress:[65,190],carStopped:[false,false],deliveryBanner:null,frameMS:0,frameWorst:0,campusQueue:[],campusGateScene:null,campusDropCursor:0,campusEntryCounter:0,gateRewardGroups:[],gateGroupCounter:0,rewardUntil:0,gatePausedTime:0});
     S.cityPeople=CITY_PEOPLE.map((p,i)=>({...p,uid:i}));S.cityPersonId=CITY_PEOPLE.length;
     S.aiRickshaws=createRickshawFleet();S.rickshawRescueCount=0;S.rickshawCrashCount=0;S.rickshawQuarrels=[];
     S.aiBoats=createRescueFleet();S.aiRespawnQueue=[];S.aiRescueCount=0;
@@ -3344,7 +3602,10 @@
       'Welcome to BRAC University · No flood holidays!';
   }
   let comicView=null,comicProj=null,comicEye=null;
-  function draw(){resize();skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
+  function draw(){resize();
+    if(dhakaWater){try{dhakaWater.update(Math.min(.05,Math.max(0,S.mode==='PLAYING'?S._waterDelta||0:.0)));}
+      catch(e){console.warn('GPU Water simulation disabled:',e);waterIntegrationError=String(e);dhakaWater=null;}}
+    gl.useProgram(prog);skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
     const currentPitch=S.waveStrength*Math.sin(S.bobTime*4.4+S.z*.012)*5.0;
     const currentRoll=S.waveStrength*Math.sin(S.bobTime*3.7+S.x*.014)*7.2;
     const boatPitch=clamp(boatImpact.pitch+currentPitch,-17,17);
@@ -3391,6 +3652,22 @@
     comicProj=perspective(fov*RAD,canvas.width/canvas.height,1.2,5100);
     comicView=lookAt(eye,target,cameraUp);
     gl.uniformMatrix4fv(uniforms.proj,false,comicProj);gl.uniformMatrix4fv(uniforms.view,false,comicView);gl.uniform1f(uniforms.time,S.bobTime*.85);
+    if(lab2){
+      gl.uniform1f(uniforms.labEnabled,dhakaWater?1:0);
+      if(dhakaWater){
+        gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,dhakaWater.height);
+        gl.uniform1i(uniforms.labField,2);
+        gl.activeTexture(gl.TEXTURE3);gl.bindTexture(gl.TEXTURE_2D,dhakaWater.normal);
+        gl.uniform1i(uniforms.labNormal,3);
+        gl.uniform2fv(uniforms.labCenter,dhakaWater.center);
+        gl.uniform1f(uniforms.labSpan,dhakaWater.SPAN);
+        gl.uniform3fv(uniforms.labEye,eye);
+        // Directional warm sun from the BRACU clearing; elsewhere the same
+        // light is strongly cloud-diffused by the city's existing fog.
+        gl.uniform3f(uniforms.labSun,.41,.82,.39);
+        gl.activeTexture(gl.TEXTURE0);
+      }
+    }
     gl.disable(gl.CULL_FACE);
     if(sourceMeshes){
       for(const group of ['sky','clouds'])render(sourceMeshes[group]); // do not render the source's opaque rectangular sky wall in front of the browser scene
@@ -3549,8 +3826,8 @@
         render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
         if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['first-rowing-'+f]||sourceMeshes['firstperson-hands'],rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));}
       }
-      if(S.rowing){
-        // Paddle-tip splashes and a short wake behind the moving sampan.
+      if(S.rowing&&!dhakaWater){
+        // Legacy fallback: Water Lab 02.1 now supplies the GPU boat wake.
         const fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
         for(const side of [-1,1]){
           render(waterRipple,model(S.x+side*lx*39+fx*18,9.4,S.z+side*lz*39+fz*18,0,.20+.10*Math.abs(Math.sin(S.strokeTime*TAU/.65))));
@@ -3614,7 +3891,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity18-grounded-shopkeepers-dual-route-map-audio-ready-v4';
+  window.majhiVersion='fidelity18-water-integration-01-gpu-lab021';
+  window.majhiWaterDiagnostics=()=>({webgl2:lab2,enabled:!!dhakaWater,error:waterIntegrationError,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
@@ -3627,6 +3905,7 @@
     poweredWindowGroups:powerWindowPairs.length,swimmers:S.cityPeople.filter(p=>p.role==='SWIM').length,aiRescueBoats:S.aiBoats.map(b=>({name:b.name,x:b.x,z:b.z,targetId:b.targetId,deliveries:b.deliveries})),aiRescued:S.aiRescueCount,respawnPending:S.aiRespawnQueue.length,updatedStreetLamps:streetlights.length,trafficSignalHousingVertices:modernTrafficBody.length,exitGlareInstalled:!!document.getElementById('majhi-exit-flashlight-glare'),impactSplashCount:S.impactSplashes.length,waveSplashCount:S.waveSplashes.length,impactPitch:boatImpact.pitch,impactRoll:boatImpact.roll,passengerTimes:seated().map(r=>({name:r.name,timeLeft:r.timeLeft})),quality:S.quality});
   let last=0,hudClock=0;
   function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,Math.max(0,(now-last)/1000||0));last=now;
+    S._waterDelta=dt;
     if(S.mode==='PLAYING'){let t=dt;while(t>0){const d=Math.min(t,.025);step(d);t-=d;}}else {S.bobTime+=dt*.5;if(S.mode==='WON')S.postWinClock=(S.postWinClock||0)+dt;}
     gameAudio.update(dt);
     const frameStart=performance.now();try{draw();renderRain(dt);updateCampusGateOverlay();}catch(e){console.error('Render error:',e);$('error').classList.remove('hidden');S.mode='PAUSED';return;}
@@ -3699,6 +3978,6 @@
   });
   document.querySelectorAll('[data-key]').forEach(btn=>btn.addEventListener('click',()=>action(btn.dataset.key)));
   // Read-only diagnostics to make browser smoke tests deterministic.
-  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),rowing:S.rowing,strokeFrame:Math.floor((S.strokeTime/0.65)*24)%24,renderer:'WebGL1 / Python source geometry',sourceGeometryLoaded:!!sourceMeshes,sourceLoadError}),start:reset};
+  window.MajhiDiagnostics={getState:()=>({mode:S.mode,x:S.x,z:S.z,angle:S.angle,score:S.score,delivered:S.delivered,failed:S.failed,activeRequests:S.rides.length,request:S.request?.name||null,boatBoost:Math.round(S.boost),rowing:S.rowing,strokeFrame:Math.floor((S.strokeTime/0.65)*24)%24,renderer:dhakaWater?'WebGL2 + Water Lab 02.1 / Python source geometry':(lab2?'WebGL2 / legacy water':'WebGL1 / legacy water'),sourceGeometryLoaded:!!sourceMeshes,sourceLoadError}),start:reset};
   requestAnimationFrame(loop);
 })();
