@@ -569,6 +569,7 @@
     const vao=gl.createVertexArray();let read=0;
     let cx=0,cz=-1450,active=false,elapsed=0,lastX=0,lastZ=0,stepAccumulator=0;
     let lastSplash=0,lastStroke=-1,travelDistance=0,wakeCount=0;
+    const aiBladeContact=new Map();
     let lastObjectRipple=-1,objectWaveCount=0;
     let seenImpacts=new WeakSet(),seenRain=new WeakSet();
     function run(effect,args={}){gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);
@@ -618,6 +619,7 @@
       sampleTime=-1;Object.assign(hullWater,{heave:0,pitch:0,roll:0,targetHeave:0,
         targetPitch:0,targetRoll:0,samples:0,available:false,disabled:!sampleFB});
       seenImpacts=new WeakSet();seenRain=new WeakSet();wakeCount=0;
+      aiBladeContact.clear();
       for(const b of buffers){gl.bindTexture(gl.TEXTURE_2D,b.texture);
         gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,N,N,gl.RGBA,gl.UNSIGNED_BYTE,blank);}
       read=0;
@@ -655,14 +657,34 @@
           // water belongs to catch/drive, not release or airborne recovery.
           const phase=S.strokeTime/.65;
           const inWater=phase>=.10&&phase<=.53;
-          const stroke=Math.floor(S.time/.65*3);
-          if(inWater&&stroke!==lastStroke){lastStroke=stroke;
+          // Once per catch/drive entry; reset after release/recovery.
+          if(!inWater)lastStroke=-1;
+          if(inWater&&lastStroke<0){lastStroke=1;
             for(const side of [-1,1]){
-              const px=S.x+fx*18-fz*side*49,pz=S.z+fz*18+fx*side*49;
+              const [bx,bz]=playerOarContact(phase,side);
+              const px=S.x+(bx*fx-bz*fz)*.62,pz=S.z+(bx*fz+bz*fx)*.62;
               run(effects.paddle,{center:uv(px,pz),motion:[fx,fz],strength:.075});
             }
           }
+        }else lastStroke=-1;
+      }
+      // AI majhis use the same stroke geometry AND water contact points.
+      // Trigger one compact pair of impulses on entering each drive stroke;
+      // keep this local to the player and avoid per-frame GPU spam.
+      if(S.mode==='PLAYING')for(const boat of S.aiBoats){
+        const phase=(boat.strokeCycle||0)%1;
+        const inWater=boat.pause<=0&&phase>=.10&&phase<.53;
+        const oldContact=aiBladeContact.get(boat.id)||false;
+        if(inWater&&!oldContact&&distance(S.x,S.z,boat.x,boat.z)<380){
+          const theta=boat.angle*RAD,cs=Math.cos(theta),sn=Math.sin(theta);
+          for(const side of [-1,1]){
+            const [bx,bz]=playerOarContact(phase,side);
+            const wx=boat.x+(bx*cs-bz*sn)*.51;
+            const wz=boat.z+(bx*sn+bz*cs)*.51;
+            run(effects.paddle,{center:uv(wx,wz),motion:[cs,sn],strength:.052});
+          }
         }
+        aiBladeContact.set(boat.id,inWater);
       }
       // Add short-lived impact/rain disturbances from the EXISTING game
       // events; don't alter rescue missions, NPCs or collision mechanics.
@@ -1040,19 +1062,69 @@
   }
   loadSourceGeometry().catch(e=>{sourceLoadError=e.message;console.error('Original source geometry:',e);
     window.majhiStartupError?.('Original geometry failed to load',e.message);});
-  const boatMesh=new Mesh();
-  const stations=[[-100,10],[-92,29],[-66,37],[-24,41],[25,42],[72,35],[100,24],[123,1]];
-  for(const side of [-1,1])for(let i=0;i<stations.length-1;i++){
-    const [a,w]=stations[i],[b,v]=stations[i+1];
-    boatMesh.quad([a,8,side*w],[b,8,side*v],[b,-5,side*(v-4)],[a,-5,side*(w-4)],side===1?[.18,.54,.56]:[.15,.43,.47]);
-    boatMesh.quad([a,9,side*(w-1)],[b,9,side*(v-1)],[b,7,side*(v-8)],[a,7,side*(w-8)],[.76,.58,.35]);
+  // Phase 9: Water Lab 02.1-inspired, passenger-capable Bengali rescue hull.
+  // Geometry is baked once; the identical hull profile is shared with AI majhis.
+  // Coordinates are the original game boat's local units, so the established
+  // collision footprint, boarding seats, dock distances and camera remain valid.
+  function buildMajhiHull(variant=0){
+    const hull=new Mesh();
+    const schemes=[
+      {outer:[.095,.37,.405],inner:[.08,.245,.25],rail:[.79,.58,.33],plank:[.67,.43,.24]},
+      {outer:[.43,.29,.17],inner:[.25,.16,.10],rail:[.82,.63,.40],plank:[.62,.43,.24]},
+      {outer:[.29,.37,.30],inner:[.16,.23,.18],rail:[.77,.56,.33],plank:[.59,.42,.25]},
+      {outer:[.46,.26,.23],inner:[.29,.14,.12],rail:[.82,.58,.36],plank:[.66,.44,.26]}
+    ];
+    const c=schemes[variant%schemes.length];
+    const frames=[[-120,3,20],[-104,23,14],[-78,35,11],[-42,40,9],[5,43,8.6],
+      [45,40,9],[82,31,11],[112,16,16],[133,1.5,23]];
+    for(let i=0;i<frames.length-1;i++){
+      const [x,w,h]=frames[i],[nx,nw,nh]=frames[i+1];
+      for(const side of [-1,1]){
+        const a=side*w,b=side*nw;
+        // Curved outer freeboard, chine and tucked-in bottom.
+        hull.quad([x,h,a],[nx,nh,b],[nx,-1,side*nw*.90],[x,-1,side*w*.90],c.outer);
+        hull.quad([x,-1,side*w*.90],[nx,-1,side*nw*.90],
+          [nx,-13,side*nw*.36],[x,-13,side*w*.36],c.outer.map(v=>v*.77));
+        // Inner walls remain visible above the retained interior floors.
+        hull.quad([x,h,side*(w-1.4)],[nx,nh,side*(nw-1.4)],
+          [nx,-6,side*nw*.70],[x,-6,side*w*.70],c.inner);
+        hull.quad([x,h+1.6,a],[nx,nh+1.6,b],
+          [nx,nh-1.8,side*(nw-3)],[x,h-1.8,side*(w-3)],c.rail);
+      }
+      // Diagonal bottom planks, slight curvature instead of flat box slabs.
+      hull.quad([x,-10,-w*.38],[nx,-10,-nw*.38],
+        [nx,-10,nw*.38],[x,-10,w*.38],c.plank.map(v=>v*.72));
+    }
+    // Fitted deck slats preserve the curved hull's interior and seat legibility.
+    for(let x=-87;x<107;x+=21){
+      const f=frames.findIndex(e=>e[0]>x),a=frames[Math.max(0,f-1)],b=frames[Math.max(1,f)];
+      const u=clamp((x-a[0])/(b[0]-a[0]||1),0,1),w=a[1]+(b[1]-a[1])*u;
+      for(let j=-2;j<=2;j++){
+        hull.box(x,-6.8,j*w*.19,18,1.5,Math.max(4,w*.16),j%2?c.plank:c.rail.map(v=>v*.83));
+      }
+    }
+    // Three visible passenger positions, with a dedicated rower's bench aft.
+    for(const [x,width] of [[-56,69],[10,71],[68,54]]){
+      hull.box(x,3.7,0,15,5.5,width,c.plank);
+      hull.box(x,1.2,-width*.35,8,5,5,c.inner);
+      hull.box(x,1.2,width*.35,8,5,5,c.inner);
+      hull.box(x,6.6,0,14,1.2,width,c.rail);
+    }
+    // Curved stem/stern caps and a narrow longitudinal keel above the bottom.
+    hull.box(-109,15,0,9,5.5,24,c.rail);
+    hull.box(118,17,0,9,5.5,17,c.rail);
+    hull.box(0,-8.5,0,190,2.4,3.0,c.plank);
+    for(const side of [-1,1]){
+      const z=side*38;
+      hull.box(-48,8.0,z,10,8,5.0,c.rail); // proper raised oarlocks
+      hull.sphere(-48,12.0,z,4.7,[.43,.44,.41],4,7);
+      for(let k=-1;k<=1;k++)
+        hull.box(-48+k*3.2,16,z+side*1.2,1.9,6.5,2.2,[.38,.39,.36]);
+    }
+    return hull.upload();
   }
-  for(let i=1;i<stations.length-2;i++){const [a,w]=stations[i],[b,v]=stations[i+1];boatMesh.quad([a,-2,-w+5],[b,-2,-v+5],[b,-2,v-5],[a,-2,w-5],[.45,.32,.22]);}
-  for(const bx of [-50,8,65])boatMesh.box(bx,4,0,12,6,62,[.70,.51,.31]);
-  boatMesh.box(-90,8,0,17,10,48,[.52,.38,.24]);
-  boatMesh.box(100,8,0,13,11,29,[.28,.49,.48]);
-  boatMesh.upload();
-  const paddleMesh=new Mesh();paddleMesh.cylinder(0,0,0,2.8,95,[.55,.38,.24],8);paddleMesh.box(0,-43,0,15,22,6,[.73,.49,.27]);paddleMesh.upload();
+  const boatMesh=buildMajhiHull(0);
+  const aiHullMeshes=[buildMajhiHull(1),buildMajhiHull(2),buildMajhiHull(3)];
   const carMesh=new Mesh();carMesh.box(0,6,0,88,25,44,[.36,.43,.47]);carMesh.box(3,21,0,49,19,41,[.22,.30,.34]);carMesh.box(-8,34,0,24,3,38,[.40,.49,.50]);carMesh.box(40,9,0,4,12,33,[.78,.35,.23]);carMesh.box(-40,9,0,4,13,33,[.87,.67,.38]);carMesh.upload();
   const npcMeshes=studentColors.map(color=>{const m=new Mesh();m.cylinder(0,14,0,7,24,color,8);m.sphere(0,32,0,9,[.78,.55,.38],4,8);m.cylinder(-9,16,0,3,22,[.77,.55,.40],6);m.cylinder(9,18,0,3,28,[.77,.55,.40],6);m.cylinder(-4,2,0,2.4,10,[.20,.29,.37],6);m.cylinder(4,2,0,2.4,10,[.20,.29,.37],6);return m.upload();});
   // Reactive citizens are lightweight procedural meshes, baked once into GPU
@@ -1071,6 +1143,143 @@
       mesh.quad(ring(from,a),ring(from,b),ring(to,b),ring(to,a),color);
     }
   }
+  // Phase 9: one common articulated stroke system for player and AI.
+  // This follows Water Lab's catch (0-.10), submerged drive (.10-.53),
+  // release (.53-.68), and airborne recovery (.68-1) stroke phases.
+  // Pre-baked meshes avoid modifying geometry or uploading buffers each frame.
+  const MAJHI_STROKE_FRAMES=24;
+  const majhiShirts=[[.12,.55,.58],[.90,.56,.20],[.28,.66,.42],[.71,.41,.72]];
+  const majhiSkin=[.77,.55,.40],majhiHair=[.09,.11,.13],majhiWood=[.67,.43,.23];
+  const majhiSmooth=u=>{u=clamp(u,0,1);return u*u*(3-2*u);};
+  function majhiStrokePose(phase,side){
+    const p=((phase%1)+1)%1;
+    let sweep,bladeY;
+    if(p<.10){const u=majhiSmooth(p/.10);sweep=29+3*u;bladeY=11-20*u;}
+    else if(p<.53){const u=majhiSmooth((p-.10)/.43);sweep=32-65*u;bladeY=-9.0;}
+    else if(p<.68){const u=majhiSmooth((p-.53)/.15);sweep=-33;bladeY=-9+21*u;}
+    else {const u=majhiSmooth((p-.68)/.32);sweep=-33+62*u;bladeY=12;}
+    const pivot=[-48,12,side*38];
+    const hand=[-48-sweep*.33,16.0+(bladeY>0?1.5:0),side*10];
+    const shaftStart=[-48+sweep*.86,bladeY+1.7,side*87];
+    const bladeEnd=[-48+sweep*1.11,bladeY-.9,side*114];
+    return {pivot,hand,shaftStart,bladeEnd,sweep,bladeY};
+  }
+  function majhiShaft(mesh,from,to,rad,color){citizenLimb(mesh,from,to,rad,color);}
+  function majhiBlade(mesh,from,to,wood){
+    // Broad flattened blade with rounded-looking tapered tip, not a pole.
+    const a=from,b=to,dx=b[0]-a[0],dz=b[2]-a[2],d=Math.hypot(dx,dz)||1;
+    const rx=-dz/d,rz=dx/d;
+    const crossSection=(p,width,thick)=>[
+      [p[0]+rx*width,p[1]+thick,p[2]+rz*width],
+      [p[0]-rx*width,p[1]+thick,p[2]-rz*width],
+      [p[0]-rx*width,p[1]-thick,p[2]-rz*width],
+      [p[0]+rx*width,p[1]-thick,p[2]+rz*width]
+    ];
+    const tip=[a[0]+dx*.96,a[1]+(b[1]-a[1])*.96,a[2]+dz*.96];
+    const sections=[crossSection(a,3.1,1.5),crossSection(tip,7.8,1.5),crossSection(b,5.3,1.2)];
+    for(let j=0;j<2;j++)for(let k=0;k<4;k++){
+      const c=sections[j],n=sections[j+1],other=(k+1)%4;
+      mesh.quad(c[k],c[other],n[other],n[k],wood);
+    }
+    mesh.quad(...sections[2],wood);
+  }
+  function makeMajhiRowingFrame(phase,shirtId=0){
+    const full=new Mesh(),first=new Mesh(),wet=new Mesh();
+    const shirt=majhiShirts[shirtId%majhiShirts.length];
+    const shade=shirt.map(x=>x*.77),skin=majhiSkin,hair=majhiHair,wood=majhiWood;
+    const active=phase>=.10&&phase<.53;
+    const pressure=active?Math.sin(Math.PI*(phase-.10)/.43):0;
+    const lean=-3.3*pressure+1.4*Math.sin(phase*TAU);
+    const torsoX=-59+lean;
+    // Seated captain, knees and feet inside the passenger-capable hull.
+    full.box(torsoX,26.5,0,19,20,28,shirt);
+    full.box(torsoX+7.8,28,0,2,13,21,shade);
+    full.box(torsoX,16.0,0,17,11,27,[.24,.30,.39]);
+    for(const side of [-1,1]){
+      full.box(torsoX+7,12.8,side*9,19,8,10,[.29,.35,.40]);
+      majhiShaft(full,[torsoX+12,12.8,side*9],[-11,7.1,side*13],4.1,[.28,.32,.37]);
+      full.box(0,6.5,side*13,17,4.0,8.6,[.28,.25,.21]);
+    }
+    full.sphere(torsoX+3,44,0,11.7,skin,6,11);
+    full.sphere(torsoX+1.7,49.3,0,11.4,hair,4,12);
+    full.box(torsoX+12.5,40.3,0,3.7,3.5,5.2,skin);
+    for(const side of [-1,1]){
+      full.sphere(torsoX+12.8,45,side*4.6,1.2,[.98,.94,.85],3,6);
+      full.sphere(torsoX+13.4,45,side*4.6,.7,[.10,.10,.12],3,6);
+      full.sphere(torsoX+1.9,43,side*11.2,2.5,skin,3,6);
+    }
+    // Hands follow handles; each elbow is solved from fixed arm lengths.
+    for(const side of [-1,1]){
+      const o=majhiStrokePose(phase,side);
+      majhiShaft(full,o.hand,o.pivot,2.0,wood);
+      majhiShaft(full,o.pivot,o.shaftStart,2.25,wood);
+      majhiBlade(full,o.shaftStart,o.bladeEnd,wood);
+      // Wet-only second rendering before the refractive optical pass.
+      if(o.bladeY<1){
+        majhiBlade(wet,o.shaftStart,o.bladeEnd,wood);
+        majhiShaft(wet,o.pivot,o.shaftStart,2.2,wood);
+      }
+      const shoulder=[torsoX+2,32.0,side*13.3];
+      const delta=o.hand.map((v,i)=>v-shoulder[i]);
+      const len=Math.hypot(...delta)||1;
+      const axis=delta.map(v=>v/len);
+      const ul=19.2,ll=19.2,d=Math.min(len,ul+ll-.05);
+      const along=d*.5,depth=Math.sqrt(Math.max(0,ul*ul-along*along));
+      const pole=[-0.7,.2,side*.9];
+      const dp=pole.reduce((acc,v,i)=>acc+v*axis[i],0);
+      let perp=pole.map((v,i)=>v-dp*axis[i]);
+      const pl=Math.hypot(...perp)||1;perp=perp.map(v=>v/pl);
+      const elbow=shoulder.map((v,i)=>v+axis[i]*along+perp[i]*depth);
+      for(const target of [full,first]){
+        target.sphere(shoulder[0],shoulder[1],shoulder[2],6.3,shirt,4,8);
+        majhiShaft(target,shoulder,elbow,4.3,shirt);
+        target.sphere(...elbow,4,skin,4,7);
+        majhiShaft(target,elbow,o.hand,3.6,skin);
+        target.sphere(...o.hand,3.8,skin,4,7);
+      }
+      // First-person uses the EXACT same oar pose and grip coordinates.
+      majhiShaft(first,o.hand,o.pivot,2.0,wood);
+      majhiShaft(first,o.pivot,o.shaftStart,2.25,wood);
+      majhiBlade(first,o.shaftStart,o.bladeEnd,wood);
+    }
+    return {full:full.upload(),first:first.upload(),wet:wet.upload()};
+  }
+  const majhiRigs=majhiShirts.map((_,s)=>Array.from({length:MAJHI_STROKE_FRAMES},(_,i)=>
+    makeMajhiRowingFrame((i+.5)/MAJHI_STROKE_FRAMES,s)));
+  function strokeFrame(phase){return Math.min(MAJHI_STROKE_FRAMES-1,Math.floor(clamp(phase,0,.999999)*MAJHI_STROKE_FRAMES));}
+  const idleStrokeFrame=strokeFrame(.82);
+  // Shared pose data also feeds the GPU paddle-contact coordinates.
+  function playerOarContact(phase,side){
+    const o=majhiStrokePose(phase,side);
+    return [o.shaftStart[0]*.45+o.bladeEnd[0]*.55,
+      side*(87*.45+114*.55)];
+  }
+  // Dedicated seated passengers, not standing source-model students.
+  // Three benches remain usable: two side seats and one front seat.
+  function makeSeatedPassenger(color,id){
+    const mesh=new Mesh(),shirt=color,skin=[.76,.53,.38],hair=[.11,.13,.17];
+    mesh.box(0,16.5,0,16.5,18,18,shirt);
+    mesh.box(7.6,17.0,0,1.6,13,11,shirt.map(v=>v*.79));
+    mesh.box(-2.0,7.2,0,17,7.2,21,[.25,.31,.37]);
+    mesh.sphere(2.3,34.1,0,8.6,skin,5,9);
+    mesh.sphere(-.3,38.0,0,8.6,hair,4,9);
+    for(const side of [-1,1]){
+      // Bent thigh + shin read as a person seated on the wooden bench.
+      citizenLimb(mesh,[4,7,side*6],[15,5.9,side*7.2],4.0,[.27,.32,.38]);
+      citizenLimb(mesh,[15,5.9,side*7.2],[16,1.2,side*7.2],3.0,[.28,.32,.38]);
+      mesh.box(19,1.4,side*7.2,9.0,3.0,6.5,[.12,.17,.20]);
+      citizenLimb(mesh,[4,21.2,side*9],[10.1,12.1,side*10],3.3,shirt);
+      citizenLimb(mesh,[10.1,12.1,side*10],[15.0,8.4,side*7],2.65,skin);
+      mesh.sphere(15.0,8.4,side*7,3,skin,3,6);
+      mesh.sphere(9.7,34.8,side*3.25,1.1,[.97,.96,.90],3,6);
+      mesh.sphere(10.6,34.8,side*3.25,.54,[.08,.12,.14],3,6);
+    }
+    // Passenger school bag stays behind their back, not floating nearby.
+    mesh.box(-11.1,15.5,0,6.0,15.0,15.0,[.24,.33,.37]);
+    mesh.box(-14.7,18,0,1.1,4.3,8,[.75,.64,.39]);
+    return mesh.upload();
+  }
+  const seatedPassengerMeshes=studentColors.map(makeSeatedPassenger);
   function makeCitizenPose(color,kind,index){
     const m=new Mesh(),phase=index*TAU/REACTION_FRAMES;
     const isSOS=kind.startsWith('SOS'),urgent=kind.endsWith('URGENT'),celebrating=kind==='CELEBRATE';
@@ -1314,6 +1523,8 @@
       const blocked=distance(nx,nz,S.x,S.z)<92;
       if(!blocked&&valid(nx,nz,18)){
         boat.x=nx;boat.z=nz;
+        // Real distance-driven animation, with a consistent rowing cadence.
+        boat.strokeCycle=((boat.strokeCycle||0)+ahead/115)%1;
       }
     }
   }
@@ -1458,23 +1669,26 @@
     if(S.mode==='MENU')return;
     for(const boat of S.aiBoats){
       if(distance(S.x,S.z,boat.x,boat.z)>1050)continue;
-      const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
-      const bob=.65*Math.sin(S.time*4+boat.id)+
-        .85*analyticSurface(boat.x,boat.z,S.bobTime*.85);
-      // Small distinct sampans carrying a visible majhi, with paddles and wakes.
-      render(sourceMeshes?.boat||boatMesh,model(boat.x,FLOOD_WATERLINE-2.2+bob,boat.z,boat.angle,.47));
-      render(citizenFrame('HOME',boat.colorId,S.time*2.7+boat.id),
-        model(boat.x-fx*12,FLOOD_WATERLINE+13.3+bob,boat.z-fz*12,boat.angle,.42));
-      const stroke=Math.sin(S.time*10+boat.id*2);
-      render(paddleMesh,model(boat.x+fx*9+lx*34,FLOOD_WATERLINE+8.3+bob,boat.z+fz*9+lz*34,boat.angle+22+stroke*17,.30));
-      render(paddleMesh,model(boat.x+fx*9-lx*34,FLOOD_WATERLINE+8.3+bob,boat.z+fz*9-lz*34,boat.angle-22-stroke*17,.30));
-      // The rescued citizen is briefly visible aboard, rather than vanishing
-      // immediately after the pickup animation.
-      if(S.time-boat.rescuedAt<7.2)
-        render(citizenFrame('CELEBRATE',boat.rescuedColor,S.time*1.9),
-          model(boat.x+fx*33,FLOOD_WATERLINE+11.3+bob,boat.z+fz*33,boat.angle,.34));
+      const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a);
+      const bob=.65*Math.sin(S.time*4+boat.id)+.85*analyticSurface(boat.x,boat.z,S.bobTime*.85);
+      const scale=.51; // same hull profile, modestly smaller than player boat
+      const y=FLOOD_WATERLINE+.2+bob;
+      const vessel=rockingBoatModel(boat.x,y,boat.z,boat.angle,scale,
+        1.3*Math.sin(S.time*2+boat.id),1.6*Math.sin(S.time*1.8+boat.id));
+      const shirt=(boat.id%3)+1;
+      const moving=boat.pause<=0&&boat.waypoints?.length>0;
+      const frame=moving?strokeFrame((boat.strokeCycle||0)%1):idleStrokeFrame;
+      render(aiHullMeshes[boat.id%aiHullMeshes.length],vessel);
+      render(majhiRigs[shirt][frame].full,vessel,true);
+      // A rescued student is seated on a real bench, not standing on water.
+      if(S.time-boat.rescuedAt<7.2){
+        render(seatedPassengerMeshes[boat.rescuedColor%seatedPassengerMeshes.length],
+          model(boat.x+fx*30,FLOOD_WATERLINE+5.0+bob,
+            boat.z+fz*30,boat.angle,.42));
+      }
       for(let k=0;k<2;k++)render(waterRipple,
-        model(boat.x-fx*(44+k*26),FLOOD_WATERLINE+.35,boat.z-fz*(44+k*26),0,.36+k*.13));
+        model(boat.x-fx*(44+k*26),FLOOD_WATERLINE+.35,
+          boat.z-fz*(44+k*26),0,.36+k*.13));
     }
   }
 
@@ -4343,7 +4557,12 @@
       eye=[S.x+(x-S.x)*minFraction,boatY+26+90*minFraction+45*nearWall,S.z+(z-S.z)*minFraction];
       target=[S.x+c*80,boatY+22+10*nearWall,S.z+s*80];
       fov=73+12*nearWall;
-    }else{eye=[S.x-c*24,boatY+41,S.z-s*24];target=[S.x+c*210,boatY+19,S.z+s*210];fov=78;}
+    }else{
+      // Position within the stern so actual rigged handles/blades, not an
+      // unrelated first-person animation, fall into the lower field of view.
+      eye=[S.x-c*70,boatY+31,S.z-s*70];
+      target=[S.x+c*210,boatY+18,S.z+s*210];fov=80;
+    }
     let cameraUp=[0,1,0];
     if(S.mode==='PLAYING'){
       if(!reducedMotion()){
@@ -4443,6 +4662,20 @@
       const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
       const f=Math.floor((S.bobTime*3+i*1.8)/TAU*24)%24;
       render(driverFrames[(f+24)%24],model(dx,FLOOD_WATERLINE-10,dz,car.angle,1));
+    }
+    // Submerged oar blades are captured BEFORE refraction. Above-water limbs
+    // are rendered later with the submerged-fragment mask: no ghost paddles.
+    if(S.mode==='PLAYING'){
+      const f=S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame;
+      render(majhiRigs[0][f].wet,
+        rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
+      for(const boat of S.aiBoats){
+        if(distance(S.x,S.z,boat.x,boat.z)>1050||boat.pause>0)continue;
+        const bf=strokeFrame((boat.strokeCycle||0)%1);
+        const bob=.65*Math.sin(S.time*4+boat.id)+.85*analyticSurface(boat.x,boat.z,S.bobTime*.85);
+        render(majhiRigs[(boat.id%3)+1][bf].wet,
+          model(boat.x,FLOOD_WATERLINE+.2+bob,boat.z,boat.angle,.51));
+      }
     }
     // Semi-transparent animated water is drawn AFTER the original flooded
     // road textures, so lane markings remain visible underneath the surface.
@@ -4566,15 +4799,10 @@
     // Traffic lights: emissive-like saturated color, red/green changes with the actual timer.
     // Modern three-lens signal is drawn for both source and fallback geometry.
     if(S.mode!=='MENU'){
-      if(S.camera3){
-        render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
-        if(sourceMeshes?.captain)render(sourceMeshes.captain,rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));
-        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['rowing-'+f]||sourceMeshes.paddles,rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));}
-      }else{
-        // Like the desktop edition, the actual boat is drawn in first person.
-        render(sourceMeshes?.boat||boatMesh,rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll));
-        if(sourceMeshes){const f=S.rowing?Math.floor((S.strokeTime/0.65)*24)%24:0;render(sourceMeshes['first-rowing-'+f]||sourceMeshes['firstperson-hands'],rockingBoatModel(S.x,boatY-12,S.z,S.angle,1,boatPitch,boatRoll));}
-      }
+      const playerVessel=rockingBoatModel(S.x,boatY,S.z,S.angle,.62,boatPitch,boatRoll);
+      const frame=S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame;
+      render(boatMesh,playerVessel);
+      render(majhiRigs[0][frame][S.camera3?'full':'first'],playerVessel,true);
       if(S.rowing&&!dhakaWater){
         // Legacy fallback: Water Lab 02.1 now supplies the GPU boat wake.
         const fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
@@ -4591,9 +4819,10 @@
         const [bx,bz]=seats[i],settle=clamp((S.time-(r.boardedAt??S.time))/1.25,0,1);
         const eased=settle*settle*(3-2*settle),localZ=(r.boardSide??1)*48*(1-eased)+bz*eased;
         const sx=S.x+(bx*c-localZ*s)*.62,sz=S.z+(bx*s+localZ*c)*.62;
-        const scale=S.camera3?.62:.51,seatY=S.camera3?boatY+15:boatY+15;
-        render(sourceMeshes?.['student-'+r.colorId]||npcMeshes[r.colorId],
-          model(sx,seatY+3*Math.sin(Math.PI*eased),sz,S.angle+(1-settle)*12*(r.boardSide||1),scale));
+        const scale=S.camera3?.70:.61,seatY=boatY+3;
+        render(seatedPassengerMeshes[r.colorId%seatedPassengerMeshes.length],
+          model(sx,seatY+6*Math.sin(Math.PI*eased),sz,
+            S.angle+(1-settle)*12*(r.boardSide||1),scale));
       });
       // Original BRACU drop-off: students leave their seats and walk to the dock.
       for(const e of S.deliveryEffects){
@@ -4632,19 +4861,15 @@
           render(waterRipple,model(effect.x,FLOOD_WATERLINE+.35,effect.z,0,1+age*.22));
         }
       }
-      if(S.camera3&&!sourceMeshes?.paddles){for(const sign of [-1,1]){
-        const bx=S.x+(8*c-sign*47*s)*.62,bz=S.z+(8*s+sign*47*c)*.62;
-        const rocking=(keys.has('w')||keys.has('arrowup'))?Math.sin(S.bobTime*9)*13:4;
-        render(paddleMesh,model(bx,boatY+10,bz,S.angle+sign*(23+rocking),.48));
-      }}
+
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity21-water-lab021-phase5-3m-traffic';
-  window.majhiWaterDiagnostics=()=>({phase:'8-minivan-windows-wheels-3m',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='phase9-rowing-rig-boat-lab021';
+  window.majhiWaterDiagnostics=()=>({phase:'9-boat-majhi-oar-rig-3m',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
-    minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
+    minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     slowCars:S.movingCars.map(c=>({x:+c.x.toFixed(1),z:+c.z.toFixed(1),stopped:c.stopped})),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
     rickshawRescues:S.rickshawRescueCount,rickshawCrashes:S.rickshawCrashCount,
