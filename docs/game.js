@@ -1801,87 +1801,111 @@
   function makeParkedCar(style,part='full'){
     const m=new Mesh();
     const palette=[
-      [.79,.81,.83], // pearl silver
-      [.09,.10,.11], // black
-      [.84,.84,.83], // ivory
-      [.53,.55,.60], // cool grey
-      [.93,.93,.94]  // white pearl
+      [.82,.84,.86], // silver
+      [.10,.11,.12], // black
+      [.92,.92,.90], // white ivory
+      [.66,.70,.77], // blue silver
+      [.95,.95,.96]  // pearl white
     ];
     const paint=palette[style%palette.length],
       tint=f=>paint.map(c=>clamp(c*f,0.,1.)),
-      glass=[.06,.10,.13],glassLite=[.10,.16,.20],
-      trim=[.10,.12,.13],metal=[.72,.74,.74],red=[.86,.16,.14],amber=[.93,.64,.19],
+      glass=[.05,.09,.12],glassLite=[.10,.16,.20],
+      trim=[.08,.10,.11],metal=[.73,.75,.76],
+      red=[.86,.16,.14],clear=[.88,.90,.84],amber=[.94,.64,.20],
       tire=[.06,.07,.08];
-    const top=part==='top', hull=part==='hull', all=part==='full';
-    function include(kind){return all || kind===part;}
+    const all=part==='full';
+    function include(kind){return all||part===kind;}
     function panel(a,b,c,d,color){m.quad(a,b,c,d,color);m.quad(d,c,b,a,color);}
-    // Underwater lower hull: slab sides, bumpers and wheels.
+
+    // Lower flooded hull.
     if(include('hull')){
-      m.box(0,12.5,0,112,21,47,tint(.88));
-      m.box(0,7.5,0,108,8,45,trim);
-      m.box(47,13.8,0,14,10,42,tint(.95)); // front bumper nose
-      m.box(-50,15,0,8,12,41,tint(.82)); // rear bumper
+      m.box(-2,12.5,0,106,18,44,tint(.87));
+      m.box(44,14.0,0,16,8,38,tint(.95));     // front lower bumper / nose
+      m.box(-48,14.0,0,10,9,39,tint(.84));    // rear bumper mass
+      m.box(-2,7.0,0,102,7,42,trim);          // lower skirt
       for(const side of [-1,1]){
-        for(const wheelX of [-34,34]){
+        for(const wheelX of [-31,31]){
           for(let j=0;j<7;j++){
             const a=j*Math.PI/7,b=(j+1)*Math.PI/7;
-            const arc=t=>[wheelX+13.5*Math.cos(t),10.8+13.5*Math.sin(t),side*23.5];
-            citizenLimb(m,arc(a),arc(b),1.7,tint(.66));
+            const arc=t=>[wheelX+13.2*Math.cos(t),10.6+13.2*Math.sin(t),side*22.2];
+            citizenLimb(m,arc(a),arc(b),1.55,tint(.64));
           }
-          dhakaWheel(m,wheelX,10.8,side*23.5,11.3);
+          dhakaWheel(m,wheelX,10.6,side*22.2,11.2);
         }
-        citizenLimb(m,[-51,22,side*23.2],[50,22,side*23.2],.7,tint(1.08));
-        citizenLimb(m,[-50,8.2,side*23.7],[50,8.2,side*23.7],.95,trim);
+        citizenLimb(m,[-46,21.0,side*22.0],[46,21.0,side*22.0],.65,tint(1.08));
+        citizenLimb(m,[-45,8.1,side*22.9],[45,8.1,side*22.9],.85,trim);
       }
-      m.box(0,5.5,0,100,2,42,tire);
+      m.box(-2,5.2,0,96,2,40,tire);
     }
-    // Above-water cabin/roof: this is the crisp visible piece drawn after water.
+
+    // Above-water cabin / greenhouse.
     if(include('top')){
-      m.box(4,31,0,88,17,46,tint(.97));
-      panel([-42,47,-19.5],[19,47,-19.5],[19,47,19.5],[-42,47,19.5],tint(1.05));
-      panel([20,42,-19.8],[39,42,-19.8],[39,42,19.8],[20,42,19.8],tint(1.02));
+      // Upper body volume with softer minivan proportions.
+      m.box(-4,30.5,0,94,14,44,tint(.98));
+      // Roof and front roof step.
+      panel([-39,46.6,-18.8],[17,46.6,-18.8],[17,46.6,18.8],[-39,46.6,18.8],tint(1.03));
+      panel([17,43.0,-18.8],[32,43.0,-18.8],[32,43.0,18.8],[17,43.0,18.8],tint(1.02));
+      // Shoulder line below the windows so the van doesn't read as a block.
       for(const side of [-1,1]){
         const w=side;
-        // Large side glazing like a Noah / minivan.
-        panel([-45,29,w*22.4],[-36,44,w*20.0],[18,44,w*20.0],[29,29,w*22.4],tint(.78));
-        panel([-41,31,w*22.65],[-34,42.2,w*20.3],[-19,42.2,w*20.6],[-18,31,w*22.65],glass);
-        panel([-15,31,w*22.65],[-14,42.2,w*20.7],[2,42.2,w*20.7],[2,31,w*22.65],glass);
-        panel([5,31,w*22.7],[5,42.2,w*20.7],[16,42.2,w*20.6],[26,31,w*22.7],glassLite);
-        panel([28,31,w*22.8],[28,40.2,w*20.7],[37,40.2,w*19.9],[43,31,w*22.8],glassLite);
-        citizenLimb(m,[28,30,w*22.8],[37.3,40.8,w*20.0],1.3,tint(.84));
-        citizenLimb(m,[4,30,w*22.8],[4,43,w*20.6],1.5,tint(.83));
-        citizenLimb(m,[-16,30,w*22.8],[-16,43,w*20.5],1.45,tint(.84));
-        citizenLimb(m,[-45,29,w*22.7],[-35.5,44,w*20.1],1.35,tint(.84));
-        citizenLimb(m,[-44,30,w*22.8],[43,30,w*22.8],.9,trim);
-        // Sliding-door seams and handles.
-        m.box(-16,22,w*23.1,1.1,18,.8,tint(.68));
-        m.box(5,22,w*23.1,1.1,18,.8,tint(.68));
-        for(const x of [-26,-4,18]){
-          m.box(x,25.2,w*23.25,7.5,1.2,1.15,tint(1.15));
-          m.box(x+2.2,24.7,w*24.1,1.8,.9,.95,trim);
+        citizenLimb(m,[-43,26.5,w*22.1],[43,26.5,w*22.1],.9,tint(1.10));
+        citizenLimb(m,[-44,29.5,w*22.45],[43,29.5,w*22.45],.95,trim);
+
+        // Window band / greenhouse.
+        panel([-44,29.0,w*22.35],[-34,44.2,w*19.1],[16,44.2,w*19.1],[28,29.0,w*22.35],tint(.78));
+        // Rear quarter window
+        panel([-40.5,31.5,w*22.7],[-34.2,42.4,w*19.5],[-22.0,42.4,w*19.7],[-21.5,31.5,w*22.7],glass);
+        // Sliding door window
+        panel([-18.5,31.5,w*22.7],[-18.2,42.4,w*19.9],[-1.0,42.4,w*20.0],[-1.0,31.5,w*22.7],glass);
+        // Front door window
+        panel([2.5,31.5,w*22.8],[2.8,42.4,w*20.0],[15.2,42.4,w*19.8],[24.5,31.5,w*22.8],glassLite);
+        // Front quarter window near A-pillar
+        panel([25.8,31.5,w*22.8],[25.8,40.6,w*20.0],[31.2,40.6,w*19.3],[35.5,31.5,w*22.8],glassLite);
+
+        // Pillars
+        citizenLimb(m,[25.5,30.0,w*22.8],[32.0,41.8,w*19.2],1.25,tint(.84)); // A
+        citizenLimb(m,[1.0,30.0,w*22.8],[1.0,43.0,w*19.9],1.45,tint(.84));   // B
+        citizenLimb(m,[-20.0,30.0,w*22.8],[-20.0,43.0,w*19.8],1.40,tint(.84)); // C
+        citizenLimb(m,[-44.0,29.3,w*22.6],[-34.8,44.2,w*19.2],1.25,tint(.84)); // D
+
+        // Sliding door seams and visible handles.
+        m.box(-20.0,22.0,w*22.9,1.0,16.2,.8,tint(.68));
+        m.box(1.0,22.0,w*22.9,1.0,16.2,.8,tint(.68));
+        for(const x of [-30,-8,12]){
+          m.box(x,24.8,w*23.2,7.0,1.1,1.1,tint(1.14));
+          m.box(x+2.2,24.4,w*24.0,1.8,.8,.9,trim);
         }
         // Mirrors.
-        m.box(31,33,w*25.4,7,5,5.2,tint(.88));
-        m.box(34.8,33,w*28.1,3.8,2,1.5,glassLite);
+        m.box(29.5,34.0,w*24.6,6.5,4.6,4.8,tint(.86));
+        m.box(33.0,34.0,w*27.1,3.4,1.7,1.3,glassLite);
       }
-      panel([30,30,-20.2],[30,30,20.2],[39.5,41.6,18.0],[39.5,41.6,-18.0],glassLite); // windshield
-      panel([-33,44,-18.0],[-33,44,18.0],[-48,31,19.0],[-48,31,-19.0],glass); // rear window
-      citizenLimb(m,[29.7,30,-18.7],[29.7,30,18.7],1.0,tint(.72));
-      citizenLimb(m,[31.2,31,-13.8],[24,33,5],.6,trim);
-      citizenLimb(m,[31.2,31,13.8],[24,33,-5],.6,trim);
-      // Front fascia.
-      m.box(49.5,24.5,0,2.2,12,36,trim);
-      m.box(50.6,18.5,0,1.2,4.2,20,[.08,.09,.10]);
-      for(let k=0;k<4;k++)m.box(50.7,26.2-k*2.0,0,.8,.48,24,metal);
+
+      // Windshield / rear window.
+      panel([25.5,30.2,-19.4],[25.5,30.2,19.4],[36.0,41.4,17.0],[36.0,41.4,-17.0],glassLite);
+      panel([-29.0,44.2,-17.8],[-29.0,44.2,17.8],[-45.0,31.2,18.8],[-45.0,31.2,-18.8],glass);
+      citizenLimb(m,[25.2,30.4,-18.3],[25.2,30.4,18.3],.95,tint(.74));
+      citizenLimb(m,[26.8,31.0,-13.4],[20.0,33.0,4.8],.55,trim);
+      citizenLimb(m,[26.8,31.0,13.4],[20.0,33.0,-4.8],.55,trim);
+
+      // Front face closer to a Noah: grille, headlights lower and visible.
+      m.box(46.2,24.0,0,4.0,10.5,32,trim);
+      for(let k=0;k<3;k++)m.box(47.8,27.0-k*2.5,0,1.1,.55,25.5,metal);
+      m.box(49.2,18.2,0,1.4,5.0,18,[.10,.10,.11]);
+      m.box(50.5,16.8,0,1.0,4.2,12,clear); // front plate area
       for(const side of [-1,1]){
-        m.box(47.2,27,side*16.3,3.4,7.0,11.0,[.90,.91,.85]);
-        m.box(48.4,27,side*16.4,1.4,5.0,8.6,[.76,.83,.80]);
-        m.box(46.3,19.4,side*18.8,1.6,2.5,7.0,amber);
-        m.box(-49.0,28.5,side*16.6,2.3,12.4,10.6,red);
-        m.box(-50.2,27.2,side*15.7,1.0,4.1,8.4,[.91,.89,.76]);
+        // More visible headlamp cluster at the front corners.
+        m.box(43.0,26.0,side*16.0,4.2,8.2,10.8,[.90,.92,.88]);
+        m.box(44.8,26.0,side*16.0,1.5,5.4,8.0,[.76,.84,.80]);
+        m.box(43.2,18.8,side*17.7,2.0,2.6,5.8,amber);
+        // Tall rear lamp.
+        m.box(-46.8,29.2,side*17.0,2.4,13.8,9.4,red);
+        m.box(-47.9,31.7,side*16.0,1.0,4.1,7.0,clear);
+        m.box(-47.2,20.0,side*18.8,1.3,2.4,5.6,red);
       }
-      m.box(-48.7,19.8,0,1.4,6.0,16,tint(.77));
-      m.box(-47.8,44.5,0,1.0,5.8,35,tint(.93)); // roof spoiler / trim
+      // Rear hatch garnish and spoiler.
+      m.box(-46.2,21.0,0,1.4,7.0,15,tint(.76));
+      m.box(-45.4,43.8,0,1.0,3.6,32,tint(.92));
+      m.box(-44.8,34.5,0,1.0,1.8,22,metal);
     }
     return m.upload();
   }
