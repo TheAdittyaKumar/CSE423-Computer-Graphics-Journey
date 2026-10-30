@@ -175,8 +175,12 @@
     float crossWind=.5+.5*sin(vWorld.x*.017-vWorld.z*.024-uTime*.22);
     opacity=(.075+.11*pow(streaks,7.)+.075*crossWind)*vert;
     c=mix(c,vec3(.22,.31,.37),.5);
-  }else if(vKind>6.5){
-    // Soft additive-looking warning glow, without the campus-ground mask.
+  }else if(vKind>10.5&&vKind<11.5){
+    // Buildings in the visual-only horizon are solid silhouettes. The former
+    // catch-all >6.5 branch made them only 16% opaque, erasing the skyline.
+    opacity=1.0;
+  }else if(vKind>6.5&&vKind<7.5){
+    // Only actual warning-glow geometry should have this low opacity.
     opacity=.16;c=min(c*1.16,vec3(1.));
   }else if(vKind>5.5){
     // BRACU alone is genuinely dry: a soft, raised grassy courtyard blends
@@ -193,7 +197,11 @@
     opacity=(.13+.085*(.5+.5*sin(uTime*1.9+vWorld.x*.008)))*radialFade*(.62+.38*heightFade);
     c=mix(c,vec3(1.,.96,.78),.19);
   }
-  float f=smoothstep(940.,3300.,vDist);c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,opacity);}`;
+  // Horizon silhouettes need to remain distinct from the storm sky. The
+  // original world fog almost completely erased them before they were seen.
+  float skyline=(vKind>10.5&&vKind<11.5)?1.:0.;
+  float f=mix(smoothstep(940.,3300.,vDist),.78*smoothstep(1500.,4500.,vDist),skyline);
+  c=mix(c,vec3(.16,.228,.287),f);gl_FragColor=vec4(c,opacity);}`;
   function shader(type,source){const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);
     if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){
       const error=gl.getShaderInfoLog(s);gl.deleteShader(s);throw Error(error);
@@ -428,62 +436,80 @@
   // without spawning missions, NPCs, or new traversable streets.
   const horizonNear=new Mesh(),horizonFar=new Mesh(),horizonMist=new Mesh(),
         horizonRain=new Mesh(),outerFlood=new Mesh();
-  let skylineBuildings=0,skylineWindowClusters=0;
-  const stormPaletteNear=[[.22,.31,.35],[.27,.34,.37],[.23,.29,.34],[.28,.33,.36],[.25,.32,.37]];
-  const stormPaletteFar=[[.17,.24,.29],[.20,.26,.30],[.19,.25,.29],[.18,.24,.28]];
-  const seeded=(n)=>{
-    // Stable procedural scene: unlike Math.random(), buildings don't change on reload.
-    let t=(Math.imul(n,1664525)+1013904223)>>>0;
-    t=(Math.imul(t^(t>>>15),2246822519))>>>0;
-    return ((t^(t>>>13))>>>0) / 4294967296;
-  };
-  function skylineBuilding(x,z,depthIndex,seed){
-    const far=depthIndex===1,mesh=far?horizonFar:horizonNear;
-    const h=far?150+seeded(seed+1)*330:115+seeded(seed+1)*280;
-    const w=far?94+seeded(seed+2)*115:70+seeded(seed+2)*94;
-    const d=far?80+seeded(seed+3)*100:67+seeded(seed+3)*86;
-    const base=(far?stormPaletteFar:stormPaletteNear)[seed%(far?4:5)];
-    const y=FLOOD_WATERLINE+h*.50-16;
-    mesh.box(x,y,z,w,h,d,base);
-    mesh.box(x,y+h*.49,z,w+3.2,7,d+3.2,base.map(c=>c*.82));
-    // Broken roof profiles and water tanks keep the skyline Dhaka-shaped.
+  // Phase 19: the skyline must be visible NEXT to the real map edge.
+  // Phase 18's closest buildings were nearly 300 units beyond it, then
+  // the ordinary distance-fog shader blended them into exactly the sky color.
+  let skylineBuildings=0,skylineWindowClusters=0,nearSkylineBuildings=0;
+  let nearEdgeDistance=Infinity;
+  const stormPaletteNear=[[.34,.39,.42],[.35,.39,.39],[.36,.35,.38],[.30,.37,.40],[.39,.39,.37],[.31,.36,.36]];
+  const stormPaletteMid=[[.27,.33,.36],[.29,.33,.35],[.26,.31,.34],[.30,.34,.36]];
+  const stormPaletteFar=[[.22,.28,.32],[.23,.29,.32],[.25,.29,.31],[.21,.27,.31]];
+  const seeded=n=>{let t=(Math.imul(n,1664525)+1013904223)>>>0;
+    t=(Math.imul(t^(t>>>15),2246822519))>>>0;return ((t^(t>>>13))>>>0)/4294967296;};
+  // Tag silhouette vertices with material 11, so they use an explicitly
+  // tuned atmospheric fade, not the very aggressive standard city fog.
+  function horizonBox(mesh,x,y,z,w,h,d,color){
+    const at=mesh.data.length;mesh.box(x,y,z,w,h,d,color);
+    for(let k=at+6;k<mesh.data.length;k+=7)mesh.data[k]=11;
+  }
+  function skylineBuilding(x,z,layer,seed){
+    const nearby=layer===0,far=layer===2;
+    const mesh=far?horizonFar:horizonNear;
+    const h=nearby?215+seeded(seed+1)*240:far?200+seeded(seed+1)*310:205+seeded(seed+1)*265;
+    const w=nearby?88+seeded(seed+2)*39:far?105+seeded(seed+2)*104:104+seeded(seed+2)*91;
+    const d=nearby?94+seeded(seed+3)*44:far?110+seeded(seed+3)*105:102+seeded(seed+3)*78;
+    const palette=nearby?stormPaletteNear:far?stormPaletteFar:stormPaletteMid;
+    const base=palette[seed%palette.length];
+    const y=FLOOD_WATERLINE+h*.5-12;
+    horizonBox(mesh,x,y,z,w,h,d,base);
+    horizonBox(mesh,x,y+h*.5,z,w+3.2,6,d+3.2,base.map(c=>c*.82));
+    // Stairwell cubicles, rooftop water tanks and stepped balcony lines.
     if(seed%3===0){
-      mesh.box(x-w*.23,y+h*.52+11,z+d*.19,w*.30,24,d*.33,base.map(v=>v*.87));
-      mesh.cylinder(x+w*.26,y+h*.52+12,z-d*.13,6.8,18,[.17,.22,.26],6);
+      horizonBox(mesh,x-w*.23,y+h*.52+12,z+d*.16,w*.33,25,d*.31,base.map(v=>v*.86));
+      horizonBox(mesh,x+w*.25,y+h*.51+10,z-d*.14,14,18,14,[.23,.28,.31]);
     }
-    if(seed%7===1){
-      mesh.cylinder(x-w*.08,y+h*.55+17,z,1.6,54,[.22,.27,.31],5);
-      mesh.box(x-w*.08,y+h*.70+7,z,21,2,2,[.24,.29,.31]);
+    if(seed%5===2){
+      horizonBox(mesh,x-w*.18,y+h*.54+16,z+d*.10,3,34,3,[.28,.32,.34]);
     }
-    // Only a few nearby windows: no fine per-window details on far LOD.
-    if(!far&&seed%3!==1){
-      const facingX=Math.abs(x)>Math.abs(z),wallZ=z-d*.5-1.0,wallX=x-(x>0?1:-1)*(w*.5+1);
-      for(let row=0;row<Math.min(5,Math.floor(h/45));row++){
-        const wy=FLOOD_WATERLINE+43+row*43;
+    if(nearby){
+      // Faint but readable apartment window rhythm: silhouettes remain simple.
+      const facingX=Math.abs(x)>Math.abs(z);
+      const wallZ=z-d*.5-1.1,wallX=x-(x>0?1:-1)*(w*.5+1.1);
+      const rows=Math.min(7,Math.floor(h/36));
+      for(let row=0;row<rows;row++){
+        const wy=FLOOD_WATERLINE+38+row*35;
         for(let col=-1;col<=1;col++){
-          const muted=((seed+row*3+col*5)%7===0)?[.37,.38,.34]:[.12,.19,.22];
-          if(facingX)mesh.box(wallX,wy,z+col*d*.25,1.4,19,d*.13,muted);
-          else mesh.box(x+col*w*.24,wy,wallZ,w*.13,19,1.4,muted);
+          const lit=(seed+row*3+col*5)%11===0;
+          const muted=lit?[.54,.49,.38]:[.10,.17,.21];
+          if(facingX)horizonBox(mesh,wallX,wy,z+col*d*.25,1.5,17,d*.13,muted);
+          else horizonBox(mesh,x+col*w*.26,wy,wallZ,w*.15,17,1.5,muted);
           skylineWindowClusters++;
         }
       }
+      // Repeated low-profile slab edges avoid a featureless tower wall.
+      for(let row=2;row<rows;row+=2){
+        const by=FLOOD_WATERLINE+35+row*35;
+        if(facingX)horizonBox(mesh,wallX,by,z,2.0,3,d*.64,base.map(v=>v*.76));
+        else horizonBox(mesh,x,by,wallZ,w*.68,3,2.0,base.map(v=>v*.76));
+      }
+      nearSkylineBuildings++;
+      nearEdgeDistance=Math.min(nearEdgeDistance,Math.max(Math.abs(x),Math.abs(z))-Math.max(w,d)*.5);
     }
     skylineBuildings++;
   }
-  // Irregular offset rings, not one evenly-spaced fence. The density is enough
-  // to suggest a city continuing behind the current streets without new map cells.
-  for(let layer=0;layer<2;layer++){
-    const edge=layer===0?1900:2660;
-    const span=layer===0?2010:2880;
-    const count=layer===0?24:29;
+  // Three irregular depth bands. The nearest buildings start just OUTSIDE the
+  // collision limit 1615, so they are visible from streets near the edge but
+  // never create new playable/interactive territory.
+  for(let layer=0;layer<3;layer++){
+    const edge=[1735,2270,3010][layer],span=[1810,2460,3290][layer];
+    const count=[29,23,24][layer];
     for(let side=0;side<4;side++)for(let i=0;i<count;i++){
-      const seed=layer*193+side*47+i*5+11;
-      const axisPosition=-span+(i+.5)*2*span/count;
-      // Keep the impossible sunny campus on the north edge visually open.
-      if(side===3 && layer===0 && Math.abs(axisPosition)<465)continue;
-      if(seeded(seed+9)<(layer===0?.12:.20))continue; // gap between blocks
-      const along=-span+(i+.5)*2*span/count+(seeded(seed+5)-.5)*80;
-      const out=edge+(seeded(seed+6)-.5)*170;
+      const seed=layer*307+side*67+i*7+19;
+      const along=-span+(i+.5)*2*span/count+(seeded(seed+5)-.5)*(layer===0?35:95);
+      // Preserve the deliberately special sunny/dry north-campus vista.
+      if(side===3&&layer===0&&Math.abs(along)<370)continue;
+      if(seeded(seed+9)<[.055,.17,.30][layer])continue;
+      const out=edge+(seeded(seed+6)-.5)*(layer===0?38:160);
       const x=side<2?(side===0?-out:out):along;
       const z=side<2?along:(side===2?-out:out);
       skylineBuilding(x,z,layer,seed);
@@ -493,7 +519,7 @@
   // done entirely by the existing shader; no weather textures or network assets.
   for(let side=0;side<4;side++){
     for(let layer=0;layer<2;layer++){
-      const edge=layer===0?1790:2360, extent=layer===0?2150:2860;
+      const edge=layer===0?1800:2430, extent=layer===0?2200:2990;
       const v=(u,y)=>side===0?[-edge,y,u]:side===1?[edge,y,u]:side===2?[u,y,-edge]:[u,y,edge];
       const A=v(-extent,26),B=v(extent,26),C=v(extent,630),D=v(-extent,630);
       horizonRain.quad(A,B,C,D,[.19,.27,.32],9);
@@ -4935,7 +4961,7 @@
       'Flood: maximum · University rules: undefeated':
       'Welcome to BRAC University · No flood holidays!';
   }
-  let comicView=null,comicProj=null,comicEye=null;
+  let comicView=null,comicProj=null,comicEye=null,horizonRenderedFrames=0;
   function draw(){resize();
     if(dhakaWater){try{dhakaWater.update(Math.min(.05,Math.max(0,S.mode==='PLAYING'?S._waterDelta||0:.0)));}
       catch(e){console.warn('GPU Water simulation disabled:',e);waterIntegrationError=String(e);dhakaWater=null;}}
@@ -5021,11 +5047,15 @@
     }
     gl.disable(gl.CULL_FACE);
     if(sourceMeshes){
-      for(const group of ['sky','clouds'])render(sourceMeshes[group]); // do not render the source's opaque rectangular sky wall in front of the browser scene
+      // Sky/clouds are a BACKDROP: they must never write depth over distant
+      // skyline silhouettes. This was another possible Phase 18 obstruction.
+      gl.depthMask(false);
+      for(const group of ['sky','clouds'])render(sourceMeshes[group]);
+      gl.depthMask(true);
     }
     // Distant silhouettes have no collisions, route cells or event triggers.
     // They render before real buildings so nearby Dhaka streets retain detail.
-    render(horizonFar);render(horizonNear);
+    render(horizonFar);render(horizonNear);horizonRenderedFrames++;
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
     render(horizonMist);render(horizonRain);
     gl.depthMask(true);gl.disable(gl.BLEND);
@@ -5289,9 +5319,9 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,photo,processBonusRewards,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='phase17-clean-streets-three-poles-power-rewards';
-  window.majhiHorizonDiagnostics=()=>({visualOnly:true,playableBoundary:1615,outerWaterEdge:3300,skylineBuildings,skylineWindowClusters,distantRainCurtains:8,hazeBanks:4,quality:S.quality});
-  window.majhiWaterDiagnostics=()=>({phase:'18-storm-horizon-illusion',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='phase19-visible-storm-city';
+  window.majhiHorizonDiagnostics=()=>({phase:'19-visible-storm-city',visualOnly:true,playableBoundary:1615,outerWaterEdge:3300,skylineBuildings,nearSkylineBuildings,nearEdgeDistance:+nearEdgeDistance.toFixed(1),skylineWindowClusters,distantRainCurtains:8,hazeBanks:4,horizonRenderedFrames,nearVertices:horizonNear.length,farVertices:horizonFar.length,quality:S.quality});
+  window.majhiWaterDiagnostics=()=>({phase:'19-visible-storm-city',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,posterBannerVertices:0,spawnPoleCount:spawnPoles.length,spawnPolePositions:spawnPoles.map(p=>({x:p.x,z:p.z})),powerArcFrames:POWER_ARC_FRAMES,pendingBonusRewards:S.bonusRewardQueue.map(e=>e.kind),lastBonusReward:S.lastBonusReward,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
     minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatCruiseSpeed:245,boatReverseSpeed:165,boatSinglePassOars:true,boatWetGeometryDraws:0,firstPersonTorsoHidden:true,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
