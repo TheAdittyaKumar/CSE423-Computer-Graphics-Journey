@@ -18,6 +18,12 @@
     return;
   }
   const TAU=Math.PI*2,RAD=Math.PI/180, BOUNDS=1650, WATER=0;
+  // Storeys are approximately 33 game units: at 12 units/metre the town's
+  // road level y=0 is four metres below the flood surface at y=48.
+  // This is an explicit *visual* scale, independent of boat movement speed.
+  const FLOOD_DEPTH_METERS=4, WORLD_UNITS_PER_METER=12;
+  const FLOOD_WATERLINE=FLOOD_DEPTH_METERS*WORLD_UNITS_PER_METER;
+
   const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
   const distance=(x,z,X,Z)=>Math.hypot(x-X,z-Z);
   const rnd=(min,max)=>min+Math.random()*(max-min);
@@ -37,7 +43,7 @@
   float radius=length(vec2(p.x,p.z-1378.));
   float daylight=clamp((560.-radius)/300.,0.,1.);
   daylight=daylight*daylight*(3.-2.*daylight);
-  p.y=8.22+(relative-.22)*(1.-.70*daylight);
+  p.y=${FLOOD_WATERLINE.toFixed(1)}+(relative-.22)*(1.-.70*daylight);
   // Only the four existing current zones get larger, faster wave crests.
    // Fade in at their boundaries instead of forming sudden water ridges.
    float west=smoothstep(-1280.,-1210.,p.x)*(1.-smoothstep(-990.,-920.,p.x))*smoothstep(-470.,-405.,p.z)*(1.-smoothstep(155.,220.,p.z));
@@ -54,9 +60,14 @@
      p.y+=h*13.0*labPatchWeight;
    }`:''}
    }vWorld=p.xyz;vColor=aColor;vKind=aKind;vec4 view=uView*p;vDist=length(view.xyz);gl_Position=uProj*view;gl_Position.x=-gl_Position.x;}`;
-  const makeFragmentShader=()=>`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime;
+  const makeFragmentShader=()=>`precision ${sharedPrecision} float;varying vec3 vColor,vWorld;varying float vKind,vDist;uniform float uTime; uniform float uSubmergeMask;
   ${lab2?`uniform sampler2D uLabNormals; uniform ${sharedPrecision} vec2 uLabCenter; uniform ${sharedPrecision} float uLabSpan,uLabEnabled; uniform vec3 uLabEye,uLabSun;`:''}
-  void main(){vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
+  void main(){
+   // Foreground figures are drawn after the water pass. Cut only their submerged
+   // polygons so legs and wheels cannot float on top of four metres of water.
+   if(uSubmergeMask>.5 && vWorld.y<${FLOOD_WATERLINE.toFixed(1)} &&
+      length(vWorld.xz-vec2(0.,1378.))>360.)discard;
+   vec3 c=vColor;float opacity=1.;if(vKind>.5&&vKind<1.5){float daylight=clamp((560.-length(vec2(vWorld.x,vWorld.z-1378.)))/300.,0.,1.);daylight=daylight*daylight*(3.-2.*daylight);
     opacity=mix(.53,.12,daylight);c=mix(c,vec3(.24,.31,.30),.55*daylight);float a=sin(vWorld.x*.075+uTime*1.7+sin(vWorld.z*.02))*sin(vWorld.z*.11-uTime*1.2);
     float b=pow(max(0.,sin(vWorld.x*.036+vWorld.z*.044+uTime*2.1)),13.);
      c+=vec3(.018,.054,.080)*a+vec3(.10,.17,.18)*b;
@@ -169,7 +180,7 @@
   const uniforms={view:gl.getUniformLocation(prog,'uView'),proj:gl.getUniformLocation(prog,'uProj'),model:gl.getUniformLocation(prog,'uModel'),time:gl.getUniformLocation(prog,'uTime'),
     labField:gl.getUniformLocation(prog,'uLabField'),labNormal:gl.getUniformLocation(prog,'uLabNormals'),
     labCenter:gl.getUniformLocation(prog,'uLabCenter'),labSpan:gl.getUniformLocation(prog,'uLabSpan'),
-    labEnabled:gl.getUniformLocation(prog,'uLabEnabled'),labEye:gl.getUniformLocation(prog,'uLabEye'),labSun:gl.getUniformLocation(prog,'uLabSun')};
+    labEnabled:gl.getUniformLocation(prog,'uLabEnabled'),submergeMask:gl.getUniformLocation(prog,'uSubmergeMask'),labEye:gl.getUniformLocation(prog,'uLabEye'),labSun:gl.getUniformLocation(prog,'uLabSun')};
   gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);
   function perspective(fovy,aspect,near,far){const f=1/Math.tan(fovy*.5),nf=1/(near-far);return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]);}
   function norm(a){const m=Math.hypot(...a)||1;return a.map(x=>x/m);}
@@ -212,7 +223,9 @@
     disk(x,y,z,r,col,n=25){for(let i=0;i<n;i++){const a=i*TAU/n,b=(i+1)*TAU/n;this.tri([x,y,z],[x+Math.cos(b)*r,y,z+Math.sin(b)*r],[x+Math.cos(a)*r,y,z+Math.sin(a)*r],col);}}
     upload(){this.length=this.data.length/7;const arr=new Float32Array(this.data);this.buffer=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,this.buffer);gl.bufferData(gl.ARRAY_BUFFER,arr,gl.STATIC_DRAW);this.data=[];return this;}
   }
-  function render(mesh,mat=ID){if(!mesh||!mesh.length)return;gl.uniformMatrix4fv(uniforms.model,false,mat);gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+  function render(mesh,mat=ID,submerged=false){if(!mesh||!mesh.length)return;
+    gl.uniform1f(uniforms.submergeMask,submerged?1:0);
+    gl.uniformMatrix4fv(uniforms.model,false,mat);gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
     gl.vertexAttribPointer(attrs.pos,3,gl.FLOAT,false,28,0);gl.vertexAttribPointer(attrs.color,3,gl.FLOAT,false,28,12);gl.vertexAttribPointer(attrs.kind,1,gl.FLOAT,false,28,24);
     gl.drawArrays(gl.TRIANGLES,0,mesh.length);}
   for(const k of Object.values(attrs))gl.enableVertexAttribArray(k);
@@ -356,7 +369,7 @@
   city.cylinder(145,49,-55,5,102,[.56,.55,.47],8);city.box(145,106,-55,22,52,21,[.23,.29,.28]);
   city.upload();
   const waterMesh=new Mesh(), SIZE=1700,STEP=lab2?28:48;
-  for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){const c=[.061+(.008*Math.sin(x*.01+z*.03)),.187,.252];waterMesh.quad([x,8,z],[x+STEP,8,z],[x+STEP,8,z+STEP],[x,8,z+STEP],c,1);}waterMesh.upload();
+  for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){const c=[.061+(.008*Math.sin(x*.01+z*.03)),.187,.252];waterMesh.quad([x,FLOOD_WATERLINE,z],[x+STEP,FLOOD_WATERLINE,z],[x+STEP,FLOOD_WATERLINE,z+STEP],[x,FLOOD_WATERLINE,z+STEP],c,1);}waterMesh.upload();
   // WATER INTEGRATION 01: adapt the Water Lab 02.1 ping-pong heightfield to
   // the ORIGINAL CITY. The patch follows the rescue boat in WORLD coordinates;
   // a GPU scroll pass preserves old wakes rather than having them follow camera.
@@ -537,7 +550,7 @@
       }
       for(const hit of S.rainSplashes){
         if(!seenRain.has(hit)){seenRain.add(hit);
-          ripple(hit.x,hit.z,.023,.008);
+          ripple(hit.x,hit.z,.078,.011);
         }
       }
       lastX=S.x;lastZ=S.z;
@@ -548,12 +561,12 @@
       }
       // Rain impacts: a bounded, deterministic density, disabled in the
       // university courtyard and during menu/pause.
-      if(S.mode==='PLAYING'&&elapsed-lastSplash>.065){
+      if(S.mode==='PLAYING'&&elapsed-lastSplash>.042){
         lastSplash=elapsed;
         const rain=campusRainWeight(S.x,S.z);
-        if(Math.random()<.78*clamp(rain,0,1)){
+        if(Math.random()<.86*clamp(rain,0,1)){
           const px=S.x+(Math.random()-.5)*550,pz=S.z+(Math.random()-.5)*550;
-          if(distance(px,pz,0,1378)>365)ripple(px,pz,.046,.007);
+          if(distance(px,pz,0,1378)>365)ripple(px,pz,.060,.011);
         }
       }
       run(effects.normals);
@@ -598,9 +611,9 @@
                     +0.65*sin(-0.017*p.x+0.029*p.z+uTime*0.83)
                     +0.30*sin(0.080*p.z+0.031*p.x-uTime*1.63);
         float dry=1.0-smoothstep(230.0,365.0,length(p.xz-vec2(0.,1378.)));
-        // Road source geometry lies around y=0; water has genuine separation.
-        // 13.7 world units is a safe physical baseline for the original boat rig.
-        p.y=13.7+(.92*swell+13.0*height*locality)*(1.0-.55*dry);
+        // Four metres between the *actual* road and floodwater, retaining the
+        // sunlight/dry-zone exemption around BRAC University.
+        p.y=${FLOOD_WATERLINE.toFixed(1)}+(.92*swell+13.0*height*locality)*(1.0-.55*dry);
         vWorld=p.xyz;
         vec4 eye=uView*p;
         gl_Position=uProj*eye;
@@ -630,21 +643,28 @@
         c+=vec3(.70,.52,.30)*pow(max(0.,dot(dir,normalize(uSun))),180.)*(.025+.31*sunny);
         return c;
       }
-      // World-anchored subpixel rainfall rings: cheap shader detail on TOP of
-      // the GPU rain impulses. No visible tiled foam or permanent rings.
+      // World-anchored expanding two-crest wavelets. Rain enters surface
+      // normals, lighting AND refractive rays -- never a white overlay mesh.
       vec3 rainfall(vec2 world,float t){
-        vec2 grid=world/23.0,base=floor(grid);vec2 grad=vec2(0.);float highlights=0.;
+        vec2 grid=world/21.0,base=floor(grid);
+        vec2 gradient=vec2(0.0);float highlights=0.0;
         for(int yy=0;yy<2;yy++)for(int xx=0;xx<2;xx++){
           vec2 id=base+vec2(float(xx),float(yy));
           float seed=hash21(id+vec2(19.3,49.2));
           float active=step(hash21(id+vec2(93.,17.)),uRain);
-          float age=fract(t/1.38+seed),radius=2.1+age*10.6;
-          vec2 center=(id+vec2(.12)+vec2(hash21(id+vec2(5.,7.)),hash21(id+vec2(3.,9.)))*.72)*23.;
-          vec2 d=world-center;float r=length(d)+.0001;
-          float ring=exp(-pow((r-radius)/1.7,2.0))*active*(1.-age);
-          grad+=d/r*ring*.19;highlights+=ring;
+          float age=fract(t/(.90+seed*.48)+seed);
+          vec2 jitter=vec2(hash21(id+vec2(5.,7.)),hash21(id+vec2(3.,9.)));
+          vec2 hit=(id+vec2(.14)+jitter*.70)*21.0;
+          vec2 d=world-hit;float r=length(d)+.0001;
+          float radius=1.2+age*11.6;
+          float crest=exp(-pow((r-radius)/1.35,2.0));
+          float trailing=exp(-pow((r-radius+2.9)/2.5,2.0));
+          float fade=pow(1.0-age,1.25)*active;
+          float wave=(crest-.53*trailing)*fade;
+          gradient+=d/r*wave*.60;
+          highlights+=crest*fade;
         }
-        return vec3(grad,highlights);
+        return vec3(gradient,highlights);
       }
       vec2 projectUV(vec3 point){
         vec4 clip=uProj*uView*vec4(point,1.);
@@ -670,7 +690,7 @@
         vec2 noiseSlope=vec2(noise(p*.044+vec2(uTime*.05,0.))-noise(p*.053),
                               noise(p*.059)-noise(p*.037+vec2(0.,uTime*.05)))*.060*uWind;
         vec3 rain=rainfall(p,uTime);
-        vec2 rainSlope=rain.xy*.31*(1.-campusDry);
+        vec2 rainSlope=rain.xy*.64*(1.-campusDry);
         vec3 N=normalize(vec3(-(slope.x*(.18+uRipple*1.7)+windSlope.x+noiseSlope.x+rainSlope.x),
                                1.,
                               -(slope.y*(.18+uRipple*1.7)+windSlope.y+noiseSlope.y+rainSlope.y)));
@@ -689,19 +709,21 @@
         // The captured scene is geometrically correct for the current camera:
         // sampling the projected refracted hit shows ORIGINAL road/buildings.
         vec2 delta=clamp(opticalUV-originalUV,vec2(-.075),vec2(.075));
-        vec2 extra=clamp((slope*.0017*uRipple+rainSlope*.0013*uDistort),vec2(-.014),vec2(.014));
+        vec2 extra=clamp((slope*.0017*uRipple+rainSlope*.0024*uDistort),vec2(-.018),vec2(.018));
         vec2 sampleUV=clamp(originalUV+(delta+extra)*uDistort,vec2(.002),vec2(.998));
         float within=step(.004,opticalUV.x)*step(opticalUV.x,.996)*step(.004,opticalUV.y)*step(opticalUV.y,.996);
         sampleUV=mix(originalUV,sampleUV,within);
         vec3 road=texture2D(uScene,sampleUV).rgb;
         // Clarity deliberately follows Water Lab 02.1: even deep water stays
         // transparent enough for navigation and the original mission markers.
-        float absorption=mix(.045,.0055,pow(uClarity,1.4));
+        float absorption=mix(.037,.0032,pow(uClarity,1.4));
         float transmission=exp(-absorption*depth/max(.28,-through.y));
         float downView=smoothstep(.10,.88,nv);
         vec3 bodyColor=mix(vec3(.034,.13,.16),vec3(.070,.26,.27),
                            clamp(.52+.25*noise(p*.024),0.,1.));
-        float visibility=transmission*mix(.74,1.,uClarity)*(.72+.28*downView);
+        // Lab's deliberately transparent aesthetic: retain usable road cues
+        // despite a 4 m world-space gap, with angle-dependent haze.
+        float visibility=transmission*mix(.76,1.,uClarity)*(.76+.24*downView);
         vec3 refracted=mix(bodyColor,road,visibility);
         // Approximate physically motivated projected-area caustic focus.
         // Under storm cloud cover caustics are subtle; the dry campus receives
@@ -724,7 +746,9 @@
         vec3 color=mix(refracted,reflection,reflectAmount);
         float glint=pow(max(0.,dot(reflect(-normalize(uSun),N),V)),105.);
         color+=vec3(.65,.68,.57)*glint*(.055+.16*sunny);
-        color+=vec3(.12,.18,.17)*rain.z*.055;
+        // Overcast rain glints follow real slopes, with no white outlined rings.
+        float rainLight=pow(max(0.,dot(reflect(-normalize(uSun),N),V)),26.);
+        color+=vec3(.13,.18,.17)*clamp(rain.z,0.,1.3)*(.18+.30*rainLight);
         // Water is optically composed against an already rendered scene;
         // opacity controls only the smooth DRY edge around BRAC University.
         gl_FragColor=vec4(color,1.-campusDry);
@@ -748,7 +772,7 @@
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
     gl.activeTexture(gl.TEXTURE0);
-    const look={rain:.85,wind:.40,clarity:.88,ripple:.64,reflection:.43,
+    const look={rain:.98,wind:.48,clarity:.93,ripple:.79,reflection:.47,
       distortion:.68,caustics:.72};
     // Read-only by default; explicit tuning is exposed for matching Water Lab
     // screenshots without changing gameplay, collision or animation state.
@@ -760,8 +784,8 @@
         look[parameter]=clamp(Number(value),0,1);
         return {...look};
       },
-      reset:()=>Object.assign(look,{rain:.85,wind:.40,clarity:.88,ripple:.64,
-        reflection:.43,distortion:.68,caustics:.72})
+      reset:()=>Object.assign(look,{rain:.98,wind:.48,clarity:.93,ripple:.79,
+        reflection:.47,distortion:.68,caustics:.72})
     };
     let frames=0;
     function renderOpticalWater(view,projection,eye,clock){
@@ -1227,18 +1251,18 @@
       const bumpAge=stopped?r.quarrelUntil-S.time:0;
       const bob=.5*Math.sin(S.time*4+r.id*2)+(stopped&&bumpAge>5.5?2.1*Math.sin(S.time*22):0);
       render(parkedDhakaModels.rescueRickshaws[r.id],
-        model(r.x,1.1+bob,r.z,r.angle,.82));
+        model(r.x,FLOOD_WATERLINE-29+bob,r.z,r.angle,.82),true);
       const a=r.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),sx=-fz,sz=fx;
       const wheelFrame=rickshawWheelFrames[Math.floor((((r.wheelSpin||0)%TAU)+TAU)/TAU*rickshawWheelFrames.length)%rickshawWheelFrames.length];
       for(const [lx,ly,lz] of [[39,14,0],[-29,14,-21],[-29,14,21]]){
         const wx=r.x+(lx*Math.cos(a)-lz*Math.sin(a))*.82;
         const wz=r.z+(lx*Math.sin(a)+lz*Math.cos(a))*.82;
-        render(wheelFrame,model(wx,1.1+bob+ly*.82,wz,r.angle,.82));
+        render(wheelFrame,model(wx,FLOOD_WATERLINE-29+bob+ly*.82,wz,r.angle,.82),true);
       }
       // Small back-seat figure makes a recently completed rescue visible.
       if(S.time-r.rescuedAt<7&&!stopped){
         render(citizenFrame('HOME',r.rescuedColor,S.time*1.2),
-          model(r.x-fx*30,35+bob,r.z-fz*30,r.angle,.34));
+          model(r.x-fx*30,FLOOD_WATERLINE+5+bob,r.z-fz*30,r.angle,.34));
       }
       if(stopped){
         const car=parkedCars[r.incidentCar];
@@ -1247,12 +1271,12 @@
           const ox=car.x+Math.sin(car.angle*RAD)*48;
           const oz=car.z-Math.cos(car.angle*RAD)*48;
           render(citizenFrame('HOME_URGENT',r.colorId,S.time*3.9+r.id),
-            model(ox,23,oz,Math.atan2(r.z-oz,r.x-ox)/RAD,.59));
+            model(ox,FLOOD_WATERLINE-12,oz,Math.atan2(r.z-oz,r.x-ox)/RAD,.59));
         }
-        render(waterRipple,model(r.x,9.6,r.z,0,.62+.10*Math.sin(S.time*5)));
+        render(waterRipple,model(r.x,FLOOD_WATERLINE+.35,r.z,0,.62+.10*Math.sin(S.time*5)));
       }else if(S.quality==='HIGH'){
-        render(waterRipple,model(r.x-fx*44,9.6,r.z-fz*44,0,.34));
-        render(waterRipple,model(r.x-fx*62+sx*12,9.6,r.z-fz*62+sz*12,0,.23));
+        render(waterRipple,model(r.x-fx*44,FLOOD_WATERLINE+.35,r.z-fz*44,0,.34));
+        render(waterRipple,model(r.x-fx*62+sx*12,FLOOD_WATERLINE+.35,r.z-fz*62+sz*12,0,.23));
       }
     }
   }
@@ -1264,19 +1288,19 @@
       const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
       const bob=.9*Math.sin(S.time*4+boat.id);
       // Small distinct sampans carrying a visible majhi, with paddles and wakes.
-      render(sourceMeshes?.boat||boatMesh,model(boat.x,11.5+bob,boat.z,boat.angle,.47));
+      render(sourceMeshes?.boat||boatMesh,model(boat.x,FLOOD_WATERLINE-2.2+bob,boat.z,boat.angle,.47));
       render(citizenFrame('HOME',boat.colorId,S.time*2.7+boat.id),
-        model(boat.x-fx*12,27+bob,boat.z-fz*12,boat.angle,.42));
+        model(boat.x-fx*12,FLOOD_WATERLINE+13.3+bob,boat.z-fz*12,boat.angle,.42));
       const stroke=Math.sin(S.time*10+boat.id*2);
-      render(paddleMesh,model(boat.x+fx*9+lx*34,22+bob,boat.z+fz*9+lz*34,boat.angle+22+stroke*17,.30));
-      render(paddleMesh,model(boat.x+fx*9-lx*34,22+bob,boat.z+fz*9-lz*34,boat.angle-22-stroke*17,.30));
+      render(paddleMesh,model(boat.x+fx*9+lx*34,FLOOD_WATERLINE+8.3+bob,boat.z+fz*9+lz*34,boat.angle+22+stroke*17,.30));
+      render(paddleMesh,model(boat.x+fx*9-lx*34,FLOOD_WATERLINE+8.3+bob,boat.z+fz*9-lz*34,boat.angle-22-stroke*17,.30));
       // The rescued citizen is briefly visible aboard, rather than vanishing
       // immediately after the pickup animation.
       if(S.time-boat.rescuedAt<7.2)
         render(citizenFrame('CELEBRATE',boat.rescuedColor,S.time*1.9),
-          model(boat.x+fx*33,25+bob,boat.z+fz*33,boat.angle,.34));
+          model(boat.x+fx*33,FLOOD_WATERLINE+11.3+bob,boat.z+fz*33,boat.angle,.34));
       for(let k=0;k<2;k++)render(waterRipple,
-        model(boat.x-fx*(44+k*26),9.55,boat.z-fz*(44+k*26),0,.36+k*.13));
+        model(boat.x-fx*(44+k*26),FLOOD_WATERLINE+.35,boat.z-fz*(44+k*26),0,.36+k*.13));
     }
   }
 
@@ -1300,14 +1324,14 @@
       const bob=Math.sin(clock*(person.role==='SWIM'?5.1:2.5)+person.phase);
       if(person.role==='SWIM'){
         render(citizenFrame('SOS',person.colorId,clock*3.5+person.phase),
-          model(x,9.2+bob*1.5,z,facing,.83));
-        render(waterRipple,model(x,9.7,z,0,.52+.16*Math.sin(clock*5+person.phase)));
+          model(x,FLOOD_WATERLINE-18+bob*1.5,z,facing,.83),true);
+        render(waterRipple,model(x,FLOOD_WATERLINE+.35,z,0,.52+.16*Math.sin(clock*5+person.phase)));
       }else if(person.role==='WADE'){
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.9)+person.phase),
-          model(x,6.8+bob*.5,z,facing,.68));
+          model(x,FLOOD_WATERLINE-15+bob*.5,z,facing,.68),true);
         // A student shields their laptop above floodwater rather than leaving it underwater.
-        if(dhakaPerson(person)==='STUDENT')render(dhakaLaptop,model(x,57+1.7*bob,z,facing,.72));
-        if(near)render(waterRipple,model(x,9.5,z,0,.34+.08*Math.sin(clock*3+person.phase)));
+        if(dhakaPerson(person)==='STUDENT')render(dhakaLaptop,model(x,FLOOD_WATERLINE+8+1.7*bob,z,facing,.72));
+        if(near)render(waterRipple,model(x,FLOOD_WATERLINE+.35,z,0,.34+.08*Math.sin(clock*3+person.phase)));
       }else if(person.role==='ROOF'){
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*1.4+person.phase),
           model(x,person.y+.5*bob,z,facing,.68));
@@ -1318,17 +1342,17 @@
           clock*(cheer?3.4:1.5)+person.phase),model(x,person.y,z-1,-90,.62));
         if(person.role==='ROPE'){
           render(rescueRope,model(x+6,person.y-2,z-18,0,.87));
-          if(S.quality==='HIGH')render(waterRipple,model(x,9.7,z-30,0,.42));
+          if(S.quality==='HIGH')render(waterRipple,model(x,FLOOD_WATERLINE+.35,z-30,0,.42));
         }
       }else if(person.role==='SHOP'){
         // Keep the seller grounded at floor height, well BEHIND the solid
         // counter. Rendering the source depth-tested geometry naturally hides
         // their lower body, unlike the previous y=34 floating character.
         render(citizenFrame('HOME',person.colorId,clock*.45+person.phase),
-          model(x,person.y,z,-90,1.16));
+          model(x,Math.max(person.y,FLOOD_WATERLINE-27),z,-90,1.16),true);
       }else{
         render(citizenFrame(near?'HOME_URGENT':'HOME',person.colorId,clock*(near?2.1:.8)+person.phase),
-          model(x,16+bob*.6,z,facing,.66));
+          model(x,FLOOD_WATERLINE-12+bob*.6,z,facing,.66));
       }
     }
   }
@@ -1622,7 +1646,7 @@
     const forwardX=zone.dx/(Math.hypot(zone.dx,zone.dz)||1),forwardZ=zone.dz/(Math.hypot(zone.dx,zone.dz)||1);
     const acrossX=-forwardZ,acrossZ=forwardX;
     for(let xi=zone.a+65;xi<zone.b-30;xi+=94)for(let zi=zone.c+65;zi<zone.d-30;zi+=97){
-      const x=xi,z=zi,y=10.25;
+      const x=xi,z=zi,y=FLOOD_WATERLINE+.65;
       currentArrows.tri([x+forwardX*17,y,z+forwardZ*17],
         [x-forwardX*12+acrossX*10,y,z-forwardZ*12+acrossZ*10],
         [x-forwardX*12-acrossX*10,y,z-forwardZ*12-acrossZ*10],[.26,.72,.75]);
@@ -1678,8 +1702,8 @@
   // world droplets and 108 replenishing droplets near the boat, plus impact
   // rings on the moving water. The canvas layer remains for a very subtle
   // near-camera rain mist and windshield condensation only.
-  const stormDrops=Array.from({length:330},()=>({x:rnd(-1650,1650),z:rnd(-1650,1650),y:rnd(100,950)}));
-  const nearDrops=Array.from({length:108},(_,i)=>({x:0,z:0,y:rnd(60,540),index:i}));
+  const stormDrops=Array.from({length:490},()=>({x:rnd(-1650,1650),z:rnd(-1650,1650),y:rnd(100,950)}));
+  const nearDrops=Array.from({length:174},(_,i)=>({x:0,z:0,y:rnd(60,540),index:i}));
   const stormGeometry=new Mesh(),stormSplash=new Mesh();
   stormSplash.ring(0,0,0,1,0.10,[.80,.96,.97],24);
   // Its translucent material is handled by kind 5 in the fragment shader.
@@ -1690,16 +1714,16 @@
   function updateWorldRain(dt){
     for(const [index,d] of stormDrops.entries()){
       d.y-=540*dt;
-      if(d.y<=10){
-        if(campusRainWeight(d.x,d.z)>.5&&S.rainSplashes.length<75&&Math.random()<.29)
+      if(d.y<=FLOOD_WATERLINE){
+        if(campusRainWeight(d.x,d.z)>.5&&S.rainSplashes.length<100&&Math.random()<.42)
           S.rainSplashes.push({x:d.x,z:d.z,age:0});
         d.x=rnd(-1650,1650);d.z=rnd(-1650,1650);d.y=rnd(560,980);
       }
     }
     for(const d of nearDrops){
       d.y-=540*dt;
-      if(d.y<=10){
-        if(campusRainWeight(d.x,d.z)>.3&&S.rainSplashes.length<75&&Math.random()<.20)
+      if(d.y<=FLOOD_WATERLINE){
+        if(campusRainWeight(d.x,d.z)>.3&&S.rainSplashes.length<100&&Math.random()<.38)
           S.rainSplashes.push({x:d.x,z:d.z,age:0});
         d.y+=480+rnd(0,250);
       }
@@ -1715,7 +1739,7 @@
     function v(x,y,z,color){data.push(x,y,z,...color,3);}
     for(const [i,d] of [...stormDrops,...nearDrops].entries()){
       const wet=campusRainWeight(d.x,d.z);
-      if(wet<.10||i>=330&&i%3===0&&wet<.90)continue;
+      if(wet<.10||i>=stormDrops.length&&i%3===0&&wet<.90)continue;
       const bright=(.57+.06*(i%4))*wet;
       const color=[bright*.76,bright*.91,bright];
       const length=17+(i%5)*4;
@@ -3048,8 +3072,8 @@
       const [bx,bz]=seats[Math.min(seat,2)],a=S.angle*RAD,c=Math.cos(a),sn=Math.sin(a);
       const x=S.x+(bx*c-bz*sn)*.62,z=S.z+(bx*sn+bz*c)*.62;
       const side=seat===0?-1:seat===1?1:(ride.id%2?1:-1);
-      S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age,fromX:x,fromZ:z,x:x-sn*side*47,z:z+c*side*47,y:28,fromBoat:true});
-    }else S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age-.80,fromX:ride.x,fromZ:ride.z,x:ride.x,z:ride.z,y:10,fromBoat:false});
+      S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age,fromX:x,fromZ:z,x:x-sn*side*47,z:z+c*side*47,y:FLOOD_WATERLINE+12,fromBoat:true});
+    }else S.missedEffects.push({id:ride.id,colorId:ride.colorId,at:age-.80,fromX:ride.x,fromZ:ride.z,x:ride.x,z:ride.z,y:FLOOD_WATERLINE-15,fromBoat:false});
     if(S.missedEffects.length>6)S.missedEffects.shift();
   }
   // Original Python windshield: pivot (505,55) in its 1000x800 virtual
@@ -3652,7 +3676,7 @@
       if(!entry.walkStarted&&S.time>=entry.dropAt){
         entry.walkStarted=true;
         const i=S.campusQueue.indexOf(entry)%3;
-        S.deliveryEffects.push({at:entry.dropAt,x0:entry.startX,z0:entry.startZ,y0:35,
+        S.deliveryEffects.push({at:entry.dropAt,x0:entry.startX,z0:entry.startZ,y0:FLOOD_WATERLINE+22,
           x1:clamp(entry.startX*.23+(i-1)*28,-86,86),z1:1164+(i-1)*16,colorId:entry.colorId,
           walkTime:entry.walkTime,holdTime:entry.forgotId?2.5:1.6,name:entry.name,entryIndex:entry.index});
       }
@@ -3908,7 +3932,7 @@
     const currentRoll=S.waveStrength*Math.sin(S.bobTime*3.7+S.x*.014)*7.2;
     const boatPitch=clamp(boatImpact.pitch+currentPitch,-17,17);
     const boatRoll=clamp(boatImpact.roll+currentRoll,-19,19);
-    const boatY=(opticalWater?14.0:12)+Math.sin(S.bobTime*2.8)*1.3+
+    const boatY=(FLOOD_WATERLINE+.30)+Math.sin(S.bobTime*2.8)*1.3+
       S.waveStrength*Math.sin(S.bobTime*4.1+S.x*.01)*3.1+boatImpact.heave;
     const lerp=((S.angle-S.heading+540)%360)-180;S.heading=(S.heading+lerp*.16+360)%360;
     const ca=S.camera3?S.heading*RAD:a;
@@ -3930,8 +3954,8 @@
         if(tMin<=tMax&&tMin<=1&&tMax>=0&&tMin<minFraction)minFraction=Math.max(.06,tMin-.04);
       }
       const nearWall=clamp((.55-minFraction)/.55,0,1);
-      eye=[S.x+(x-S.x)*minFraction,39+100*minFraction+67*nearWall,S.z+(z-S.z)*minFraction];
-      target=[S.x+c*80,36+10*nearWall,S.z+s*80];
+      eye=[S.x+(x-S.x)*minFraction,boatY+26+90*minFraction+45*nearWall,S.z+(z-S.z)*minFraction];
+      target=[S.x+c*80,boatY+22+10*nearWall,S.z+s*80];
       fov=73+12*nearWall;
     }else{eye=[S.x-c*24,boatY+41,S.z-s*24];target=[S.x+c*210,boatY+19,S.z+s*210];fov=78;}
     let cameraUp=[0,1,0];
@@ -3993,6 +4017,25 @@
     drawModernTrafficSignal();
     // All stations are live 3D cabinets instead of the old baked source blocks.
     drawPowerCabinets();
+    // Four-metre flood: vehicles are now behind the optical water surface.
+    // Stationary CNG/rickshaw roofs remain visible while chassis refract below.
+    // Keep original parked-car collision boxes while changing their visual type.
+    for(let i=0;i<parkedCars.length;i++){
+      const car=parkedCars[i];
+      if(distance(S.x,S.z,car.x,car.z)>1200&&S.mode!=='MENU')continue;
+      const type=dhakaVehicleType(i);
+      const mesh=type==='cng'?(i===5?parkedDhakaModels.cngAlt:parkedDhakaModels.cng):
+        type==='rickshaw'?parkedDhakaModels.rickshaw:parkedDhakaModels.car[i%4];
+      render(mesh,model(car.x,0,car.z,car.angle,.97));
+    }
+    for(const car of S.movingCars){const mesh=sourceMeshes?.['moving-car-'+(car.style%5)]||carMesh;
+      render(mesh,model(car.x,0,car.z,car.angle,.98));
+    }
+    for(const i of [1,4]){const car=parkedCars[i],a=car.angle*RAD;
+      const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
+      const f=Math.floor((S.bobTime*3+i*1.8)/TAU*24)%24;
+      render(driverFrames[(f+24)%24],model(dx,FLOOD_WATERLINE-10,dz,car.angle,1));
+    }
     // Semi-transparent animated water is drawn AFTER the original flooded
     // road textures, so lane markings remain visible underneath the surface.
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
@@ -4012,22 +4055,20 @@
     if(S.mode==='PLAYING'){
       uploadStormRain();gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
       render(stormGeometry);
-      for(const [splashIndex,splash] of S.rainSplashes.entries()){if(S.quality==='BALANCED'&&splashIndex%2)continue;
-        if(distance(S.x,S.z,splash.x,splash.z)>510)continue;
-        render(stormSplash,model(splash.x,9.65,splash.z,0,1.8+splash.age*26));
-      }
+      // Small raindrops no longer receive bright circular mesh overlays.
+      // Physics impulses and analytical ring slopes supply all visible ripples.
       // Large collision sprays and expanding wake rings; bounded for FPS.
       for(const splash of S.impactSplashes){
         if(distance(S.x,S.z,splash.x,splash.z)>530)continue;
         const age=splash.age,life=1-age/.78;
         const swell=clamp((.54+age*2.2)*splash.power*life,.05,2.4);
-        render(impactSprayMesh,model(splash.x,9.8+Math.sin(Math.PI*age/.78)*5,splash.z,age*70,swell));
-        render(waterRipple,model(splash.x,9.7,splash.z,0,splash.power*(.65+age*3.1)));
-        render(waterRipple,model(splash.x,9.9,splash.z,0,splash.power*(.3+age*2.0)));
+        render(impactSprayMesh,model(splash.x,FLOOD_WATERLINE+Math.sin(Math.PI*age/.78)*5,splash.z,age*70,swell));
+        render(waterRipple,model(splash.x,FLOOD_WATERLINE+.35,splash.z,0,splash.power*(.65+age*3.1)));
+        render(waterRipple,model(splash.x,FLOOD_WATERLINE+.55,splash.z,0,splash.power*(.3+age*2.0)));
       }
       for(const splash of S.waveSplashes){
         if(distance(S.x,S.z,splash.x,splash.z)>490)continue;
-        render(waterRipple,model(splash.x,9.6,splash.z,0,.45+splash.age*1.6));
+        render(waterRipple,model(splash.x,FLOOD_WATERLINE+.35,splash.z,0,.45+splash.age*1.6));
       }
       gl.depthMask(true);gl.disable(gl.BLEND);
     }
@@ -4036,35 +4077,14 @@
     for(const [x,z] of streetlights){if(lightOffAt(x,z)||distance(S.x,S.z,x,z)>680||distance(x,z,0,1378)<378)continue;
       render(litHalo,model(x,113.6,z-33,0,1.08));
       render(lampAirGlow,model(x,95,z-33,0,1.5));
-      render(lampGroundGlow,model(x,9.45,z-33,0,1.45));
-      render(lampReflection,model(x,9.25,z-33,0,1.18));
+      render(lampGroundGlow,model(x,FLOOD_WATERLINE+.35,z-33,0,1.45));
+      render(lampReflection,model(x,FLOOD_WATERLINE+.25,z-33,0,1.18));
     }
     drawPowerCabinetGlow();
     gl.depthMask(true);gl.disable(gl.BLEND);
     // Keep culling disabled for original double-sided OpenGL line/quad geometry.
     // Foreground boat, dynamic light state and localized mission markers.
-    // Keep original parked-car collision boxes while changing their visual type.
-    for(let i=0;i<parkedCars.length;i++){
-      const car=parkedCars[i];
-      if(distance(S.x,S.z,car.x,car.z)>1200&&S.mode!=='MENU')continue;
-      const type=dhakaVehicleType(i);
-      const mesh=type==='cng'?(i===5?parkedDhakaModels.cngAlt:parkedDhakaModels.cng):
-        type==='rickshaw'?parkedDhakaModels.rickshaw:parkedDhakaModels.car[i%4];
-      render(mesh,model(car.x,0,car.z,car.angle,.97));
-    }
-    for(const car of S.movingCars){const mesh=sourceMeshes?.['moving-car-'+(car.style%5)]||carMesh;
-      render(mesh,model(car.x,0,car.z,car.angle,.98));
-      if(!car.stopped){
-        const fx=Math.cos(car.angle*RAD),fz=Math.sin(car.angle*RAD);
-        for(let n=0;n<3;n++)render(waterRipple,model(car.x-(30+n*20)*fx,9.4,car.z-(30+n*20)*fz,0,.47+n*.27));
-      }
-    }
-    for(const i of [1,4]){const car=parkedCars[i],a=car.angle*RAD;
-      const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
-      const f=Math.floor((S.bobTime*3+i*1.8)/TAU*24)%24;
-      render(driverFrames[(f+24)%24],model(dx,9,dz,car.angle,1));
-    }
-    S.debris.forEach((d,i)=>render(sourceMeshes?.['debris-'+(i%3)]||debrisMesh,model(d.x,0,d.z,(i*57)%360,1)));
+    S.debris.forEach((d,i)=>render(sourceMeshes?.['debris-'+(i%3)]||debrisMesh,model(d.x,FLOOD_WATERLINE-5,d.z,(i*57)%360,1)));
     // Waiting students react to both the incoming boat and their remaining time.
     // Their arms are animated mesh poses, with distinct home/SOS movements.
     for(const r of S.rides)if(r.state==='WAITING'){
@@ -4072,9 +4092,9 @@
       const kind=(home?'HOME':'SOS')+(mood.energetic?'_URGENT':'');
       const clock=S.time*mood.speed+r.id*.65;
       const bob=(home?.6:1.5)*Math.sin(S.time*(mood.energetic?6.1:3.0)+r.id);
-      const y=home?19+bob:10+bob;
+      const y=home?FLOOD_WATERLINE+5+bob:FLOOD_WATERLINE-3+bob;
       const scale=home?.74:.90;
-      render(citizenFrame(kind,r.colorId,clock),model(mood.px,y,mood.pz,mood.facing,scale));
+      render(citizenFrame(kind,r.colorId,clock),model(mood.px,y,mood.pz,mood.facing,scale),true);
       if(mood.urgent){
         const blink=.8+.22*Math.sin(S.time*9+r.id);
         render(urgencyMarker,model(mood.px,y+(home?47:31)+3*Math.sin(S.time*4+r.id),mood.pz,0,blink));
@@ -4082,9 +4102,9 @@
       if(!home&&mood.responding){
         // Water agitation grows near rescuers or near the deadline.
         const pulse=.55+.18*Math.sin(S.time*(mood.urgent?9:5)+r.id);
-        render(waterRipple,model(mood.px,9.75,mood.pz,0,mood.urgent?1.1+pulse:pulse));
+        render(waterRipple,model(mood.px,FLOOD_WATERLINE+.35,mood.pz,0,mood.urgent?1.1+pulse:pulse));
       }
-      render(markerMesh,model(r.x,3+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
+      render(markerMesh,model(r.x,FLOOD_WATERLINE+.5+Math.sin(S.bobTime*4+r.id)*1.5,r.z,0,1));
     }
     // Two independent AI majhis rescue background citizens and leave wakes.
     drawRescueFleet();
@@ -4101,21 +4121,21 @@
       const kind=alert?'HOME_URGENT':'HOME';
       const facing=alert?Math.atan2(S.z-c.z,S.x-c.x)/RAD:-90;
       render(citizenFrame(kind,c.colorId,S.time*(alert?2.6:.7)+c.colorId),
-        model(c.x,22+.7*Math.sin(S.bobTime*2+c.colorId),c.z,facing,.70));
+        model(c.x,FLOOD_WATERLINE-13+.7*Math.sin(S.bobTime*2+c.colorId),c.z,facing,.70));
     }
     if(S.request){/* Offered riders appear on the map, not in the city until accepted. */}
     for(const splash of S.pickupEffects){const age=S.time-splash.at;
-      render(waterRipple,model(splash.x,10,splash.z,0,.6+age*1.8));
-      render(waterRipple,model(splash.x,10.3,splash.z,0,.35+age*1.15));
+      render(waterRipple,model(splash.x,FLOOD_WATERLINE+.35,splash.z,0,.6+age*1.8));
+      render(waterRipple,model(splash.x,FLOOD_WATERLINE+.55,splash.z,0,.35+age*1.15));
     }
-    if(!S.photo)render(markerGoal,model(825,1,1080,0,1));
-    if(S.powerOff){const p=power[S.powerIndex];render(markerGoal,model(p.x,2,p.z,0,.8));}
-    if(sourceMeshes){render(markerGoal,model(0,10,1100,0,1.85));}
+    if(!S.photo)render(markerGoal,model(825,FLOOD_WATERLINE+.45,1080,0,1));
+    if(S.powerOff){const p=power[S.powerIndex];render(markerGoal,model(p.x,FLOOD_WATERLINE+.45,p.z,0,.8));}
+    if(sourceMeshes){render(markerGoal,model(0,FLOOD_WATERLINE+.45,1100,0,1.85));}
     if(S.deliveryBanner&&S.time-S.deliveryBanner.at<2.65){
       const age=S.time-S.deliveryBanner.at;
       for(let k=0;k<3;k++){
         const radius=.8+age*.8+k*.36;
-        render(markerGoal,model(0,10.1+k*.1,1100,0,radius));
+        render(markerGoal,model(0,FLOOD_WATERLINE+.5+k*.1,1100,0,radius));
       }
     }
     // Traffic lights: emissive-like saturated color, red/green changes with the actual timer.
@@ -4134,10 +4154,10 @@
         // Legacy fallback: Water Lab 02.1 now supplies the GPU boat wake.
         const fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
         for(const side of [-1,1]){
-          render(waterRipple,model(S.x+side*lx*39+fx*18,9.4,S.z+side*lz*39+fz*18,0,.20+.10*Math.abs(Math.sin(S.strokeTime*TAU/.65))));
+          render(waterRipple,model(S.x+side*lx*39+fx*18,FLOOD_WATERLINE+.35,S.z+side*lz*39+fz*18,0,.20+.10*Math.abs(Math.sin(S.strokeTime*TAU/.65))));
         }
         const shift=32+((S.time*32)%95);
-        render(waterRipple,model(S.x-fx*shift,9.25,S.z-fz*shift,0,.36+.24*Math.sin(S.time*2)));
+        render(waterRipple,model(S.x-fx*shift,FLOOD_WATERLINE+.35,S.z-fz*shift,0,.36+.24*Math.sin(S.time*2)));
       }
       // First-person seats are directly in front of the eye: keep passenger
       // silhouettes visible but lower than the sightline (and below the wiper).
@@ -4181,10 +4201,10 @@
           const sink=age>2.85?36*clamp((age-2.85)/1,0,1):0;
           const frame=Math.floor(((age*7.2)%TAU)/TAU*24)%24;
           if(S.camera3||distance(eye[0],eye[2],effect.x,effect.z)>52)
-            render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,-sink,effect.z,0,.85));
-          render(waterRipple,model(effect.x,9.5,effect.z,0,.9+age*.12));
+            render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,FLOOD_WATERLINE-18-sink,effect.z,0,.85));
+          render(waterRipple,model(effect.x,FLOOD_WATERLINE+.35,effect.z,0,.9+age*.12));
         }else if(age<4.35){
-          render(waterRipple,model(effect.x,9.5,effect.z,0,1+age*.22));
+          render(waterRipple,model(effect.x,FLOOD_WATERLINE+.35,effect.z,0,1+age*.22));
         }
       }
       if(S.camera3&&!sourceMeshes?.paddles){for(const sign of [-1,1]){
@@ -4195,8 +4215,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='fidelity19-water-lab021-phase2-optical-refraction';
-  window.majhiWaterDiagnostics=()=>({webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='fidelity20-water-lab021-phase3-4m-rain';
+  window.majhiWaterDiagnostics=()=>({phase:'3-depth-rain-traffic',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
