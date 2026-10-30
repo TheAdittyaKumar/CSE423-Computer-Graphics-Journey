@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "mode": "PLAYING",
+  "waterDepthMeters": 3,
+  "waterSurfaceY": 36,
+  "renderer": true,
+  "framePasses": 17049,
+  "sceneCaptures": 160,
+  "carProgress": [
+    119.28799999999917,
+    240.99520000000211
+  ],
+  "shaderCount": 12,
+  "boatHullVertices": 3396,
+  "majhiFullVertices": 3204,
+  "seatedPassengerVertices": 1722,
+  "aiStrokePhases": [
+    0.594,
+    0.171
+  ],
+  "wheelBefore": [
+    13,
+    5
+  ],
+  "wheelAfter": [
+    16,
+    7
+  ],
+  "blockedCarProgressStable": true,
+  "warnings": []
+}

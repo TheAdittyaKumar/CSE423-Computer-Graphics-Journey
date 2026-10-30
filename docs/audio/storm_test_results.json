@@ -1,0 +1,65 @@
+{
+  "ok": true,
+  "mode": "PLAYING",
+  "waterDepthMeters": 3,
+  "waterSurfaceY": 36,
+  "renderer": true,
+  "framePasses": 17059,
+  "sceneCaptures": 160,
+  "carProgress": [
+    119.28799999999917,
+    680.2312000000129
+  ],
+  "shaderCount": 12,
+  "boatHullVertices": 3396,
+  "majhiFullVertices": 3204,
+  "seatedPassengerVertices": 1722,
+  "aiStrokePhases": [
+    0.594,
+    0.171
+  ],
+  "wheelBefore": [
+    13,
+    5
+  ],
+  "wheelAfter": [
+    16,
+    7
+  ],
+  "blockedCarProgressStable": true,
+  "horizon": {
+    "phase": "20-storm-outskirts-lightning",
+    "visualOnly": true,
+    "playableBoundary": 1615,
+    "outerWaterEdge": 3300,
+    "skylineBuildings": 51,
+    "nearSkylineBuildings": 30,
+    "nearEdgeDistance": 1650.4,
+    "skylineWindowClusters": 621,
+    "outerTreeCount": 28,
+    "outerHazardCount": 10,
+    "distantRainCurtains": 8,
+    "hazeBanks": 4,
+    "horizonRenderedFrames": 160,
+    "nearVertices": 29952,
+    "farVertices": 756,
+    "treeVertices": 31164,
+    "hazardVertices": 2061,
+    "quality": "HIGH"
+  },
+  "storm": {
+    "phase": "20-storm-outskirts-lightning",
+    "strikes": 1,
+    "thunderEvents": 1,
+    "flash": 0,
+    "nextAt": 37.9,
+    "stormAt": {
+      "x": -8.031718591124218,
+      "z": -1346.1068039616641
+    },
+    "outerTrees": 28,
+    "outerHazards": 10,
+    "lightningVariants": 5
+  },
+  "warnings": []
+}
