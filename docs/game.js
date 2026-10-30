@@ -2651,6 +2651,115 @@
     cityPosterDecor.box(x,y-1.4,cz-w*.18,.26,7.8,w*.16,accent);
     cityPosterDecor.box(x,y-1.2,cz+w*.16,.26,7.8,w*.18,accent.map(v=>Math.min(1,v*1.15)));
   }
+
+  function posterTextZ(value,cx,top,z,step,color){
+    const width=value.length*6*step,x0=cx-width*.5;
+    for(let i=0;i<value.length;i++){
+      const glyph=signGlyphs[value[i]]; if(!glyph)continue;
+      for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(glyph[row][col]==='1'){
+        const l=x0+(i*6+col)*step,r=l+step*.84,t=top-row*step,b=t-step*.88;
+        cityPosterDecor.quad([l,b,z],[r,b,z],[r,t,z],[l,t,z],color);
+      }
+    }
+  }
+  function posterTextX(value,x,top,cz,step,color){
+    const width=value.length*6*step,z0=cz-width*.5;
+    for(let i=0;i<value.length;i++){
+      const glyph=signGlyphs[value[i]]; if(!glyph)continue;
+      for(let row=0;row<7;row++)for(let col=0;col<5;col++)if(glyph[row][col]==='1'){
+        const l=z0+(i*6+col)*step,r=l+step*.84,t=top-row*step,b=t-step*.88;
+        cityPosterDecor.quad([x,b,l],[x,b,r],[x,t,r],[x,t,l],color);
+      }
+    }
+  }
+  function banglaMotifZ(cx,cy,z,width,color){
+    cityPosterDecor.box(cx,cy+2.8,z,width,1.0,.18,color);
+    const xs=[-.34,-.12,.10,.31];
+    xs.forEach((t,i)=>{
+      const px=cx+width*t;
+      cityPosterDecor.box(px,cy, z, .8, 4.8, .18, color);
+      cityPosterDecor.box(px+1.4,cy-1.5,z,2.8,1.0,.18,color);
+      if(i%2===0)cityPosterDecor.box(px-1.1,cy+0.5,z,1.0,1.0,.18,color);
+    });
+  }
+  function banglaMotifX(x,cy,cz,width,color){
+    cityPosterDecor.box(x,cy+2.8,cz,.18,1.0,width,color);
+    const xs=[-.34,-.12,.10,.31];
+    xs.forEach((t,i)=>{
+      const pz=cz+width*t;
+      cityPosterDecor.box(x,cy,pz,.18,4.8,.8,color);
+      cityPosterDecor.box(x,cy-1.5,pz+1.4,.18,1.0,2.8,color);
+      if(i%2===0)cityPosterDecor.box(x,cy+0.5,pz-1.1,.18,1.0,1.0,color);
+    });
+  }
+  function moviePosterZ(cx,cy,wallZ,dir,w,h,base,accent){
+    addPosterPanelZ(cx,cy,wallZ,dir,w,h,base,accent);
+    const z=wallZ+dir*1.74;
+    posterTextZ('DHAKA STAR',cx,cy+h*.38,z,Math.min(1.1,w/72),[.98,.97,.93]);
+    banglaMotifZ(cx,cy+h*.11,z,w*.48,[.96,.90,.28]);
+    cityPosterDecor.box(cx-w*.23,cy-.8,z,w*.18,h*.40,.20,[.84,.38,.32]);
+    cityPosterDecor.box(cx,cy-.8,z,w*.20,h*.40,.20,[.31,.47,.70]);
+    cityPosterDecor.box(cx+w*.22,cy-.8,z,w*.18,h*.40,.20,[.89,.62,.18]);
+    posterTextZ('SUPER HIT',cx,cy-h*.27,z,Math.min(1.0,w/82),[.11,.16,.20]);
+  }
+  function moviePosterX(wallX,cy,cz,dir,w,h,base,accent){
+    addPosterPanelX(wallX,cy,cz,dir,w,h,base,accent);
+    const x=wallX+dir*1.74;
+    posterTextX('DHAKA STAR',x,cy+h*.38,cz,Math.min(1.1,w/72),[.98,.97,.93]);
+    banglaMotifX(x,cy+h*.11,cz,w*.48,[.96,.90,.28]);
+    cityPosterDecor.box(x,cy-.8,cz-w*.23,.20,h*.40,w*.18,[.84,.38,.32]);
+    cityPosterDecor.box(x,cy-.8,cz,.20,h*.40,w*.20,[.31,.47,.70]);
+    cityPosterDecor.box(x,cy-.8,cz+w*.22,.20,h*.40,w*.18,[.89,.62,.18]);
+    posterTextX('SUPER HIT',x,cy-h*.27,cz,Math.min(1.0,w/82),[.11,.16,.20]);
+  }
+  function coachingPosterZ(cx,cy,wallZ,dir,w,h,base,accent){
+    addPosterPanelZ(cx,cy,wallZ,dir,w,h,base,accent);
+    const z=wallZ+dir*1.74;
+    posterTextZ('A PLUS COACHING',cx,cy+h*.36,z,Math.min(.84,w/96),[.98,.97,.93]);
+    posterTextZ('ADMISSION OPEN',cx,cy+h*.17,z,Math.min(.72,w/108),[.10,.15,.18]);
+    banglaMotifZ(cx,cy-h*.04,z,w*.56,[.97,.94,.90]);
+    posterTextZ('HSC  SSC  IELTS',cx,cy-h*.26,z,Math.min(.62,w/116),[.97,.92,.33]);
+    cityPosterDecor.box(cx-w*.20,cy-.5,z,w*.14,h*.28,.20,accent);
+    cityPosterDecor.box(cx+w*.20,cy-.5,z,w*.14,h*.28,.20,accent.map(v=>Math.min(1,v*1.18)));
+  }
+  function coachingPosterX(wallX,cy,cz,dir,w,h,base,accent){
+    addPosterPanelX(wallX,cy,cz,dir,w,h,base,accent);
+    const x=wallX+dir*1.74;
+    posterTextX('A PLUS COACHING',x,cy+h*.36,cz,Math.min(.84,w/96),[.98,.97,.93]);
+    posterTextX('ADMISSION OPEN',x,cy+h*.17,cz,Math.min(.72,w/108),[.10,.15,.18]);
+    banglaMotifX(x,cy-h*.04,cz,w*.56,[.97,.94,.90]);
+    posterTextX('HSC  SSC  IELTS',x,cy-h*.26,cz,Math.min(.62,w/116),[.97,.92,.33]);
+    cityPosterDecor.box(x,cy-.5,cz-w*.20,.20,h*.28,w*.14,accent);
+    cityPosterDecor.box(x,cy-.5,cz+w*.20,.20,h*.28,w*.14,accent.map(v=>Math.min(1,v*1.18)));
+  }
+  function addMovieBannerX(x1,x2,y,z,base,accent){
+    addRoadBannerX(x1,x2,y,z,base,accent);
+    const cx=(x1+x2)*.5, zz=z+.32;
+    posterTextZ('CITY CINEMA',cx,y+4.0,zz,1.0,[.98,.97,.90]);
+    banglaMotifZ(cx,y-.5,zz,44,[.96,.90,.28]);
+    posterTextZ('NEW SHOW',cx,y-5.2,zz,.82,[.14,.16,.18]);
+  }
+  function addMovieBannerZ(x,z1,z2,y,base,accent){
+    addRoadBannerZ(x,z1,z2,y,base,accent);
+    const cz=(z1+z2)*.5, xx=x+.32;
+    posterTextX('CITY CINEMA',xx,y+4.0,cz,1.0,[.98,.97,.90]);
+    banglaMotifX(xx,y-.5,cz,44,[.96,.90,.28]);
+    posterTextX('NEW SHOW',xx,y-5.2,cz,.82,[.14,.16,.18]);
+  }
+  function addCoachingBannerX(x1,x2,y,z,base,accent){
+    addRoadBannerX(x1,x2,y,z,base,accent);
+    const cx=(x1+x2)*.5, zz=z+.32;
+    posterTextZ('BRIGHT COACHING',cx,y+4.0,zz,.88,[.98,.97,.90]);
+    banglaMotifZ(cx,y-.5,zz,46,[.97,.94,.90]);
+    posterTextZ('ADMISSION',cx,y-5.2,zz,.92,[.14,.16,.18]);
+  }
+  function addCoachingBannerZ(x,z1,z2,y,base,accent){
+    addRoadBannerZ(x,z1,z2,y,base,accent);
+    const cz=(z1+z2)*.5, xx=x+.32;
+    posterTextX('BRIGHT COACHING',xx,y+4.0,cz,.88,[.98,.97,.90]);
+    banglaMotifX(xx,y-.5,cz,46,[.97,.94,.90]);
+    posterTextX('ADMISSION',xx,y-5.2,cz,.92,[.14,.16,.18]);
+  }
   function addSagWire(a,b,sag=11,segments=10,radius=.66){
     let prev=[a.x,a.y,a.z];
     for(let i=1;i<=segments;i++){
@@ -2666,8 +2775,10 @@
     const posterBase=posterBases[b.idx%posterBases.length];
     const floors=Math.max(4,Math.floor((b.h-30)/34));
     const frontZ=b.z-b.hd-2.8,backZ=b.z+b.hd+2.8,leftX=b.x-b.hw-2.8,rightX=b.x+b.hw+2.8;
-    const useBalconies=b.idx%3!==1, useRailOnly=!useBalconies, roundedStack=b.idx%4===1;
-    const posterStyle=b.idx%5, hasWallPoster=(b.idx%4===0||b.idx%7===2), hasRoadsideBanner=(b.idx%9===3);
+    const useBalconies=b.idx%3!==1, roundedStack=b.idx%4===1;
+    const spawnFacing=b.z===-1375 && Math.abs(b.x)<=275;
+    const posterStyle=b.idx%5, hasWallPoster=spawnFacing||(b.idx%3===0||b.idx%5===2), hasRoadsideBanner=spawnFacing||(b.idx%8===3);
+    const rightWinZ=b.z-b.hd*.18,leftWinZ=b.z+b.hd*.20;
     // Street-level Dhaka-style gates and tiled podiums.
     cityFacadeDetails.box(b.x,10,frontZ,Math.min(b.hw*1.30,154),22,4.0,tile);
     cityFacadeDetails.box(b.x,22.5,frontZ-2.0,Math.min(b.hw*1.22,146),5,7.5,accent);
@@ -2695,14 +2806,14 @@
       const hasLeft=level<floors-2||b.idx%3===0, hasRight=level<floors-2;
       if(hasLeft)addGrillWindowZ(b.x-39,y,frontZ,-1,20,17,lit&&level%2===0);
       if(hasRight)addGrillWindowZ(b.x+39,y,frontZ,-1,20,17,lit&&level%2===1);
-      addGrillWindowX(rightX,y,b.z-b.hd*.18,1,16,17,lit&&level%2===0);
-      addGrillWindowX(leftX,y,b.z+b.hd*.20,-1,16,16,lit&&level%3===1);
+      addGrillWindowX(rightX,y,rightWinZ,1,16,17,lit&&level%2===0);
+      addGrillWindowX(leftX,y,leftWinZ,-1,16,16,lit&&level%3===1);
       if(useBalconies){
         if(level%2===0)addBalconyZ(b.x,y-1.5,frontZ,-1,roundedStack?36:42,10,accent);
         else if(hasLeft&&b.idx%2===0)addBalconyZ(b.x-39,y-1.4,frontZ,-1,28,9,wall.map(v=>v*.95));
         else if(hasRight)addBalconyZ(b.x+39,y-1.4,frontZ,-1,28,9,wall.map(v=>v*.95));
-        if(level%3===0)addBalconyX(rightX,y-1.2,b.z+b.hd*.16,1,10,34,accent.map(v=>v*.92));
-        if(level%3===1&&b.idx%2===0)addBalconyX(leftX,y-1.2,b.z-b.hd*.18,-1,10,30,wall.map(v=>v*.9));
+        if(level%3===0){addGrillWindowX(rightX,y,rightWinZ,1,18,17,lit&&level%2===0);addBalconyX(rightX,y-1.2,rightWinZ,1,10,34,accent.map(v=>v*.92));}
+        if(level%3===1&&b.idx%2===0){addGrillWindowX(leftX,y,leftWinZ,-1,18,16,lit&&level%3===1);addBalconyX(leftX,y-1.2,leftWinZ,-1,10,30,wall.map(v=>v*.9));}
       }else{
         addRailingZ(b.x,y-1.0,frontZ,-1,30);
         if(hasLeft&&level%2===0)addRailingZ(b.x-39,y-1.0,frontZ,-1,18);
@@ -2715,15 +2826,26 @@
         cityFacadeDetails.box(b.x+b.hw*.36, y-1.0, frontZ-6.2, 12,2,2,[.32,.36,.39]);
       }
     }
-    // A light amount of posters / banners like in Dhaka.
+    // Posters / banners like in Dhaka: visible around gameplay routes, especially near spawn.
     if(hasWallPoster){
-      if(posterStyle<2)addPosterPanelZ(b.x-b.hw*.20,58,frontZ,-1,26,30,posterBase,accent);
-      else addPosterPanelZ(b.x+b.hw*.18,72,frontZ,-1,34,42,posterBase,accent);
-      if(b.idx%6===0)addPosterPanelX(leftX,54,b.z+b.hd*.05,-1,22,28,posterBase.map(v=>Math.min(1,v*1.08)),accent);
+      if(spawnFacing){
+        moviePosterZ(b.x-b.hw*.22,64,frontZ,-1,30,36,posterBase,accent);
+        coachingPosterZ(b.x+b.hw*.20,64,frontZ,-1,30,36,posterBase.map(v=>Math.min(1,v*1.06)),accent);
+        if(b.x<0)coachingPosterX(leftX,58,b.z+b.hd*.04,-1,24,30,posterBase,accent);
+        else moviePosterX(rightX,58,b.z-b.hd*.04,1,24,30,posterBase,accent);
+      }else{
+        if(posterStyle<2)moviePosterZ(b.x-b.hw*.20,58,frontZ,-1,26,30,posterBase,accent);
+        else coachingPosterZ(b.x+b.hw*.18,72,frontZ,-1,34,42,posterBase,accent);
+        if(b.idx%4===0)coachingPosterX(leftX,54,b.z+b.hd*.05,-1,22,28,posterBase.map(v=>Math.min(1,v*1.08)),accent);
+        if(b.idx%6===1)moviePosterX(rightX,84,b.z-b.hd*.08,1,22,28,posterBase,accent);
+      }
     }
     if(hasRoadsideBanner){
-      if(b.idx%2===0)addRoadBannerX(b.x-b.hw-34,b.x+b.hw+34,118,frontZ-24,posterBase,accent);
-      else addRoadBannerZ(rightX+22,b.z-b.hd-26,b.z+b.hd+26,116,posterBase,accent);
+      if(spawnFacing){
+        if(b.x<0)addMovieBannerX(b.x-b.hw-18,b.x+b.hw+10,116,frontZ-18,posterBase,accent);
+        else addCoachingBannerX(b.x-b.hw-10,b.x+b.hw+18,116,frontZ-18,posterBase.map(v=>Math.min(1,v*1.04)),accent);
+      }else if(b.idx%2===0)addMovieBannerX(b.x-b.hw-34,b.x+b.hw+34,118,frontZ-24,posterBase,accent);
+      else addCoachingBannerZ(rightX+22,b.z-b.hd-26,b.z+b.hd+26,116,posterBase,accent);
     }
     // Rooftop tanks, a stair head-room and parapet details are common in Dhaka.
     cityFacadeDetails.box(b.x-b.hw*.16,b.h+10,b.z+b.hd*.10,36,20,32,[.29,.34,.36]);
@@ -2743,6 +2865,7 @@
   function pushPole(x,z,h=130,type=0){const pole={x,z,h,type}; utilityPoleData.push(pole); return pole;}
   // Random-looking Dhaka utility clusters: not everywhere, but in selective messy pockets.
   const poleGroupDefs=[
+    {dir:'x',count:2,start:[-180,-1265],step:360},
     {dir:'x',count:3,start:[-760,-610],step:225},
     {dir:'x',count:2,start:[360,-40],step:255},
     {dir:'x',count:4,start:[-210,520],step:195},
@@ -2786,11 +2909,15 @@
       if((gi+i)%2===0)addSagWire({x:a.x+px*8,y:a.h-36,z:a.z+pz*8},{x:b.x-px*8,y:b.h-39,z:b.z-pz*8},17,9,.32);
     }
   });
+  // Immediate neighborhood clutter near the starting corridor so the player sees poles, posters and banners right away.
+  addMovieBannerX(-180,180,115,-1265,[.70,.22,.20],[.95,.80,.35]);
+  moviePosterZ(-355,64,-1502,-1,30,36,[.68,.24,.21],[.86,.62,.20]);
+  coachingPosterZ(355,64,-1502,-1,30,36,[.24,.46,.69],[.93,.92,.84]);
   // A few extra hanging street banners / poster strings, but not everywhere.
-  addRoadBannerX(-650,-330,114,-610,[.67,.23,.20],[.93,.81,.36]);
-  addRoadBannerX(-115,165,118,520,[.33,.55,.36],[.94,.92,.84]);
-  addRoadBannerZ(540,-690,-470,116,[.25,.44,.68],[.90,.58,.18]);
-  addRoadBannerZ(1080,60,305,114,[.55,.31,.63],[.92,.90,.84]);
+  addMovieBannerX(-650,-330,114,-610,[.67,.23,.20],[.93,.81,.36]);
+  addCoachingBannerX(-115,165,118,520,[.33,.55,.36],[.94,.92,.84]);
+  addMovieBannerZ(540,-690,-470,116,[.25,.44,.68],[.90,.58,.18]);
+  addCoachingBannerZ(1080,60,305,114,[.55,.31,.63],[.92,.90,.84]);
   cityFacadeDetails.upload();cityFacadeLights.upload();storeCanopies.upload();cityPosterDecor.upload();utilityPoles.upload();overheadWires.upload();
   // Detailed, source-independent flood-damaged electrical cabinets. The legacy
   // baked powerboxes mesh is intentionally not drawn, to avoid overlapping models.
@@ -5143,8 +5270,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='phase15-dhaka-random-wires-posters';
-  window.majhiWaterDiagnostics=()=>({phase:'15-dhaka-random-wires-posters',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiVersion='phase16-visible-posters-banners-start-poles';
+  window.majhiWaterDiagnostics=()=>({phase:'16-visible-posters-banners-start-poles',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],movingCarWheelFrames:S.carProgress.map(minivanWheelIndex),
     minivanWheelFrameCount:MINIVAN_WHEEL_STEPS,boatStrokeFrame:S.rowing?strokeFrame(S.strokeTime/.65):idleStrokeFrame,boatCruiseSpeed:245,boatReverseSpeed:165,boatSinglePassOars:true,boatWetGeometryDraws:0,firstPersonTorsoHidden:true,boatHullVertices:boatMesh.length,aiHullVertices:aiHullMeshes.map(m=>m.length),majhiRigFrames:MAJHI_STROKE_FRAMES,majhiFullVertices:majhiRigs[0][0].full.length,aiStrokePhases:S.aiBoats.map(b=>+(b.strokeCycle||0).toFixed(3)),seatedPassengerMeshVertices:seatedPassengerMeshes[0].length,waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
