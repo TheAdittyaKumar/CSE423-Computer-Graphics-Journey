@@ -131,6 +131,18 @@
   }else if(vKind>2.5&&vKind<3.5){
     // Real 3D rain streaks retain translucency rather than opaque HUD marks.
     opacity=.64;
+  }else if(vKind>7.5 && vKind<8.5){
+    // Phase 4 contact layer: a damp facade stain and a broken, moving waterline.
+    // It is narrow and semi-transparent, never a continuous glowing foam stripe.
+    float wave=1.30*sin(vWorld.x*.085+vWorld.z*.057-uTime*1.80)
+        +.50*sin(vWorld.z*.17-vWorld.x*.06+uTime*2.55);
+    float above=vWorld.y-(48.0+wave);
+    float touch=exp(-pow(above/1.65,2.));
+    float stain=(1.-smoothstep(-3.5,2.0,above))*smoothstep(-6.5,-2.5,above);
+    float breakup=.50+.50*sin(vWorld.x*.61+vWorld.z*.36+uTime*1.30);
+    opacity=.26*touch*(.42+.58*breakup)+.11*stain;
+    // No artificial halo in the storm: mostly a dark, wet edge with glints.
+    c=mix(vec3(.025,.095,.114),vec3(.25,.41,.40),touch*(.18+.36*breakup));
   }else if(vKind>6.5){
     // Soft additive-looking warning glow, without the campus-ground mask.
     opacity=.16;c=min(c*1.16,vec3(1.));
@@ -248,23 +260,12 @@
       {x:car.fixed,z:along,angle:forward?90:270,style:car.style};
   }
   function updateSlowCars(dt){
+    // Phase 4: ordinary road cars are waterlogged in the 4 m flood, not
+    // inexplicably driving beneath the surface. Preserve their mission-safe
+    // positions and collision geometry; rescue vehicles use separate AI.
     S.movingCars=slowCars.map((car,i)=>{
-      const current=S.carProgress[i],future=current+car.speed*dt;
-      let blocked=false;
-      const steps=Math.max(1,Math.ceil(car.speed*dt/5));
-      for(let part=1;part<=steps;part++){
-        const point=carAtProgress(car,current+(future-current)*(part/steps));
-        if(orientedObjectOverlap(S.x,S.z,point.x,point.z,point.angle,
-                                 point.style%3===1?45:40,20,12)){blocked=true;break;}
-      }
-      const wasStopped=S.carStopped[i];
-      S.carStopped[i]=blocked;
-      if(blocked&&!wasStopped){
-        const carPos=carAtProgress(car,current);
-        triggerBoatImpact(carPos.x-S.x,carPos.z-S.z,.85);
-      }
-      if(!blocked)S.carProgress[i]=future;
-      return {...carAtProgress(car,S.carProgress[i]),stopped:blocked};
+      S.carStopped[i]=true;
+      return {...carAtProgress(car,S.carProgress[i]),stopped:true,waterlogged:true};
     });
   }
   const trees=[[-1552,335,.86],[-1545,120,.76],[-215,875,.93],[402,890,.82],[-1530,-1330,.72],[1562,-959,.86],[-145,852,.91],[1545,-230,.78],[-1260,-1540,.96],[1541,847,.76],[1545,-365,.87],[-1550,-230,.84],[-1545,-420,.70],[1555,100,.74]];
@@ -370,6 +371,45 @@
   city.upload();
   const waterMesh=new Mesh(), SIZE=1700,STEP=lab2?28:48;
   for(let x=-SIZE;x<SIZE;x+=STEP)for(let z=-SIZE;z<SIZE;z+=STEP){const c=[.061+(.008*Math.sin(x*.01+z*.03)),.187,.252];waterMesh.quad([x,FLOOD_WATERLINE,z],[x+STEP,FLOOD_WATERLINE,z],[x+STEP,FLOOD_WATERLINE,z+STEP],[x,FLOOD_WATERLINE,z+STEP],c,1);}waterMesh.upload();
+  // PHASE 4: thin physical water-contact ribbons on the actual building
+  // footprint boundaries. They are not screen-space circles and do not change
+  // collisions, source building geometry or submerged street rendering.
+  const facadeWaterline=new Mesh();
+  function facadeEdge(x0,z0,x1,z1){
+    const y0=FLOOD_WATERLINE-6.8,y1=FLOOD_WATERLINE+4.2;
+    facadeWaterline.quad([x0,y0,z0],[x1,y0,z1],[x1,y1,z1],[x0,y1,z0],
+      [.12,.28,.30],8);
+  }
+  for(const b of buildings){
+    // Campus has its own protected sunny courtyard, not flooded walls.
+    if(distance(b.x,b.z,0,1378)<445)continue;
+    const x0=b.x-b.hw-.95,x1=b.x+b.hw+.95;
+    const z0=b.z-b.hd-.95,z1=b.z+b.hd+.95;
+    facadeEdge(x0,z0,x1,z0);facadeEdge(x1,z0,x1,z1);
+    facadeEdge(x1,z1,x0,z1);facadeEdge(x0,z1,x0,z0);
+  }
+  // Storefront edges are at street level and likewise meet the flood.
+  for(const [x,z] of [[178,885],[-367,885],[320,715]]){
+    if(distance(x,z,0,1378)<410)continue;
+    facadeEdge(x-59, z-48,x+59,z-48);
+    facadeEdge(x-59,z+48,x+59,z+48);
+  }
+  facadeWaterline.upload();
+  // PHASE 4: the *same* GPU field also drives the player hull. The 2x2 readback
+  // is sampled at low frequency and smoothed, so it cannot jitter the game.
+  const hullWater={heave:0,pitch:0,roll:0,targetHeave:0,targetPitch:0,targetRoll:0,
+    samples:0,available:false,disabled:false};
+  function analyticSurface(x,z,t){
+    // Identical low-frequency waves to the dedicated optical water vertex shader.
+    return .92*(1.10*Math.sin(.027*x+.013*z-t*1.18)
+                 +.65*Math.sin(-.017*x+.029*z+t*.83)
+                 +.30*Math.sin(.080*z+.031*x-t*1.63));
+  }
+  function analyticSurfaceSlope(x,z,t){
+    const p1=.027*x+.013*z-t*1.18,p2=-.017*x+.029*z+t*.83,p3=.080*z+.031*x-t*1.63;
+    return [.92*(1.10*.027*Math.cos(p1)-.65*.017*Math.cos(p2)+.30*.031*Math.cos(p3)),
+            .92*(1.10*.013*Math.cos(p1)+.65*.029*Math.cos(p2)+.30*.080*Math.cos(p3))];
+  }
   // WATER INTEGRATION 01: adapt the Water Lab 02.1 ping-pong heightfield to
   // the ORIGINAL CITY. The patch follows the rescue boat in WORLD coordinates;
   // a GPU scroll pass preserves old wakes rather than having them follow camera.
@@ -459,6 +499,24 @@
     const effects={update:passProgram(updateShader),drop:passProgram(drops),
       wake:passProgram(wake),paddle:passProgram(paddle),scroll:passProgram(scroll),
       normals:passProgram(normals)};
+    // One 2x2 floating-point-avoiding GPU sample pass reads the surface below
+    // bow, stern, port and starboard in a SINGLE 16-byte readback.
+    // This is optional and falls back to analytic waves if unavailable/too slow.
+    const samplerFragment=`#version 300 es\n${common}
+      uniform vec2 uSamplePoints[4];
+      void main(){
+        int k=int(gl_FragCoord.x)+2*int(gl_FragCoord.y);
+        fragColor=texture(uPrevious,clamp(uSamplePoints[k],vec2(.003),vec2(.997)));
+      }`;
+    let surfaceSampler=null;
+    try {
+      surfaceSampler=passProgram(samplerFragment);
+      surfaceSampler.points=gl.getUniformLocation(surfaceSampler.p,'uSamplePoints[0]');
+    }catch(e){
+      // This extra capability must never disable the proven Wave Lab renderer.
+      hullWater.disabled=true;
+      console.warn('GPU hull sampling shader unavailable; using procedural swells:',e);
+    }
     const blank=new Uint8Array(N*N*4);
     for(let i=0;i<blank.length;i+=4){blank[i]=128;blank[i+2]=128;}
     function buffer(filtered){const texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,texture);
@@ -472,9 +530,28 @@
       if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)
         throw Error('Water heightfield framebuffer incomplete');return {texture,fb};}
     const buffers=[buffer(false),buffer(false)], normal=buffer(true);
+    let sampleFB=null;
+    const sampleBytes=new Uint8Array(16);let sampleTime=-1;
+    if(surfaceSampler){try{
+      const sampleTexture=gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D,sampleTexture);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA8,2,2,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      sampleFB=gl.createFramebuffer();gl.bindFramebuffer(gl.FRAMEBUFFER,sampleFB);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,sampleTexture,0);
+      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)
+        throw Error('Hull water sampling framebuffer incomplete');
+    }catch(e){
+      sampleFB=null;hullWater.disabled=true;
+      console.warn('GPU hull sampling target unavailable; using procedural swells:',e);
+    }}
     const vao=gl.createVertexArray();let read=0;
     let cx=0,cz=-1450,active=false,elapsed=0,lastX=0,lastZ=0,stepAccumulator=0;
     let lastSplash=0,lastStroke=-1,travelDistance=0,wakeCount=0;
+    let lastObjectRipple=-1,objectWaveCount=0;
     let seenImpacts=new WeakSet(),seenRain=new WeakSet();
     function run(effect,args={}){gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);
       const destination=effect===effects.normals?normal:buffers[1-read];
@@ -492,8 +569,36 @@
       if(effect!==effects.normals)read=1-read;
     }
     function uv(x,z){return [(x-cx)/SPAN+.5,(z-cz)/SPAN+.5];}
+    function sampleHullWater(){
+      if(hullWater.disabled || !sampleFB || !surfaceSampler || !gl.readPixels)return;
+      const a=S.angle*RAD,fx=Math.cos(a),fz=Math.sin(a);
+      // sample order: bow, stern, port, starboard (2x2 GPU output)
+      const locations=[uv(S.x+fx*65,S.z+fz*65),uv(S.x-fx*65,S.z-fz*65),
+        uv(S.x-fz*29,S.z+fx*29),uv(S.x+fz*29,S.z-fx*29)];
+      if(locations.some(q=>q.some(v=>v<.02||v>.98)))return;
+      const coords=new Float32Array(locations.flat());
+      gl.disable(gl.DEPTH_TEST);gl.disable(gl.BLEND);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,sampleFB);gl.viewport(0,0,2,2);
+      gl.useProgram(surfaceSampler.p);gl.bindVertexArray(vao);
+      gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,buffers[read].texture);
+      gl.uniform1i(surfaceSampler.prev,0);
+      gl.uniform2fv(surfaceSampler.points,coords);
+      gl.drawArrays(gl.TRIANGLES,0,3);
+      gl.readPixels(0,0,2,2,gl.RGBA,gl.UNSIGNED_BYTE,sampleBytes);
+      // A blank/unwritten result is ignored: important on unsupported drivers.
+      if(sampleBytes[0]>40 && sampleBytes[0]<216){
+        const h=[0,1,2,3].map(i=>13.0*(2.0*(sampleBytes[i*4]*256+sampleBytes[i*4+1])/65535.0-1.0));
+        hullWater.targetHeave=clamp((h[0]+h[1]+h[2]+h[3])*.25,-5,5);
+        hullWater.targetPitch=clamp(Math.atan2(h[0]-h[1],130)*180/Math.PI,-4,4);
+        hullWater.targetRoll=clamp(Math.atan2(h[2]-h[3],58)*180/Math.PI,-6,6);
+        hullWater.available=true;hullWater.samples++;
+      }
+    }
     function reset(x=0,z=-1450){cx=x;cz=z;lastX=x;lastZ=z;active=true;
       elapsed=0;lastSplash=0;lastStroke=-1;travelDistance=0;stepAccumulator=0;
+      lastObjectRipple=-1;objectWaveCount=0;
+      sampleTime=-1;Object.assign(hullWater,{heave:0,pitch:0,roll:0,targetHeave:0,
+        targetPitch:0,targetRoll:0,samples:0,available:false,disabled:!sampleFB});
       seenImpacts=new WeakSet();seenRain=new WeakSet();wakeCount=0;
       for(const b of buffers){gl.bindTexture(gl.TEXTURE_2D,b.texture);
         gl.texSubImage2D(gl.TEXTURE_2D,0,0,0,N,N,gl.RGBA,gl.UNSIGNED_BYTE,blank);}
@@ -554,6 +659,32 @@
         }
       }
       lastX=S.x;lastZ=S.z;
+      // Buildings, trapped vehicles and nearby rescue boats disturb the same
+      // heightfield. Keep impulses sparse and local to avoid heavy GPU passes.
+      if(S.mode==='PLAYING' && elapsed-lastObjectRipple>.29 &&
+         distance(S.x,S.z,0,1378)>395){
+        lastObjectRipple=elapsed;
+        const nearestWall=buildings.filter(b=>distance(S.x,S.z,b.x,b.z)<445 &&
+          distance(b.x,b.z,0,1378)>430)
+          .sort((a,b)=>distance(S.x,S.z,a.x,a.z)-distance(S.x,S.z,b.x,b.z))[0];
+        if(nearestWall){
+          // Select a point just outside the facade on the camera-facing side.
+          const b=nearestWall,dx=S.x-b.x,dz=S.z-b.z;
+          let rx,rz;
+          if(Math.abs(dx)/(b.hw+1)>Math.abs(dz)/(b.hd+1)){
+            rx=b.x+Math.sign(dx||1)*(b.hw+8);
+            rz=clamp(S.z,b.z-b.hd+8,b.z+b.hd-8);
+          }else{
+            rx=clamp(S.x,b.x-b.hw+8,b.x+b.hw-8);
+            rz=b.z+Math.sign(dz||1)*(b.hd+8);
+          }
+          ripple(rx,rz,.011,.017);objectWaveCount++;
+        }
+        const nearbyCar=parkedCars.find(c=>distance(S.x,S.z,c.x,c.z)<265);
+        if(nearbyCar){ripple(nearbyCar.x+25,nearbyCar.z,.014,.014);objectWaveCount++;}
+        const nearbyBoat=(S.aiBoats||[]).find(b=>distance(S.x,S.z,b.x,b.z)<360);
+        if(nearbyBoat){ripple(nearbyBoat.x,nearbyBoat.z,.017,.015);objectWaveCount++;}
+      }
       // 120 Hz numerical integration, bounded to 6 substeps per animation frame.
       stepAccumulator=Math.min(.060,stepAccumulator+dt);
       let steps=0;while(stepAccumulator>=1/120&&steps<6){
@@ -570,6 +701,15 @@
         }
       }
       run(effects.normals);
+      // HIGH quality only. One tiny GPU readback ~every 120 ms avoids a
+      // full-resolution readPixels stall on each animation frame.
+      if(S.quality==='HIGH' && S.mode==='PLAYING' && elapsed-sampleTime>.12){
+        sampleTime=elapsed;
+        try {sampleHullWater();} catch(e){
+          hullWater.disabled=true;hullWater.available=false;
+          console.warn('Optional GPU buoyancy sampling disabled:',e);
+        }
+      }
       gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.viewport(0,0,canvas.width,canvas.height);
       gl.bindVertexArray(null);gl.useProgram(prog);gl.enable(gl.DEPTH_TEST);
     }
@@ -580,7 +720,9 @@
       get height(){return buffers[read].texture;},
       get center(){return [cx,cz];},SPAN,
       get diagnostics(){return {running:active,localSpan:SPAN,texels:N,
-        worldCenter:[cx,cz],wavesInjected:wakeCount,shader:'GPU RGBA8 height/velocity + normals'};}};
+        worldCenter:[cx,cz],wavesInjected:wakeCount,objectWavesInjected:objectWaveCount,
+        hullSamples:hullWater.samples,hullWaterActive:hullWater.available,
+        shader:'GPU RGBA8 height/velocity + normals'};}};
   }
   let dhakaWater=null,waterIntegrationError=null;
   if(lab2){try{dhakaWater=createDhakaWaterLab();}
@@ -1243,6 +1385,13 @@
       }
     }
   }
+  // Floating rescue rickshaws retain their established AI/voices. Two simple
+  // timber flotation beams make their waterline position visually plausible.
+  const rickshawPontoons=new Mesh();
+  rickshawPontoons.box(0,-1,-25,93,9,12,[.34,.21,.12]);
+  rickshawPontoons.box(0,-1,25,93,9,12,[.34,.21,.12]);
+  rickshawPontoons.box(8,-.2,0,8,6,55,[.45,.30,.18]);
+  rickshawPontoons.upload();
   function drawRickshawFleet(){
     if(S.mode==='MENU')return;
     for(const r of S.aiRickshaws){
@@ -1252,6 +1401,7 @@
       const bob=.5*Math.sin(S.time*4+r.id*2)+(stopped&&bumpAge>5.5?2.1*Math.sin(S.time*22):0);
       render(parkedDhakaModels.rescueRickshaws[r.id],
         model(r.x,FLOOD_WATERLINE-29+bob,r.z,r.angle,.82),true);
+      render(rickshawPontoons,model(r.x,FLOOD_WATERLINE-4+bob,r.z,r.angle,.82));
       const a=r.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),sx=-fz,sz=fx;
       const wheelFrame=rickshawWheelFrames[Math.floor((((r.wheelSpin||0)%TAU)+TAU)/TAU*rickshawWheelFrames.length)%rickshawWheelFrames.length];
       for(const [lx,ly,lz] of [[39,14,0],[-29,14,-21],[-29,14,21]]){
@@ -1286,7 +1436,8 @@
     for(const boat of S.aiBoats){
       if(distance(S.x,S.z,boat.x,boat.z)>1050)continue;
       const a=boat.angle*RAD,fx=Math.cos(a),fz=Math.sin(a),lx=-fz,lz=fx;
-      const bob=.9*Math.sin(S.time*4+boat.id);
+      const bob=.65*Math.sin(S.time*4+boat.id)+
+        .85*analyticSurface(boat.x,boat.z,S.bobTime*.85);
       // Small distinct sampans carrying a visible majhi, with paddles and wakes.
       render(sourceMeshes?.boat||boatMesh,model(boat.x,FLOOD_WATERLINE-2.2+bob,boat.z,boat.angle,.47));
       render(citizenFrame('HOME',boat.colorId,S.time*2.7+boat.id),
@@ -3928,12 +4079,24 @@
     if(dhakaWater){try{dhakaWater.update(Math.min(.05,Math.max(0,S.mode==='PLAYING'?S._waterDelta||0:.0)));}
       catch(e){console.warn('GPU Water simulation disabled:',e);waterIntegrationError=String(e);dhakaWater=null;}}
     gl.useProgram(prog);skyColor();const a=S.angle*RAD,c=Math.cos(a),s=Math.sin(a);
-    const currentPitch=S.waveStrength*Math.sin(S.bobTime*4.4+S.z*.012)*5.0;
-    const currentRoll=S.waveStrength*Math.sin(S.bobTime*3.7+S.x*.014)*7.2;
-    const boatPitch=clamp(boatImpact.pitch+currentPitch,-17,17);
-    const boatRoll=clamp(boatImpact.roll+currentRoll,-19,19);
-    const boatY=(FLOOD_WATERLINE+.30)+Math.sin(S.bobTime*2.8)*1.3+
-      S.waveStrength*Math.sin(S.bobTime*4.1+S.x*.01)*3.1+boatImpact.heave;
+    // Vessel rides the *same* long waves used by the optical water mesh.
+    // Four optional GPU height samples add actual local disturbances and wakes.
+    if(S.quality!=='HIGH'||!dhakaWater){hullWater.available=false;hullWater.targetHeave=0;hullWater.targetPitch=0;hullWater.targetRoll=0;}
+    const waterTime=S.bobTime*.85;
+    const slopes=analyticSurfaceSlope(S.x,S.z,waterTime);
+    const forwardSlope=slopes[0]*c+slopes[1]*s;
+    const sidewaysSlope=-slopes[0]*s+slopes[1]*c;
+    const response=1-Math.exp(-8*Math.min(.05,Math.max(.008,S._waterDelta||.016)));
+    for(const [key,target] of [['heave','targetHeave'],['pitch','targetPitch'],['roll','targetRoll']])
+      hullWater[key]+=(hullWater[target]-hullWater[key])*response;
+    const currentPitch=Math.atan(forwardSlope)*180/Math.PI +
+      S.waveStrength*Math.sin(S.bobTime*4.4+S.z*.012)*2.6;
+    const currentRoll=Math.atan(sidewaysSlope)*180/Math.PI +
+      S.waveStrength*Math.sin(S.bobTime*3.7+S.x*.014)*3.4;
+    const boatPitch=clamp(boatImpact.pitch+currentPitch+hullWater.pitch,-17,17);
+    const boatRoll=clamp(boatImpact.roll+currentRoll+hullWater.roll,-19,19);
+    const boatY=FLOOD_WATERLINE+.30+analyticSurface(S.x,S.z,waterTime)+
+      (hullWater.available?hullWater.heave:0)+boatImpact.heave;
     const lerp=((S.angle-S.heading+540)%360)-180;S.heading=(S.heading+lerp*.16+360)%360;
     const ca=S.camera3?S.heading*RAD:a;
     let eye,target,fov;
@@ -4026,10 +4189,15 @@
       const type=dhakaVehicleType(i);
       const mesh=type==='cng'?(i===5?parkedDhakaModels.cngAlt:parkedDhakaModels.cng):
         type==='rickshaw'?parkedDhakaModels.rickshaw:parkedDhakaModels.car[i%4];
-      render(mesh,model(car.x,0,car.z,car.angle,.97));
+      // Some trapped vehicles retain a visible roof while most of their bodies
+      // remain underwater. This is a tethered, slowly bobbing *visual* float;
+      // original collision positions/size and mission scripts stay unchanged.
+      const floatHeight=type==='rickshaw'?15:type==='cng'?10:(i%3===0?14:5);
+      const bob=.65*Math.sin(S.bobTime*1.45+i*2.1);
+      render(mesh,model(car.x,floatHeight+bob,car.z,car.angle,.97));
     }
     for(const car of S.movingCars){const mesh=sourceMeshes?.['moving-car-'+(car.style%5)]||carMesh;
-      render(mesh,model(car.x,0,car.z,car.angle,.98));
+      render(mesh,model(car.x,9+.5*Math.sin(S.bobTime*1.1+car.style),car.z,car.angle,.98));
     }
     for(const i of [1,4]){const car=parkedCars[i],a=car.angle*RAD;
       const dx=car.x+Math.sin(a)*47,dz=car.z-Math.cos(a)*47;
@@ -4046,6 +4214,9 @@
       gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);
     }
     if(!opticalWater)render(waterMesh);
+    // Facade waterline ribbons exist on real wall planes; blend after the
+    // optical water and honor the depth buffer, not fake screen-space decals.
+    if(S.quality==='HIGH')render(facadeWaterline);
     render(currentArrows);
     render(campusGround);
     render(sunshineAura);render(sunshineSun);
@@ -4216,7 +4387,7 @@
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
   window.majhiVersion='fidelity20-water-lab021-phase3-4m-rain';
-  window.majhiWaterDiagnostics=()=>({phase:'3-depth-rain-traffic',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
+  window.majhiWaterDiagnostics=()=>({phase:'4-environment-buoyancy',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
   window.majhiDiagnostics=()=>({x:S.x,z:S.z,angle:S.angle,shopSignVertices:shopSigns.length,wiperAngle:S.wiperAngle,wiperActive:S.wiperActive,screenDrops:S.screenDrops.length,pickupSplashes:S.pickupEffects.length,homeMoorings:homes.map(p=>({name:p.name,x:p.x,z:p.z,relocated:!!p.relocated})),traffic:S.traffic,powerOff:S.powerOff,powerIndex:S.powerIndex,missedEffects:S.missedEffects.map(e=>({...e})),loaded:!!sourceMeshes,geometryNames:Object.keys(sourceMeshes||{}),camera:S.camera3?'third':'first',onboard:seated().length,sunlightBlend:1-clamp((distance(S.x,S.z,0,1378)-365)/230,0,1),wiperGeometry:windshieldBlade(Math.max(1,weather.clientWidth),Math.max(1,weather.clientHeight)),rainSplashes:S.rainSplashes.length,driverAnimations:driverFrames.length,stormDrops:stormDrops.length,litStreetlamps:streetlights.filter(([x,z])=>!lightOffAt(x,z)).length,carStopped:[...S.carStopped],carProgress:[...S.carProgress],waveStrength:S.waveStrength,powerCabinetVertices:powerCabinets.map(m=>m.length),citizenAnimationFrames:REACTION_FRAMES,citizenAnimationStyles:reactionAnimations.length,citizenAnimationVertices:citizenFrames.HOME[0][0].length,waitingEmotions:S.rides.filter(r=>r.state==='WAITING').map(r=>({name:r.name,...passengerReaction(r)})),celebratingPassengers:S.deliveryEffects.filter(e=>S.time-e.at>=1.65).length,powerRepairFX:powerVisual.repairedIndex,backgroundCitizens:S.cityPeople.length,dhakaVehicleTypes:parkedCars.map((_,i)=>dhakaVehicleType(i)),
     movingRickshaws:(S.aiRickshaws||[]).map(r=>({name:r.name,x:r.x,z:r.z,targetId:r.targetId,deliveries:r.deliveries,quarrelling:r.quarrelUntil>S.time})),
