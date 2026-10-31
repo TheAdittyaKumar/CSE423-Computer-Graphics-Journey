@@ -1406,13 +1406,11 @@
   const boatMesh=buildMajhiHull(0);
   const aiHullMeshes=[buildMajhiHull(1),buildMajhiHull(2),buildMajhiHull(3)];
   const carMesh=new Mesh();carMesh.box(0,6,0,88,25,44,[.36,.43,.47]);carMesh.box(3,21,0,49,19,41,[.22,.30,.34]);carMesh.box(-8,34,0,24,3,38,[.40,.49,.50]);carMesh.box(40,9,0,4,12,33,[.78,.35,.23]);carMesh.box(-40,9,0,4,13,33,[.87,.67,.38]);carMesh.upload();
-  const npcMeshes=studentColors.map(color=>{const m=new Mesh();m.cylinder(0,14,0,7,24,color,8);m.sphere(0,32,0,9,[.78,.55,.38],4,8);m.cylinder(-9,16,0,3,22,[.77,.55,.40],6);m.cylinder(9,18,0,3,28,[.77,.55,.40],6);m.cylinder(-4,2,0,2.4,10,[.20,.29,.37],6);m.cylinder(4,2,0,2.4,10,[.20,.29,.37],6);return m.upload();});
   // Reactive citizens are lightweight procedural meshes, baked once into GPU
   // buffers instead of regenerated on every frame. They use the original
   // student's shirt palette, and animate without extra assets or packages.
   const REACTION_FRAMES=12;
   const reactionAnimations=['HOME','HOME_URGENT','SOS','SOS_URGENT','CELEBRATE'];
-  const citizenSkin=[.76,.53,.38],citizenHair=[.115,.125,.16];
   function citizenLimb(mesh,from,to,radius,color){
     const axis=norm(to.map((v,i)=>v-from[i]));
     const guide=Math.abs(axis[1])<.88?[0,1,0]:[1,0,0];
@@ -1422,6 +1420,87 @@
       const a=j*TAU/7,b=(j+1)*TAU/7;
       mesh.quad(ring(from,a),ring(from,b),ring(to,b),ring(to,a),color);
     }
+  }
+  // Phase 22: small, consistent, low-poly anatomy toolkit. Everything is
+  // baked into the existing WebGL mesh buffers (no external model downloads).
+  // Head, torso and limbs share the +X facing convention of the original game.
+  const characterSkinTones=[
+    [.78,.55,.39],[.67,.45,.32],[.86,.65,.46],
+    [.72,.49,.34],[.80,.57,.42],[.62,.41,.29]
+  ];
+  const characterHairTones=[
+    [.085,.105,.12],[.13,.105,.09],[.085,.09,.105],
+    [.16,.13,.115],[.09,.12,.15],[.12,.095,.085]
+  ];
+  const charShade=(c,m)=>c.map(v=>clamp(v*m,0,1));
+  function characterEllipsoid(mesh,x,y,z,rx,ry,rz,col,rings=5,segments=9){
+    for(let i=0;i<rings;i++){
+      const a=-Math.PI*.5+i*Math.PI/rings;
+      const b=-Math.PI*.5+(i+1)*Math.PI/rings;
+      for(let j=0;j<segments;j++){
+        const t=j*TAU/segments,u=(j+1)*TAU/segments;
+        const at=(v,w)=>[x+rx*Math.cos(v)*Math.cos(w),
+          y+ry*Math.sin(v),z+rz*Math.cos(v)*Math.sin(w)];
+        const shade=.87+.13*Math.sin(b)+.035*Math.cos(t);
+        mesh.quad(at(a,t),at(b,t),at(b,u),at(a,u),charShade(col,shade));
+      }
+    }
+  }
+  function characterJoint(mesh,from,to,rStart,rEnd,color,sides=7){
+    const axis=norm(to.map((v,i)=>v-from[i]));
+    const guide=Math.abs(axis[1])<.88?[0,1,0]:[1,0,0];
+    const right=norm(cross(axis,guide)),side=cross(axis,right);
+    const pos=(p,r,t)=>p.map((v,i)=>v+r*(Math.cos(t)*right[i]+Math.sin(t)*side[i]));
+    for(let j=0;j<sides;j++){
+      const a=j*TAU/sides,b=(j+1)*TAU/sides;
+      mesh.quad(pos(from,rStart,a),pos(from,rStart,b),pos(to,rEnd,b),pos(to,rEnd,a),
+        charShade(color,.88+.12*Math.cos(a)));
+    }
+  }
+  function characterHead(mesh,x,y,z,scale,style=0,expression='calm'){
+    const id=((style%characterSkinTones.length)+characterSkinTones.length)%characterSkinTones.length;
+    const skin=characterSkinTones[id],hair=characterHairTones[id];
+    const rx=8.2*scale,ry=9.0*scale,rz=8.0*scale;
+    characterEllipsoid(mesh,x,y,z,rx,ry,rz,skin,5,10);
+    // Dark hair sits on the skull instead of floating as a full second sphere.
+    const hairStyle=id%3;
+    characterEllipsoid(mesh,x-1.4*scale,y+6.5*scale,z,rx*.96,
+      (hairStyle===2?3.9:4.6)*scale,rz*1.03,hair,3,10);
+    if(hairStyle===1){
+      characterEllipsoid(mesh,x+3.3*scale,y+7.0*scale,z-3.8*scale,3.1*scale,2.4*scale,3.0*scale,hair,3,6);
+    }else if(hairStyle===2){
+      characterEllipsoid(mesh,x+2.1*scale,y+8.8*scale,z+2.4*scale,3.4*scale,2.1*scale,2.8*scale,hair,3,6);
+    }
+    // Ears, large legible eyes, eyebrows and a tiny nose/mouth for readability.
+    for(const side of [-1,1]){
+      characterEllipsoid(mesh,x,y-1.1*scale,z+side*7.6*scale,
+        2.1*scale,2.9*scale,1.35*scale,skin,3,6);
+      mesh.sphere(x+7.6*scale,y+1.5*scale,z+side*3.3*scale,1.65*scale,[.98,.96,.90],3,6);
+      mesh.sphere(x+8.8*scale,y+1.4*scale,z+side*3.3*scale,.87*scale,[.11,.14,.17],3,5);
+      mesh.box(x+7.35*scale,y+4.0*scale,z+side*3.3*scale,
+        .75*scale,.68*scale,3.05*scale,hair);
+    }
+    characterEllipsoid(mesh,x+8.55*scale,y-1.1*scale,z,
+      1.25*scale,1.7*scale,1.35*scale,charShade(skin,1.05),3,6);
+    mesh.box(x+8.55*scale,y-(expression==='worried'?5.3:4.5)*scale,z,
+      .8*scale,(expression==='worried'?2.0:.85)*scale,3.1*scale,[.26,.15,.15]);
+    if(id===3||id===5){
+      mesh.box(x+8.1*scale,y-3.35*scale,z,.85*scale,.66*scale,5.1*scale,charShade(hair,.92));
+    }
+  }
+  function characterBody(mesh,x,y,z,shirt,style=0,rx=10,ry=12,rz=11){
+    const id=style%characterSkinTones.length;
+    const trim=charShade(shirt,.72),light=charShade(shirt,1.13);
+    characterEllipsoid(mesh,x,y,z,rx,ry,rz,shirt,5,9);
+    // Neck and the contrasting top of a crew-neck T-shirt.
+    mesh.cylinder(x+1,y+ry+1,z,3.15,5.4,characterSkinTones[id],7);
+    mesh.box(x+rx*.87,y+ry*.31,z,.85,ry*.46,3.2,light);
+    mesh.box(x-2,y-ry*.72,z,rx*1.5,2.4,rz*1.48,trim);
+  }
+  function characterShoe(mesh,x,y,z,style=0){
+    const col=style%2===0?[.12,.18,.22]:[.24,.20,.18];
+    characterEllipsoid(mesh,x+2.0,y,z,4.6,2.0,3.3,col,3,7);
+    mesh.box(x+2.4,y-1.15,z,7.5,.65,5.7,[.73,.72,.65]);
   }
   // Phase 9: one common articulated stroke system for player and AI.
   // This follows Water Lab's catch (0-.10), submerged drive (.10-.53),
@@ -1466,41 +1545,36 @@
   function makeMajhiRowingFrame(phase,shirtId=0){
     const full=new Mesh(),first=new Mesh();
     const shirt=majhiShirts[shirtId%majhiShirts.length];
-    const shade=shirt.map(x=>x*.77),skin=majhiSkin,hair=majhiHair,wood=majhiWood;
+    const skin=characterSkinTones[shirtId%characterSkinTones.length];
+    const shade=charShade(shirt,.75),wood=majhiWood;
     const active=phase>=.10&&phase<.53;
     const pressure=active?Math.sin(Math.PI*(phase-.10)/.43):0;
     const lean=-3.3*pressure+1.4*Math.sin(phase*TAU);
     const torsoX=-59+lean;
-    // Seated captain, knees and feet inside the passenger-capable hull.
-    full.box(torsoX,26.5,0,19,20,28,shirt);
-    // First-person is viewed from the majhi's eyes. Never draw a headless
-    // back, chest, knees, or head in front of the camera. Sleeve geometry is
-    // separately authored below as a POV view-model, emerging from frame edges.
-    full.box(torsoX+7.8,28,0,2,13,21,shade);
-    full.box(torsoX,16.0,0,17,11,27,[.24,.30,.39]);
+    // Full third-person majhi: sculpted shirt/waist, collar, knees and shoes.
+    // Body origin and hands stay compatible with Phase 21's seating/oar rigs.
+    characterBody(full,torsoX,26.5,0,shirt,shirtId,11.2,12.6,15.1);
+    characterEllipsoid(full,torsoX-1.2,16.8,0,10.4,5.9,13.6,[.26,.32,.40],4,9);
+    full.box(torsoX+9.2,27.4,0,.75,13,2.0,shade);
+    full.box(torsoX-8.3,26.8,0,1.1,11,12.0,shade);
     for(const side of [-1,1]){
-      full.box(torsoX+7,12.8,side*9,19,8,10,[.29,.35,.40]);
-      majhiShaft(full,[torsoX+12,12.8,side*9],[-11,7.1,side*13],4.1,[.28,.32,.37]);
-      full.box(0,6.5,side*13,17,4.0,8.6,[.28,.25,.21]);
+      characterJoint(full,[torsoX+3.8,13.7,side*9.0],[-13,7.0,side*13.0],
+        4.9,3.6,[.28,.33,.41]);
+      characterEllipsoid(full,torsoX+5.5,12.8,side*9.0,11.0,4.4,5.5,[.30,.36,.43],4,8);
+      characterShoe(full,-7.0,6.2,side*13.0,shirtId);
     }
-    full.sphere(torsoX+3,44,0,11.7,skin,6,11);
-    full.sphere(torsoX+1.7,49.3,0,11.4,hair,4,12);
-    full.box(torsoX+12.5,40.3,0,3.7,3.5,5.2,skin);
-    for(const side of [-1,1]){
-      full.sphere(torsoX+12.8,45,side*4.6,1.2,[.98,.94,.85],3,6);
-      full.sphere(torsoX+13.4,45,side*4.6,.7,[.10,.10,.12],3,6);
-      full.sphere(torsoX+1.9,43,side*11.2,2.5,skin,3,6);
-    }
-    // Hands follow handles; each elbow is solved from fixed arm lengths.
+    // Separate neck means the head is actually attached to the shoulders.
+    full.cylinder(torsoX+2.0,39.0,0,4.6,6.8,skin,8);
+    characterHead(full,torsoX+3.0,46.4,0,1.16,shirtId,'calm');
     for(const side of [-1,1]){
       const o=majhiStrokePose(phase,side);
+      // The original single-pass oars and their water-contact locations remain.
       majhiShaft(full,o.hand,o.pivot,2.0,wood);
       majhiShaft(full,o.pivot,o.shaftStart,2.25,wood);
       majhiBlade(full,o.shaftStart,o.bladeEnd,wood);
       const shoulder=[torsoX+2,32.0,side*13.3];
       const delta=o.hand.map((v,i)=>v-shoulder[i]);
-      const len=Math.hypot(...delta)||1;
-      const axis=delta.map(v=>v/len);
+      const len=Math.hypot(...delta)||1,axis=delta.map(v=>v/len);
       const ul=19.2,ll=19.2,d=Math.min(len,ul+ll-.05);
       const along=d*.5,depth=Math.sqrt(Math.max(0,ul*ul-along*along));
       const pole=[-0.7,.2,side*.9];
@@ -1508,23 +1582,21 @@
       let perp=pole.map((v,i)=>v-dp*axis[i]);
       const pl=Math.hypot(...perp)||1;perp=perp.map(v=>v/pl);
       const elbow=shoulder.map((v,i)=>v+axis[i]*along+perp[i]*depth);
-      // Third person: true seated body with shoulder / elbow IK.
-      full.sphere(shoulder[0],shoulder[1],shoulder[2],6.3,shirt,4,8);
-      majhiShaft(full,shoulder,elbow,4.3,shirt);
-      full.sphere(...elbow,4,skin,4,7);
-      majhiShaft(full,elbow,o.hand,3.6,skin);
-      full.sphere(...o.hand,3.8,skin,4,7);
-      // First person: a dedicated view-model. Sleeve roots sit near the
-      // camera and slightly below it; elbows and hands project naturally
-      // from the bottom left/right into the SAME animated handle grips.
-      // This keeps the boat interior visible and hides the headless torso.
-      const povShoulder=[-126,37,side*31];
-      const povElbow=[-90,25,side*26];
-      majhiShaft(first,povShoulder,povElbow,5.25,shirt);
-      first.sphere(...povElbow,4.5,shirt,4,8);
-      majhiShaft(first,povElbow,o.hand,3.25,skin);
-      first.sphere(...o.hand,3.8,skin,4,7);
-      // First-person uses the EXACT same oar pose and grip coordinates.
+      characterEllipsoid(full,...shoulder,5.6,6.0,5.6,shirt,4,7);
+      characterJoint(full,shoulder,elbow,4.8,3.8,shirt);
+      characterEllipsoid(full,...elbow,4.0,4.0,4.0,shirt,3,7);
+      const cuff=elbow.map((v,i)=>v+(o.hand[i]-v)*.16);
+      characterJoint(full,elbow,cuff,3.8,3.5,shade);
+      characterJoint(full,cuff,o.hand,3.3,2.8,skin);
+      characterEllipsoid(full,...o.hand,3.7,3.0,3.7,skin,3,7);
+      // Keep POV arms-only: never add the third-person head or torso here.
+      const povShoulder=[-126,37,side*31],povElbow=[-90,25,side*26];
+      characterJoint(first,povShoulder,povElbow,5.8,4.4,shirt);
+      characterEllipsoid(first,...povElbow,4.6,4.6,4.6,shade,3,7);
+      const povCuff=povElbow.map((v,i)=>v+(o.hand[i]-v)*.14);
+      characterJoint(first,povElbow,povCuff,4.1,3.5,shade);
+      characterJoint(first,povCuff,o.hand,3.5,2.8,skin);
+      characterEllipsoid(first,...o.hand,3.8,3.3,3.8,skin,3,7);
       majhiShaft(first,o.hand,o.pivot,2.0,wood);
       majhiShaft(first,o.pivot,o.shaftStart,2.25,wood);
       majhiBlade(first,o.shaftStart,o.bladeEnd,wood);
@@ -1544,67 +1616,63 @@
   // Dedicated seated passengers, not standing source-model students.
   // Three benches remain usable: two side seats and one front seat.
   function makeSeatedPassenger(color,id){
-    const mesh=new Mesh(),shirt=color,skin=[.76,.53,.38],hair=[.11,.13,.17];
-    mesh.box(0,16.5,0,16.5,18,18,shirt);
-    mesh.box(7.6,17.0,0,1.6,13,11,shirt.map(v=>v*.79));
-    mesh.box(-2.0,7.2,0,17,7.2,21,[.25,.31,.37]);
-    mesh.sphere(2.3,34.1,0,8.6,skin,5,9);
-    mesh.sphere(-.3,38.0,0,8.6,hair,4,9);
+    const mesh=new Mesh(),shirt=color,skin=characterSkinTones[id%characterSkinTones.length];
+    const trouser=id%2?[.22,.28,.36]:[.29,.34,.39];
+    // Natural torso silhouette instead of a square crate with a sphere on top.
+    characterBody(mesh,0,17.5,0,shirt,id,9.3,11.1,10.0);
+    characterEllipsoid(mesh,-1,7.8,0,9.0,5.0,10.9,trouser,4,9);
+    mesh.box(7.1,17.8,0,.7,10,2.1,charShade(shirt,1.12));
+    mesh.cylinder(2.3,28.8,0,3.2,4.6,skin,7);
+    characterHead(mesh,2.0,35.1,0,1.0,id,'calm');
     for(const side of [-1,1]){
-      // Bent thigh + shin read as a person seated on the wooden bench.
-      citizenLimb(mesh,[4,7,side*6],[15,5.9,side*7.2],4.0,[.27,.32,.38]);
-      citizenLimb(mesh,[15,5.9,side*7.2],[16,1.2,side*7.2],3.0,[.28,.32,.38]);
-      mesh.box(19,1.4,side*7.2,9.0,3.0,6.5,[.12,.17,.20]);
-      citizenLimb(mesh,[4,21.2,side*9],[10.1,12.1,side*10],3.3,shirt);
-      citizenLimb(mesh,[10.1,12.1,side*10],[15.0,8.4,side*7],2.65,skin);
-      mesh.sphere(15.0,8.4,side*7,3,skin,3,6);
-      mesh.sphere(9.7,34.8,side*3.25,1.1,[.97,.96,.90],3,6);
-      mesh.sphere(10.6,34.8,side*3.25,.54,[.08,.12,.14],3,6);
+      // Bent thighs and forward shins are kept inside the three wooden seats.
+      characterJoint(mesh,[4,7.2,side*6],[14.5,5.7,side*7.2],4.9,4.0,trouser);
+      characterJoint(mesh,[14.5,5.7,side*7.2],[16,1.5,side*7.2],3.8,3.0,trouser);
+      characterShoe(mesh,19,.7,side*7.2,id);
+      const shoulder=[1.7,23.5,side*9.5],elbow=[9,13.8,side*10.8],hand=[14.8,8.9,side*7.6];
+      characterEllipsoid(mesh,...shoulder,4.1,4.4,4.6,shirt,3,7);
+      characterJoint(mesh,shoulder,elbow,3.7,3.2,shirt);
+      characterJoint(mesh,elbow,hand,2.9,2.4,skin);
+      characterEllipsoid(mesh,...hand,2.9,2.5,2.9,skin,3,7);
     }
-    // Passenger school bag stays behind their back, not floating nearby.
-    mesh.box(-11.1,15.5,0,6.0,15.0,15.0,[.24,.33,.37]);
-    mesh.box(-14.7,18,0,1.1,4.3,8,[.75,.64,.39]);
+    // The backpack is attached to the passenger, with visible straps.
+    const bag=id%2?[.24,.34,.40]:[.36,.28,.34];
+    mesh.box(-11.0,15.5,0,5.5,14.5,14.2,bag);
+    mesh.box(-14.0,18,0,1.1,4.2,6.5,[.79,.65,.42]);
+    mesh.box(5.2,20,-5,.75,13,2.0,bag);
+    mesh.box(5.2,20,5,.75,13,2.0,bag);
     return mesh.upload();
   }
   const seatedPassengerMeshes=studentColors.map(makeSeatedPassenger);
-  function makeCitizenPose(color,kind,index){
+  function makeCitizenPose(color,kind,index,style=0){
     const m=new Mesh(),phase=index*TAU/REACTION_FRAMES;
     const isSOS=kind.startsWith('SOS'),urgent=kind.endsWith('URGENT'),celebrating=kind==='CELEBRATE';
-    const aliveY=isSOS?-9:0; // Keep the SOS student visibly immersed in water.
+    const aliveY=isSOS?-9:0; // Preserve the rescue-water immersion.
     const chestY=aliveY+22,headY=aliveY+37;
-    const skin=citizenSkin,shirt=color;
+    const id=style%characterSkinTones.length,skin=characterSkinTones[id],shirt=color;
+    const trouser=style%2?[.26,.32,.39]:[.19,.27,.34];
     const pace=Math.sin(phase),counter=Math.cos(phase);
-    // Compact character proportions match the size of the existing students.
-    m.box(0,chestY,0,15,23,17,shirt);
-    m.box(0,chestY+10,0,15,3,17,shirt.map(v=>Math.min(1,v*1.15)));
-    m.cylinder(0,aliveY+13,0,4.4,5,skin,8);
+    // Body breathing/sway is modest; the arms retain their expressive poses.
+    const sway=(isSOS?1.0:.55)*Math.sin(phase);
+    characterBody(m,sway,chestY,0,shirt,id,9.0,12.6,9.9);
+    characterEllipsoid(m,0,aliveY+12.0,0,8.4,4.4,8.7,trouser,4,8);
+    m.box(8.6,chestY+2.2,0,.62,8,1.7,charShade(shirt,1.14));
     if(!isSOS){
       for(const side of [-1,1]){
         const stride=celebrating?Math.sin(phase)*3.2:Math.sin(phase+side)*1.2;
-        citizenLimb(m,[-1,aliveY+12,side*5],[-1+stride,aliveY+1,side*5.5],3.1,[.17,.24,.30]);
-        m.box(3+stride,aliveY+2,side*6,9,4,5,[.11,.16,.19]);
+        characterJoint(m,[-1,aliveY+11,side*5],[-1+stride,aliveY+2.2,side*5.7],4.1,3.1,trouser);
+        characterShoe(m,1.5+stride,aliveY+2,side*6,id);
       }
     }
-    // Head, hair, face and eyes point down local +X, toward the player.
-    m.sphere(1,headY,0,9,skin,5,9);
-    m.sphere(-1.5,headY+5,0,8.8,citizenHair,4,9);
-    m.sphere(8.9,headY+1,-3.2,1.25,[.95,.96,.87],3,6);
-    m.sphere(8.9,headY+1,3.2,1.25,[.95,.96,.87],3,6);
-    m.sphere(9.9,headY+1,-3.2,.65,[.10,.14,.17],3,5);
-    m.sphere(9.9,headY+1,3.2,.65,[.10,.14,.17],3,5);
-    if(urgent||isSOS)m.box(10,headY-5,0,1,3.8,3.5,[.25,.18,.17]);
-    else m.box(9.7,headY-5,0,1,1.1,5.5,[.28,.16,.15]);
-    // Arms are actual jointed geometry, not textures or stationary overlays.
-    // Different frame meshes produce overhead waving, water-treading, or cheers.
+    characterHead(m,1+sway*.3,headY,0,1.04,id,urgent||isSOS?'worried':'calm');
     for(const side of [-1,1]){
-      const shoulder=[0,chestY+7,side*10.5];
+      const shoulder=[0,chestY+7,side*10.0];
       let elbow,hand;
       if(celebrating){
         elbow=[4,chestY+17+Math.sin(phase+side)*2,side*13];
-        hand=[5+Math.sin(phase+side)*5,chestY+30+6*Math.sin(phase*1.0+side),side*15];
+        hand=[5+Math.sin(phase+side)*5,chestY+30+6*Math.sin(phase+side),side*15];
       }else if(isSOS){
-        const raised=urgent?12:5;
-        const splashWave= Math.sin(phase+(side===-1?0:Math.PI));
+        const raised=urgent?12:5,splashWave=Math.sin(phase+(side===-1?0:Math.PI));
         elbow=[5,chestY+5+raised*.65+5*splashWave,side*14];
         hand=[7+3*Math.cos(phase),chestY+13+raised+7*splashWave,side*18];
       }else if(urgent){
@@ -1617,21 +1685,27 @@
         elbow=[0,chestY-5+2*pace,side*12];
         hand=[3,chestY-12+2*counter,side*11];
       }
-      citizenLimb(m,shoulder,elbow,3.7,shirt);
-      citizenLimb(m,elbow,hand,2.7,skin);
-      m.sphere(hand[0],hand[1],hand[2],3.1,skin,3,6);
+      characterEllipsoid(m,...shoulder,4.1,4.6,4.1,shirt,3,7);
+      characterJoint(m,shoulder,elbow,4.0,3.3,shirt);
+      characterJoint(m,elbow,hand,3.0,2.35,skin);
+      characterEllipsoid(m,...hand,3.05,2.6,3.05,skin,3,7);
+      if(celebrating){
+        // Small cuffs and upturned open hands communicate joy from a distance.
+        characterEllipsoid(m,...elbow,3.3,3.2,3.3,charShade(shirt,.90),3,6);
+      }
     }
-    // Stranded home students visibly retain a small school bag.
-    if(!isSOS&&!celebrating){
-      m.box(-9,chestY-2,0,5,16,13,[.24,.34,.36]);
-      m.box(-12,chestY+3,0,1.5,4,7,[.85,.67,.36]);
+    // School bags are carried by some passengers, not every shopkeeper.
+    if(!isSOS&&!celebrating&&style%3!==2){
+      const bag=style%2?[.30,.27,.37]:[.21,.35,.37];
+      m.box(-9,chestY-2,0,5.2,15,12.5,bag);
+      m.box(-12,chestY+3,0,1.2,4,6.0,[.82,.67,.39]);
     }
     return m.upload();
   }
   const citizenFrames={};
   for(const kind of reactionAnimations){
-    citizenFrames[kind]=studentColors.map(color=>
-      Array.from({length:REACTION_FRAMES},(_,frame)=>makeCitizenPose(color,kind,frame)));
+    citizenFrames[kind]=studentColors.map((color,style)=>
+      Array.from({length:REACTION_FRAMES},(_,frame)=>makeCitizenPose(color,kind,frame,style)));
   }
   const urgencyMarker=new Mesh();
   urgencyMarker.box(0,6,0,3.4,13,3.4,[1,.31,.22]);
@@ -3794,7 +3868,7 @@
         <label>VOICE <input data-voice-volume type="range" min="0" max="100" value="100"></label>
         <button data-audio-caption type="button">CC ON</button><span data-audio-status>Audio ON · loading…</span>`;
       ui.style.cssText='position:fixed;top:7px;left:50%;transform:translateX(-50%);z-index:12500;display:flex;align-items:center;gap:6px;max-width:96vw;padding:7px 10px;border:1px solid #607e8b;border-radius:12px;background:rgba(7,25,34,.92);color:#d2e8df;font:700 10px system-ui;pointer-events:auto';
-      const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:6px 8px;font:800 10px system-ui;cursor:pointer}#majhi-dhaka-audio label{display:flex;align-items:center;gap:5px}#majhi-dhaka-audio input{width:66px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{max-width:130px;overflow:hidden;white-space:nowrap;color:#b2d9ce}#majhi-dhaka-subtitle{position:fixed;z-index:12495;bottom:8%;left:50%;transform:translateX(-50%);width:min(620px,78vw);pointer-events:none;background:rgba(5,21,29,.89);border:1px solid #e9c476;border-radius:13px;padding:8px 16px;text-align:center;font:700 15px 'Nirmala UI',system-ui,sans-serif;color:#f8f3da;opacity:0;transition:opacity .18s}#majhi-dhaka-subtitle.mj-voice-show{opacity:1}#majhi-dhaka-subtitle [data-voice-who]{font:800 10px system-ui;color:#efce79;letter-spacing:.09em;margin-bottom:4px}@media(max-width:950px){#majhi-dhaka-audio{top:auto!important;bottom:8px;padding:5px 6px;font-size:8px}#majhi-dhaka-audio button{font-size:9px;padding:5px}#majhi-dhaka-audio input{width:43px}#majhi-dhaka-audio [data-audio-status]{display:none}#majhi-dhaka-subtitle{bottom:16%;font-size:12px}}`;
+      const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:6px 8px;font:800 10px system-ui;cursor:pointer}#majhi-dhaka-audio label{display:flex;align-items:center;gap:5px}#majhi-dhaka-audio input{width:66px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{max-width:130px;overflow:hidden;white-space:nowrap;color:#b2d9ce}#majhi-dhaka-subtitle{position:fixed;z-index:12495;bottom:17.5%;left:50%;transform:translateX(-50%);width:min(640px,78vw);pointer-events:none;background:linear-gradient(180deg,rgba(6,24,34,.94),rgba(4,16,25,.92));border:1px solid rgba(245,199,103,.72);border-radius:14px;padding:10px 18px;text-align:center;font:700 15px 'Nirmala UI',system-ui,sans-serif;color:#f8f3da;opacity:0;transition:opacity .18s;box-shadow:0 12px 28px rgba(0,0,0,.34),0 0 0 1px rgba(155,227,233,.1) inset}#majhi-dhaka-subtitle.mj-voice-show{opacity:1}#majhi-dhaka-subtitle [data-voice-who]{font:800 10px system-ui;color:#efce79;letter-spacing:.09em;margin-bottom:4px}@media(max-width:950px){#majhi-dhaka-audio{top:auto!important;bottom:8px;padding:5px 6px;font-size:8px}#majhi-dhaka-audio button{font-size:9px;padding:5px}#majhi-dhaka-audio input{width:43px}#majhi-dhaka-audio [data-audio-status]{display:none}#majhi-dhaka-subtitle{bottom:22%;width:min(84vw,560px);font-size:12px}}`;
       document.head.appendChild(style);document.body.appendChild(ui);
       subtitle=document.createElement('div');subtitle.id='majhi-dhaka-subtitle';subtitle.innerHTML='<div data-voice-who></div><div data-voice-line></div>';document.body.appendChild(subtitle);
       ui.querySelector('[data-audio-toggle]').onclick=()=>{on=!on;ui.querySelector('[data-audio-toggle]').textContent=on?'🔊 DHAKA AUDIO':'🔇 MUTED';if(on)ctx?.resume();else{cancelSequence();if(S.campusGateScene){S.campusGateScene.audioComplete=true;S.campusGateScene.finishedAt=S.time;}}updateMix();};
@@ -4492,6 +4566,129 @@
     guide.querySelector('button').addEventListener('click',()=>{S.guideDismissed=true;guide.classList.add('hidden');});
   }
   installPickupGuide();
+  function installPhase25HUDPolish(){
+    if(document.getElementById('majhi-phase25-hud-css'))return;
+    const css=document.createElement('style');
+    css.id='majhi-phase25-hud-css';
+    css.textContent=`
+      body.mj-phase25-theme #hud{isolation:isolate}
+      body.mj-phase25-theme #request-panel,
+      body.mj-phase25-theme #delivery-deadlines,
+      body.mj-phase25-theme #active-rides,
+      body.mj-phase25-theme #delivery-celebration,
+      body.mj-phase25-theme #photo-info,
+      body.mj-phase25-theme #toast,
+      body.mj-phase25-theme #majhi-pickup-guide,
+      body.mj-phase25-theme #majhi-map-target,
+      body.mj-phase25-theme #majhi-map-controls,
+      body.mj-phase25-theme #performance-status{
+        background:linear-gradient(180deg,rgba(8,28,40,.94),rgba(5,17,27,.90));
+        border:1px solid rgba(246,198,89,.64);
+        box-shadow:0 12px 28px rgba(0,0,0,.32),0 0 0 1px rgba(144,222,228,.11) inset;
+      }
+      body.mj-phase25-theme #request-panel,
+      body.mj-phase25-theme #delivery-deadlines,
+      body.mj-phase25-theme #active-rides,
+      body.mj-phase25-theme #delivery-celebration,
+      body.mj-phase25-theme #photo-info,
+      body.mj-phase25-theme #toast,
+      body.mj-phase25-theme #majhi-pickup-guide,
+      body.mj-phase25-theme #performance-status{
+        clip-path:polygon(0 0,calc(100% - 20px) 0,100% 20px,100% 100%,20px 100%,0 calc(100% - 20px));
+      }
+      body.mj-phase25-theme #request-panel{border-color:rgba(245,199,103,.78)}
+      body.mj-phase25-theme #request-panel.urgent{border-color:rgba(255,115,115,.85);box-shadow:0 0 0 1px rgba(255,115,115,.15) inset,0 12px 32px rgba(124,0,0,.22)}
+      body.mj-phase25-theme #majhi-map-target,
+      body.mj-phase25-theme #majhi-map-controls{
+        clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
+        border-radius:0;
+      }
+      body.mj-phase25-theme #minimap{
+        border:1px solid rgba(125,212,225,.62)!important;
+        border-radius:12px;
+        box-shadow:0 14px 32px rgba(0,0,0,.25),0 0 0 1px rgba(245,199,103,.08) inset;
+        background:rgba(4,18,27,.22);
+      }
+      body.mj-phase25-theme #score,
+      body.mj-phase25-theme #timer,
+      body.mj-phase25-theme #delivered,
+      body.mj-phase25-theme #failed,
+      body.mj-phase25-theme #request-name,
+      body.mj-phase25-theme #shortest-deadline,
+      body.mj-phase25-theme #objective-title{
+        color:#f8fbff;
+        text-shadow:0 2px 10px rgba(0,0,0,.34);
+        letter-spacing:.03em;
+      }
+      body.mj-phase25-theme #timer.hud-critical,
+      body.mj-phase25-theme #shortest-deadline.hud-critical,
+      body.mj-phase25-theme #objective-title.hud-critical{color:#ffd2c2}
+      body.mj-phase25-theme #objective-title{
+        font-weight:900;
+        letter-spacing:.08em;
+      }
+      body.mj-phase25-theme #objective-detail,
+      body.mj-phase25-theme #request-location,
+      body.mj-phase25-theme #queue-count,
+      body.mj-phase25-theme #majhi-map-count,
+      body.mj-phase25-theme #passengers,
+      body.mj-phase25-theme #request-remaining{
+        color:#c7dde4;
+      }
+      body.mj-phase25-theme #accept-button,
+      body.mj-phase25-theme #reject-button,
+      body.mj-phase25-theme #camera-button,
+      body.mj-phase25-theme #pause-button,
+      body.mj-phase25-theme #majhi-map-toggle{
+        border:1px solid rgba(125,212,225,.52);
+        background:linear-gradient(180deg,rgba(15,53,68,.96),rgba(7,28,41,.96));
+        color:#eff7fb;
+        box-shadow:0 5px 12px rgba(0,0,0,.22),0 0 0 1px rgba(245,199,103,.07) inset;
+      }
+      body.mj-phase25-theme #accept-button:hover,
+      body.mj-phase25-theme #camera-button:hover,
+      body.mj-phase25-theme #pause-button:hover,
+      body.mj-phase25-theme #majhi-map-toggle:hover{border-color:rgba(245,199,103,.82)}
+      body.mj-phase25-theme #reject-button:hover{border-color:rgba(255,141,141,.82)}
+      body.mj-phase25-theme #accept-button{background:linear-gradient(180deg,rgba(161,239,207,.98),rgba(121,211,181,.94));color:#062227;border-color:rgba(215,255,236,.58)}
+      body.mj-phase25-theme #reject-button{background:linear-gradient(180deg,rgba(14,44,58,.97),rgba(8,27,37,.97));color:#e7eef4}
+      body.mj-phase25-theme #boost-fill,
+      body.mj-phase25-theme #dock-fill{background:linear-gradient(90deg,#edd27c 0%,#f5a356 46%,#f06a5e 100%)}
+      body.mj-phase25-theme #boost-number{color:#fff5cf;text-shadow:0 2px 10px rgba(0,0,0,.28)}
+      body.mj-phase25-theme #traffic-status.status-green,
+      body.mj-phase25-theme #power-status.status-green{box-shadow:0 0 0 1px rgba(119,238,174,.12) inset,0 0 16px rgba(59,179,107,.10)}
+      body.mj-phase25-theme #traffic-status.status-red,
+      body.mj-phase25-theme #power-status.status-red{box-shadow:0 0 0 1px rgba(255,121,121,.12) inset,0 0 16px rgba(187,68,68,.12)}
+      body.mj-phase25-theme #toast{backdrop-filter:blur(3px)}
+      body.mj-phase25-theme #delivery-celebration{color:#ffe6b5}
+      body.mj-phase25-theme #photo-info{color:#fff1cf}
+      body.mj-phase25-theme #ride-queue .urgent,
+      body.mj-phase25-theme #passenger-deadlines .urgent{color:#ffd9cf}
+      body.mj-phase25-theme.mj-firstperson #hud{filter:drop-shadow(0 0 6px rgba(80,211,230,.10))}
+      body.mj-phase25-theme.mj-critical #request-panel,
+      body.mj-phase25-theme.mj-critical #delivery-deadlines,
+      body.mj-phase25-theme.mj-critical #objective-title{animation:majhiHudAlert 1.1s ease-in-out infinite alternate}
+      @keyframes majhiHudAlert{from{filter:brightness(1)}to{filter:brightness(1.08)}}
+      @media(max-width:900px){
+        body.mj-phase25-theme #majhi-dhaka-subtitle{bottom:24%!important}
+        body.mj-phase25-theme #request-panel{max-width:min(90vw,340px)}
+      }
+    `;
+    document.head.appendChild(css);
+    document.body?.classList?.add('mj-phase25-theme');
+  }
+  function syncPhase25HUDState(urgentSeconds=999){
+    document.body?.classList?.toggle('mj-firstperson',!S.camera3&&S.mode==='PLAYING');
+    document.body?.classList?.toggle('mj-critical',urgentSeconds<=25||S.requestLeft>0&&S.requestLeft<8);
+    const panel=$('request-panel');
+    if(panel)panel.classList.toggle('urgent',!!S.request&&S.requestLeft<8);
+    const timer=$('timer'),deadline=$('shortest-deadline'),title=$('objective-title');
+    const timeLeft=900-(S.time-S.gatePausedTime);
+    timer?.classList?.toggle('hud-critical',timeLeft<=60);
+    deadline?.classList?.toggle('hud-critical',urgentSeconds<=25);
+    title?.classList?.toggle('hud-critical',urgentSeconds<=25);
+  }
+  installPhase25HUDPolish();
   function refreshPickupGuide(){
     const guide=$('majhi-pickup-guide');if(!guide)return;
     if(S.guideDismissed||S.delivered>0||S.mode!=='PLAYING'){
@@ -4522,12 +4719,16 @@
     $('majhi-guide-detail').textContent=detail;
   }
   function refreshHUD(){if(S.mode==='MENU')return;
-    $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(900-(S.time-S.gatePausedTime));$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
+    const roundTime=Math.max(0,900-(S.time-S.gatePausedTime));
+    $('score').textContent=String(S.score).padStart(4,'0');$('timer').textContent=formatTime(roundTime);$('delivered').textContent=`${S.delivered} / 6`;$('failed').textContent=`${S.failed} / 6`;
+    const camBtn=$('camera-button');if(camBtn)camBtn.textContent=S.camera3?'📷 CAM':'👁 POV';
+    const pauseBtn=$('pause-button');if(pauseBtn&&pauseBtn.textContent.trim()==='')pauseBtn.textContent='⏸ PAUSE';
     const trafficLabel=$('traffic-status'),powerLabel=$('power-status');
     const perf=$('performance-status');if(perf){perf.classList.toggle('hidden',!S.frameProfile);if(S.frameProfile)perf.textContent=`${S.frameMS.toFixed(1)}ms frame · worst ${S.frameWorst.toFixed(1)}ms · ${S.quality}`;}
     if(trafficLabel){trafficLabel.textContent=`${S.traffic==='GREEN'?'🟢 GREEN':'🔴 RED'} LIGHT`;trafficLabel.className='status-pill '+(S.traffic==='GREEN'?'status-green':'status-red');}
     if(powerLabel){powerLabel.textContent=S.powerOff?`🔴 BLACKOUT: ${power[S.powerIndex].name} · Find repair box (F)`:'🟢 POWER RESTORED · Streetlights and windows are on';powerLabel.className='status-pill '+(S.powerOff?'status-red':'status-green');}
     const onboardForTimer=seated().slice().sort((a,b)=>a.timeLeft-b.timeLeft);
+    syncPhase25HUDState(onboardForTimer.length?onboardForTimer[0].timeLeft:999);
     const deadlineBox=$('delivery-deadlines');deadlineBox.classList.toggle('hidden',!onboardForTimer.length);
     if(onboardForTimer.length){
       const short=onboardForTimer[0].timeLeft;
@@ -5131,7 +5332,9 @@
     let eye,target,fov;
     if(S.mode==='MENU'){
       const t=performance.now()*.00012;eye=[720*Math.cos(t),520,-1100+570*Math.sin(t)];target=[0,60,600];fov=70;
-    }else if(S.camera3){const x=S.x-Math.cos(ca)*228,z=S.z-Math.sin(ca)*228;
+    }else if(S.camera3){
+      const chaseDistance=228+(S.boostOn?12:(S.rowing?6:0));
+      const x=S.x-Math.cos(ca)*chaseDistance,z=S.z-Math.sin(ca)*chaseDistance;
       // Colliding the chase-camera arm against building silhouettes prevents
       // the camera from passing inside a facade (present in the original Python).
       let minFraction=1;
@@ -5146,23 +5349,29 @@
         if(tMin<=tMax&&tMin<=1&&tMax>=0&&tMin<minFraction)minFraction=Math.max(.06,tMin-.04);
       }
       const nearWall=clamp((.55-minFraction)/.55,0,1);
-      eye=[S.x+(x-S.x)*minFraction,boatY+26+90*minFraction+45*nearWall,S.z+(z-S.z)*minFraction];
-      target=[S.x+c*80,boatY+22+10*nearWall,S.z+s*80];
-      fov=73+12*nearWall;
+      const forwardLead=92+(S.boostOn?18:(S.rowing?10:0));
+      eye=[S.x+(x-S.x)*minFraction,boatY+30+84*minFraction+40*nearWall,S.z+(z-S.z)*minFraction];
+      target=[S.x+c*forwardLead,boatY+24+9*nearWall,S.z+s*forwardLead];
+      fov=72+(S.boostOn?3:0)+10*nearWall;
     }else{
-      // Eye-level forward view: the head is the camera, so do not display a
-      // separate headless torso. Dedicated POV sleeves enter from below.
-      eye=[S.x-c*80,boatY+42,S.z-s*80];
-      target=[S.x+c*210,boatY+13,S.z+s*210];fov=82;
+      // Phase 22: true eye-level POV behind the actual rowing grips. The
+      // Phase 21 +16 eye offset accidentally placed the hands and both oars
+      // *behind* the camera (their local X is about -48). Keep the invisible
+      // head at the majhi's seat and let the arms enter from below/side.
+      const lookBoost=S.boostOn?34:(S.rowing?15:0);
+      eye=[S.x-c*79,boatY+50.2,S.z-s*79];
+      target=[S.x+c*(225+lookBoost),boatY+31,S.z+s*(225+lookBoost)];
+      fov=79+(S.boostOn?3:0);
     }
     let cameraUp=[0,1,0];
     if(S.mode==='PLAYING'){
       if(!reducedMotion()){
-        // Small chase-camera sway, stronger viewpoint tilt from inside hull.
-        const pitchFactor=S.camera3?.55:2.2;
+        // Small chase-camera sway, with a calmer POV roll so first-person play
+        // feels more readable while still preserving the storm-tossed boat.
+        const pitchFactor=S.camera3?.55:1.45;
         target[1]-=boatPitch*pitchFactor;
-        eye[1]+=boatImpact.heave*(S.camera3?.3:.7);
-        const cameraRoll=boatRoll*(S.camera3?.12:.55)*RAD;
+        eye[1]+=boatImpact.heave*(S.camera3?.3:.62);
+        const cameraRoll=boatRoll*(S.camera3?.11:.32)*RAD;
         cameraUp=[Math.sin(a)*Math.sin(cameraRoll),Math.cos(cameraRoll),-Math.cos(a)*Math.sin(cameraRoll)];
       }
       applyImpactShake(eye,target);
@@ -5450,7 +5659,7 @@
             const angle=S.time*2.1+k*TAU/3+e.colorId;
             render(happySparkle,model(x+22*Math.cos(angle),y+26+5*Math.sin(S.time*4+k),z+22*Math.sin(angle),angle/RAD,.45));
           }
-        }else render(sourceMeshes?.['student-'+e.colorId]||npcMeshes[e.colorId],model(x,y,z,-12*(1-walk),.50));
+        }else render(citizenFrame('HOME',e.colorId,age*4+e.colorId),model(x,y,z,-12*(1-walk),.56));
       }
       for(const effect of S.missedEffects){
         const age=S.time-effect.at;
@@ -5458,12 +5667,12 @@
           const f=Math.min(1,age/.80),p=f*f*(3-2*f),elevation=effect.y*(1-p)+7*p+5*Math.sin(Math.PI*p);
           const x=effect.fromX+(effect.x-effect.fromX)*p,z=effect.fromZ+(effect.z-effect.fromZ)*p;
           if(S.camera3||distance(eye[0],eye[2],x,z)>52)
-            render(sourceMeshes?.['student-'+effect.colorId]||npcMeshes[effect.colorId],model(x,elevation,z,S.angle+35*p,.55));
+            render(citizenFrame('HOME_URGENT',effect.colorId,age*5+effect.colorId),model(x,elevation,z,S.angle+35*p,.60));
         }else if(age<3.85){
           const sink=age>2.85?36*clamp((age-2.85)/1,0,1):0;
           const frame=Math.floor(((age*7.2)%TAU)/TAU*24)%24;
           if(S.camera3||distance(eye[0],eye[2],effect.x,effect.z)>52)
-            render(sourceMeshes?.['struggling-'+frame]||npcMeshes[effect.colorId],model(effect.x,FLOOD_WATERLINE-18-sink,effect.z,0,.85));
+            render(citizenFrame('SOS_URGENT',effect.colorId,age*7.2),model(effect.x,FLOOD_WATERLINE-18-sink,effect.z,0,.85));
           render(waterRipple,model(effect.x,FLOOD_WATERLINE+.35,effect.z,0,.9+age*.12));
         }else if(age<4.35){
           render(waterRipple,model(effect.x,FLOOD_WATERLINE+.35,effect.z,0,1+age*.22));
@@ -5473,7 +5682,8 @@
     }
   }
   if(location.hostname==='localhost'||location.hostname===''){window.majhiTesting={S,step,repair,photo,processBonusRewards,moveAllowed,carOverlap,recordMissedPassenger,stormDrops,nearDrops,campusRainWeight,driverFrames,streetlights,updateRescueFleet,updateRickshawFleet,respawnFleetCitizen,comicProject,renderComicBubbles,dhakaVehicleType,lightOffAt,districtForX,drawDhakaPowerNeighborhood};}
-  window.majhiVersion='phase20-storm-outskirts-lightning';
+  window.majhiVersion='phase22-stylized-character-polish';
+  window.majhiCharacterDiagnostics=()=>({version:'phase22-stylized-character-polish',playerFrameVertices:majhiRigs[0][0].full.length,povFrameVertices:majhiRigs[0][0].first.length,seatedPassengerVertices:seatedPassengerMeshes[0].length,citizenFrameVertices:citizenFrames.HOME[0][0].length,animationFrames:REACTION_FRAMES,rowingFrames:MAJHI_STROKE_FRAMES,characterVariants:studentColors.length,menuAndIdCardUnchanged:true});
   window.majhiHorizonDiagnostics=()=>({phase:'20-storm-outskirts-lightning',visualOnly:true,playableBoundary:1615,outerWaterEdge:3300,skylineBuildings,nearSkylineBuildings,nearEdgeDistance:+nearEdgeDistance.toFixed(1),skylineWindowClusters,outerTreeCount,outerHazardCount,distantRainCurtains:8,hazeBanks:4,horizonRenderedFrames,nearVertices:horizonNear.length,farVertices:horizonFar.length,treeVertices:horizonTrees.length,hazardVertices:horizonLandmarks.length,quality:S.quality});
   window.majhiWaterDiagnostics=()=>({phase:'20-storm-outskirts-lightning',waterDepthMeters:FLOOD_DEPTH_METERS,waterSurfaceY:FLOOD_WATERLINE,worldUnitsPerMeter:WORLD_UNITS_PER_METER,campusDry:true,hullWater:{samples:hullWater.samples,active:hullWater.available,disabled:hullWater.disabled,heave:+hullWater.heave.toFixed(3),pitch:+hullWater.pitch.toFixed(3),roll:+hullWater.roll.toFixed(3)},webgl2:webgl2Context,enabled:!!dhakaWater,opticalRenderer:!!opticalWater,opticalError:opticalWaterError,opticalFrames:opticalWater?.frames||0,captureSize:opticalWater?.captureSize||null,look:opticalWater?.look||null,error:waterIntegrationError,mainShaderFallback,...(dhakaWater?.diagnostics||{})});
   window.majhiAudioDiagnostics=()=>gameAudio.getState();
