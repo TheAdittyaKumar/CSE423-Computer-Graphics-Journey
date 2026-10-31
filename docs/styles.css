@@ -208,3 +208,149 @@
   #menu .menu-footer {position:relative;left:auto;right:auto;bottom:auto;font-size:9px;max-width:540px;padding:0 0 4px;}
   #menu-close {right:10px;top:10px;width:35px;height:35px;}
 }
+
+
+/* === Mobile gameplay cockpit (Phase 24): portrait only. ===
+   Intentionally excludes #menu, .mj-gate* and desktop UI. */
+@media (max-width: 720px) and (orientation: portrait) {
+  #game-shell { min-height: 0; height: 100dvh; }
+  #hud { display:block; padding:0; inset:0; overflow:visible; }
+  #hud .hud-top { display:flex; flex-direction:column; gap:6px; padding:calc(env(safe-area-inset-top) + 6px) 8px 0; align-items:stretch; }
+  #hud .status-panel { width:100%; min-width:0; max-height:170px; overflow-y:auto; overscroll-behavior:contain;
+    padding:9px 11px 8px; border-radius:13px; background:rgba(5,23,34,.90); }
+  #hud .brand-tag { font-size:11px; letter-spacing:.075em; white-space:nowrap; }
+  #hud .brand-tag span { font-size:7px; letter-spacing:.06em; margin-left:5px; }
+  #hud .metric-row { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; margin-top:7px; }
+  #hud .metric-row div { min-width:0; }
+  #hud .metric-row small { font-size:8px; letter-spacing:.03em; white-space:nowrap; }
+  #hud .metric-row strong { font-size:clamp(14px,4.2vw,18px); }
+  #hud .world-statuses { display:flex; gap:5px; flex-wrap:wrap; margin-top:6px; }
+  #hud .status-pill { padding:3px 5px; font-size:8px; max-width:100%; letter-spacing:0; }
+  #hud .delivery-deadlines { margin:6px 0 0; padding:5px 7px; }
+  #hud .deadline-summary { font-size:9px; }
+  #hud .deadline-summary strong { font-size:15px; }
+  #hud .deadline-person { font-size:10px; padding:3px; }
+  #hud .status-panel .active-rides { margin-top:5px; max-height:66px; padding:5px; }
+  #hud .right-top { display:flex; flex-direction:row; align-items:flex-start; justify-content:flex-end; width:100%; gap:6px; position:relative; pointer-events:none; }
+  #hud .right-top .request-panel { pointer-events:auto; flex:1; width:auto; max-width:none!important; min-width:0; padding:9px 10px; border-radius:11px; }
+  #hud .request-head { font-size:8px; letter-spacing:0; gap:4px; line-height:1.25; }
+  #hud #request-name { font-size:16px; margin-top:3px; line-height:1.15; }
+  #hud #request-location { font-size:10px; margin-top:2px; }
+  #hud .request-actions { margin-top:6px; gap:5px; }
+  #hud .request-actions .btn { padding:7px 5px; font-size:11px; min-height:34px; }
+  #hud .request-actions kbd { font-size:10px; padding:2px 3px; }
+  #hud .top-actions { pointer-events:auto; display:flex; flex-direction:column; gap:6px; flex:0 0 46px; }
+  #hud .top-actions .icon-button { min-width:46px; width:46px; height:43px; padding:7px 3px; font-size:18px; border-radius:9px; }
+  #hud .top-actions .icon-button span { display:none; }
+  #hud .hud-bottom { display:block; }
+  #hud .map-panel { pointer-events:auto; position:absolute; z-index:4; left:8px; top:var(--mj-mobile-map-top, 282px); bottom:auto;
+    width:126px; max-width:45vw; padding:7px; border-radius:11px; overflow:hidden;
+    background:rgba(4,20,31,.86); transition:width .18s ease,top .18s ease; }
+  #hud .map-panel .section-heading { font-size:7px; letter-spacing:.035em; gap:3px; }
+  #hud #minimap { width:100%; height:auto; margin:4px auto 0; }
+  #hud .map-panel .map-legend { display:none; }
+  #hud #majhi-map-target { display:none; }
+  #hud #majhi-map-controls { display:none; }
+  #hud .map-panel.mj-map-expanded { width:min(215px,60vw); max-width:none; }
+  #hud .map-panel.mj-map-expanded .map-legend { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px; font-size:8px; margin-top:4px; }
+  #hud .map-panel.mj-map-expanded #majhi-map-target { display:block; font-size:9px; }
+  #hud .map-panel.mj-map-expanded #majhi-map-controls { display:flex; }
+  #hud .map-panel.mj-map-expanded #majhi-map-count { font-size:8px; }
+  #hud .map-panel.mj-map-expanded #majhi-map-toggle { font-size:9px; }
+  #hud #majhi-mobile-map-toggle { appearance:none; pointer-events:auto; border:1px solid rgba(229,197,119,.7); border-radius:5px;
+    padding:3px 5px; font:800 9px system-ui; background:rgba(22,58,71,.94); color:#f5d795; }
+  #hud .middle-panel { position:absolute; left:8px; right:8px; bottom:calc(env(safe-area-inset-bottom) + 196px);
+    margin:0 auto; max-width:100%; width:calc(100% - 16px); gap:5px; display:flex; pointer-events:none; z-index:3; }
+  #hud .objective { max-width:min(350px, 95%); padding:7px 10px; border-radius:9px; }
+  #hud .objective>span { font-size:9px; letter-spacing:.055em; margin-bottom:1px; }
+  #hud .objective>strong { display:block; font-size:10px; line-height:1.3; }
+  #hud .meter { margin-top:5px; }
+  #hud .boost-row { max-width:350px; width:90%; margin:0 auto; font-size:9px; gap:5px; }
+  #hud .boost-track { height:6px; }
+  #hud .toast { padding:5px 8px; font-size:10px; }
+  #hud .delivery-celebration { padding:7px 10px; font-size:10px; }
+  #hud #touch-controls { display:flex; position:absolute; z-index:5; left:9px; right:9px;
+    bottom:calc(env(safe-area-inset-bottom) + 46px); justify-content:space-between; align-items:flex-end; pointer-events:none; }
+  #hud #touch-controls button { min-width:46px; min-height:43px; border-radius:11px; font-size:12px; line-height:1.1;
+    backdrop-filter:blur(7px); background:rgba(6,35,48,.74); border-color:rgba(148,216,219,.60); }
+  #hud #touch-controls .touch-dpad { display:flex; flex-direction:column; gap:5px; align-items:center; }
+  #hud #touch-controls .touch-dpad>div { display:flex; gap:5px; }
+  #hud #touch-controls .touch-actions { display:flex; flex-direction:column; gap:5px; }
+  #hud #touch-controls .touch-actions button { min-width:70px; min-height:42px; font-size:10px; }
+  #hud .center-crosshair { display:none; }
+  #hud #majhi-pickup-guide { position:absolute!important; top:var(--mj-mobile-guide-top, 211px)!important;
+    left:8px!important; right:8px!important; transform:none!important; width:auto!important;
+    z-index:5; padding:7px 29px 7px 10px!important; border-radius:9px; }
+  #hud #majhi-pickup-guide strong { font-size:10px!important; line-height:1.2; }
+  #hud #majhi-pickup-guide .guide-detail { font-size:9px!important; line-height:1.35; margin-top:2px; }
+  #hud #majhi-pickup-guide button { top:3px; right:5px; min-height:28px; min-width:26px; }
+  #majhi-dhaka-subtitle { bottom:calc(env(safe-area-inset-bottom) + 253px)!important; left:50%!important; width:min(345px,88vw)!important;
+    padding:7px 10px!important; font-size:11px!important; line-height:1.38!important; max-height:82px; overflow:hidden; }
+  #majhi-dhaka-subtitle [data-voice-who]{font-size:9px!important;margin-bottom:2px!important;}
+  #majhi-dhaka-audio { position:fixed!important; top:auto!important; bottom:calc(env(safe-area-inset-bottom) + 4px)!important;
+    left:auto!important; right:9px!important; transform:none!important; display:flex!important; flex-wrap:wrap;
+    justify-content:flex-end!important; align-items:center; max-width:calc(100vw - 18px)!important; width:auto!important;
+    padding:3px 5px!important; gap:4px!important; border-radius:10px!important; font-size:9px!important;
+    max-height:min(44dvh,245px); overflow-y:auto; }
+  #majhi-dhaka-audio [data-mobile-audio-menu]{display:block!important; border-radius:8px!important; padding:6px 10px!important;
+    min-height:34px; background:#164351!important; color:#ffdf96!important; font-size:11px!important; }
+  #majhi-dhaka-audio:not(.mj-mobile-audio-expanded)>:not([data-mobile-audio-menu]) { display:none!important; }
+  #majhi-dhaka-audio.mj-mobile-audio-expanded { width:min(340px,calc(100vw - 18px))!important; padding:8px!important; }
+  #majhi-dhaka-audio.mj-mobile-audio-expanded [data-mobile-audio-menu] { width:100%; text-align:center; }
+  #majhi-dhaka-audio.mj-mobile-audio-expanded label { display:flex!important; flex:1 1 46%; justify-content:space-between; }
+  #majhi-dhaka-audio.mj-mobile-audio-expanded label input { width:65px!important; }
+  #majhi-dhaka-audio.mj-mobile-audio-expanded [data-audio-status] { display:none!important; }
+  #photo-info { top:23%!important; bottom:auto!important; max-width:88vw!important; padding:12px!important; }
+}
+/* Short portrait phones: prioritize steering, requests, and real estate for the world. */
+@media (max-width:720px) and (orientation:portrait) and (max-height:690px) {
+  #hud .status-panel {max-height:125px;}
+  #hud .status-panel .active-rides {max-height:45px;}
+  #hud .map-panel {width:105px;}
+  #hud .middle-panel {bottom:calc(env(safe-area-inset-bottom) + 165px);}
+  #hud #touch-controls {bottom:calc(env(safe-area-inset-bottom) + 43px);}
+  #hud #touch-controls button {min-width:42px;min-height:38px;}
+  #hud #touch-controls .touch-actions button {min-height:38px;}
+  #majhi-dhaka-subtitle {bottom:calc(env(safe-area-inset-bottom) + 207px)!important;}
+}
+/* Landscape touch devices: leave desktop layout and game logic alone. */
+@media (pointer:coarse) and (orientation:landscape) and (max-height:540px) {
+  #hud .status-panel {padding:6px 9px;min-width:0;max-width:min(310px,35vw);}
+  #hud .metric-row {margin-top:5px;gap:8px;}
+  #hud .metric-row strong {font-size:15px;}
+  #hud .metric-row small {font-size:8px;}
+  #hud .status-pill {font-size:8px;padding:3px;}
+  #hud .request-panel {width:min(260px,33vw);padding:8px;}
+  #hud .request-panel strong {font-size:15px;}
+  #hud .right-top {max-width:37vw;}
+  #hud .map-panel {position:absolute;left:7px;bottom:5px;width:125px;max-width:22vw;padding:6px;}
+  #hud .map-panel .map-legend {display:none;}
+  #hud #majhi-map-target,#hud #majhi-map-controls {display:none;}
+  #hud .middle-panel {max-width:min(310px,36vw);margin:0 0 4px;}
+  #hud .objective {padding:5px;}
+  #hud .objective>strong {font-size:10px;}
+  #hud #touch-controls {bottom:8px;left:140px;right:7px;}
+  #hud #touch-controls button {min-width:39px;min-height:34px;}
+  #hud #touch-controls .touch-actions button {min-width:60px;min-height:33px;}
+  #hud #majhi-pickup-guide {top:55px!important;width:min(270px,35vw)!important;left:50%!important;right:auto!important;transform:translateX(-50%)!important;padding:5px 24px 5px 7px!important;}
+  #majhi-dhaka-subtitle {bottom:66px!important;width:min(330px,42vw)!important;font-size:11px!important;padding:5px 9px!important;}
+  #majhi-dhaka-audio {top:auto!important;bottom:4px!important;left:50%!important;transform:translateX(-50%)!important;max-width:46vw!important;}
+  #majhi-dhaka-audio:not(.mj-mobile-audio-expanded)>:not([data-mobile-audio-menu]) {display:none!important;}
+  #majhi-dhaka-audio [data-mobile-audio-menu]{display:block!important;}
+}
+/* Keep dialogue in the quiet strip to the right of the collapsed minimap,
+   above the driving objective instead of covering the boost bar. */
+@media (max-width:720px) and (orientation:portrait) {
+  html body.mj-phase25-theme #majhi-dhaka-subtitle {left:auto!important;right:8px!important;transform:none!important;
+    width:min(245px,calc(100vw - 150px))!important; bottom:calc(env(safe-area-inset-bottom) + 274px)!important;
+    font-size:11px!important;}
+}
+@media (max-width:720px) and (orientation:portrait) and (max-height:690px) {
+  html body.mj-phase25-theme #majhi-dhaka-subtitle {bottom:calc(env(safe-area-inset-bottom) + 237px)!important;}
+}
+/* Only mobile layouts show the optional sound-panel expander. Desktop stays original. */
+#majhi-dhaka-audio [data-mobile-audio-menu] {display:none!important;}
+@media (max-width:720px) and (orientation:portrait),
+       (pointer:coarse) and (orientation:landscape) and (max-height:540px) {
+  #majhi-dhaka-audio [data-mobile-audio-menu] {display:block!important;}
+}

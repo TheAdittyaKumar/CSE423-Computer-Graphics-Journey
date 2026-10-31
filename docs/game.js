@@ -3870,6 +3870,21 @@
       ui.style.cssText='position:fixed;top:7px;left:50%;transform:translateX(-50%);z-index:12500;display:flex;align-items:center;gap:6px;max-width:96vw;padding:7px 10px;border:1px solid #607e8b;border-radius:12px;background:rgba(7,25,34,.92);color:#d2e8df;font:700 10px system-ui;pointer-events:auto';
       const style=document.createElement('style');style.textContent=`#majhi-dhaka-audio button{border:1px solid #567680;border-radius:8px;background:#143443;color:#f5e7b6;padding:6px 8px;font:800 10px system-ui;cursor:pointer}#majhi-dhaka-audio label{display:flex;align-items:center;gap:5px}#majhi-dhaka-audio input{width:66px;accent-color:#e9c476}#majhi-dhaka-audio [data-audio-status]{max-width:130px;overflow:hidden;white-space:nowrap;color:#b2d9ce}#majhi-dhaka-subtitle{position:fixed;z-index:12495;bottom:17.5%;left:50%;transform:translateX(-50%);width:min(640px,78vw);pointer-events:none;background:linear-gradient(180deg,rgba(6,24,34,.94),rgba(4,16,25,.92));border:1px solid rgba(245,199,103,.72);border-radius:14px;padding:10px 18px;text-align:center;font:700 15px 'Nirmala UI',system-ui,sans-serif;color:#f8f3da;opacity:0;transition:opacity .18s;box-shadow:0 12px 28px rgba(0,0,0,.34),0 0 0 1px rgba(155,227,233,.1) inset}#majhi-dhaka-subtitle.mj-voice-show{opacity:1}#majhi-dhaka-subtitle [data-voice-who]{font:800 10px system-ui;color:#efce79;letter-spacing:.09em;margin-bottom:4px}@media(max-width:950px){#majhi-dhaka-audio{top:auto!important;bottom:8px;padding:5px 6px;font-size:8px}#majhi-dhaka-audio button{font-size:9px;padding:5px}#majhi-dhaka-audio input{width:43px}#majhi-dhaka-audio [data-audio-status]{display:none}#majhi-dhaka-subtitle{bottom:22%;width:min(84vw,560px);font-size:12px}}`;
       document.head.appendChild(style);document.body.appendChild(ui);
+      // On a phone, keep every original audio control available without
+      // permanently occupying the same region as the driving HUD.
+      const mobileAudioButton=document.createElement('button');
+      mobileAudioButton.type='button';
+      mobileAudioButton.setAttribute('data-mobile-audio-menu','');
+      mobileAudioButton.setAttribute('aria-label','Show sound and voice controls');
+      mobileAudioButton.setAttribute('aria-expanded','false');
+      mobileAudioButton.textContent='🔊 SOUND';
+      ui.insertAdjacentElement('afterbegin',mobileAudioButton);
+      mobileAudioButton.addEventListener('click',()=>{
+        const open=ui.classList.toggle('mj-mobile-audio-expanded');
+        mobileAudioButton.setAttribute('aria-expanded',String(open));
+        mobileAudioButton.setAttribute('aria-label',open?'Hide sound and voice controls':'Show sound and voice controls');
+        mobileAudioButton.textContent=open?'✕ SOUND':'🔊 SOUND';
+      });
       subtitle=document.createElement('div');subtitle.id='majhi-dhaka-subtitle';subtitle.innerHTML='<div data-voice-who></div><div data-voice-line></div>';document.body.appendChild(subtitle);
       ui.querySelector('[data-audio-toggle]').onclick=()=>{on=!on;ui.querySelector('[data-audio-toggle]').textContent=on?'🔊 DHAKA AUDIO':'🔇 MUTED';if(on)ctx?.resume();else{cancelSequence();if(S.campusGateScene){S.campusGateScene.audioComplete=true;S.campusGateScene.finishedAt=S.time;}}updateMix();};
       ui.querySelector('[data-audio-voices]').onclick=()=>{speech=!speech;ui.querySelector('[data-audio-voices]').textContent=speech?'🎤 VOICES ON':'🎤 VOICES OFF';if(!speech){cancelSequence();if(S.campusGateScene){S.campusGateScene.audioComplete=true;S.campusGateScene.finishedAt=S.time;}}updateMix();};
@@ -4749,6 +4764,40 @@
     title?.classList?.toggle('hud-critical',urgentSeconds<=25);
   }
   installPhase25HUDPolish();
+  function installMobileCockpit(){
+    const mapPanel=document.querySelector('#hud .map-panel');
+    if(!mapPanel||document.getElementById('majhi-mobile-map-toggle'))return;
+    const control=document.createElement('button');
+    control.type='button';control.id='majhi-mobile-map-toggle';
+    control.setAttribute('aria-label','Expand flood route minimap');
+    control.setAttribute('aria-expanded','false');
+    control.textContent='MAP +';
+    const head=mapPanel.querySelector('.section-heading');head?.appendChild(control);
+    control.addEventListener('click',()=>{
+      const open=mapPanel.classList.toggle('mj-map-expanded');
+      control.textContent=open?'MAP −':'MAP +';
+      control.setAttribute('aria-expanded',String(open));
+      control.setAttribute('aria-label',open?'Collapse flood route minimap':'Expand flood route minimap');
+    });
+  }
+  function syncMobileCockpitLayout(){
+    const hud=$('hud');
+    if(!hud||!window.matchMedia?.('(max-width: 720px) and (orientation: portrait)')?.matches)return;
+    const header=hud.querySelector('.hud-top');
+    if(!header)return;
+    const base=hud.getBoundingClientRect().top;
+    const headerBottom=header.getBoundingClientRect().bottom-base;
+    const guide=$('majhi-pickup-guide');
+    const visible=guide&&!guide.classList.contains('hidden');
+    const guideTop=Math.round(headerBottom+7);
+    const guideHeight=visible?guide.getBoundingClientRect().height:0;
+    const mapTop=Math.round(Math.max(guideTop+(visible?guideHeight+7:0),122));
+    hud.style.setProperty('--mj-mobile-guide-top',guideTop+'px');
+    hud.style.setProperty('--mj-mobile-map-top',mapTop+'px');
+  }
+  installMobileCockpit();
+  window.addEventListener('resize',syncMobileCockpitLayout,{passive:true});
+  window.addEventListener('orientationchange',syncMobileCockpitLayout,{passive:true});
   function refreshPickupGuide(){
     const guide=$('majhi-pickup-guide');if(!guide)return;
     if(S.guideDismissed||S.delivered>0||S.mode!=='PLAYING'){
@@ -4823,7 +4872,7 @@
     if(S.current){$('objective-title').textContent+=` · ${S.current}`;}
     const docking=nearest&&S.dockId===nearest.id?S.dock/(nearest.type==='HOME'?1.3:.65):0;$('dock-fill').style.width=`${Math.min(100,docking*100)}%`;
     $('toast').classList.toggle('hidden',S.notificationTime<=0);if(S.notificationTime>0)$('toast').textContent=S.notification;
-    refreshPickupGuide();refreshMap();
+    refreshPickupGuide();refreshMap();syncMobileCockpitLayout();
   }
   function skyColor(){gl.clearColor(0,0,0,0);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);}
   function resize(){const ratio=Math.min(devicePixelRatio||1,1.8),w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);weather.width=canvas.width;weather.height=canvas.height;}gl.viewport(0,0,canvas.width,canvas.height);}
